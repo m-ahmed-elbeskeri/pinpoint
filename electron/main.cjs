@@ -12,6 +12,7 @@ const runs = require('./runs.cjs');
 const project = require('./project.cjs');
 const { listRoutes } = require('./routes.cjs');
 const sourcemap = require('./sourcemap.cjs');
+const gitx = require('./git.cjs');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 if (process.env.PINPOINT_USER_DATA) app.setPath('userData', process.env.PINPOINT_USER_DATA);
@@ -40,6 +41,8 @@ const DEFAULT_SETTINGS = {
   useDesign: true,            // include DESIGN.md in prompts
   useMemory: true,            // include enabled memory items in prompts
   editorCommand: '',          // '' = auto-detect cursor / code / windsurf / zed
+  gitBranchPerChat: false,    // new chat -> new pinpoint/* branch
+  gitAutoCommit: false,       // commit each run's changed files
 };
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; }
@@ -238,13 +241,37 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId }) => {
   const prompt = buildPrompt({ request, files, projectDir: cwd, followUp: !!sessionId, design: design?.exists ? design.content : '', memory });
   const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('agent:event', { runId, ...evt }); };
 
+  // Git: a new chat can start on its own branch.
+  if (settings.gitBranchPerChat && !sessionId) {
+    try {
+      const st = await gitx.status(cwd);
+      if (st.repo && st.hasCommits) {
+        const hint = request.instruction || request.annotations.map((a) => a.note).find(Boolean) || '';
+        const branch = await gitx.createBranch(cwd, hint);
+        send({ type: 'status', text: `On new branch ${branch}` });
+        send({ type: 'git', branch });
+      }
+    } catch (err) { send({ type: 'log', text: `git branch failed: ${err.message}` }); }
+  }
+
+  const agentName = settings.agent === 'codex' ? 'Codex' : 'Claude Code';
   const snap = snapshot.take(cwd);
   // Attach the real file diff to the final event, whatever tools the agent used.
-  const onEvent = (evt) => {
+  const onEvent = async (evt) => {
     if (evt.type !== 'done') return send(evt);
     let changes = snapshot.diff(snap);
-    try { changes = runs.save(cwd, runId, snap, changes); } catch (err) { send({ type: 'log', text: `could not save run record: ${err.message}` }); }
-    send({ ...evt, changes });
+    try { changes = runs.save(cwd, runId, snap, changes, { request: { instruction: request.instruction, annotations: request.annotations.map(({ n, kind, note, element }) => ({ n, kind, note, element: element && { tag: element.tag, source: element.source } })) }, agent: agentName, url: request.url }); } catch (err) { send({ type: 'log', text: `could not save run record: ${err.message}` }); }
+    let commit = null;
+    if (settings.gitAutoCommit && changes.length && evt.ok) {
+      try {
+        const st = await gitx.status(cwd);
+        if (st.repo) {
+          commit = await gitx.commitPaths(cwd, changes.map((c) => c.path), gitx.commitMessage(request, changes, agentName));
+          if (commit) runs.setMeta(cwd, runId, { commit });
+        }
+      } catch (err) { send({ type: 'log', text: `git commit failed: ${err.message}` }); }
+    }
+    send({ ...evt, changes, commit, request: { instruction: request.instruction, notes: request.annotations.map((a) => a.note).filter(Boolean) } });
   };
   const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, onEvent });
   active.set(runId, handle);
@@ -290,6 +317,35 @@ ipcMain.handle('design:write', (_e, content) => project.writeDesign(projectDir()
 ipcMain.handle('memory:read', () => project.readMemory(projectDir()));
 ipcMain.handle('memory:write', (_e, items) => project.writeMemory(projectDir(), items));
 ipcMain.handle('routes:list', () => listRoutes(projectDir()));
+// ---------- IPC: git ----------
+ipcMain.handle('git:status', () => gitx.status(projectDir()));
+ipcMain.handle('git:init', () => gitx.initRepo(projectDir()));
+ipcMain.handle('git:branch', async (_e, hint) => ({ branch: await gitx.createBranch(projectDir(), hint || 'visual-edit') }));
+ipcMain.handle('git:commitRun', async (_e, runId) => {
+  const cwd = projectDir();
+  const rec = runs.readMeta(cwd, runId);
+  const paths = rec.changes.filter((c) => !c.reverted).map((c) => c.path);
+  if (!paths.length) throw new Error('Nothing left to commit for this run.');
+  const msg = gitx.commitMessage(rec.request || { instruction: 'Visual edit', annotations: [] }, rec.changes, rec.agent || 'Pinpoint');
+  const commit = await gitx.commitPaths(cwd, paths, msg);
+  if (!commit) throw new Error('These changes are already committed.');
+  runs.setMeta(cwd, runId, { commit });
+  return commit;
+});
+ipcMain.handle('git:commitAll', (_e, message) => gitx.commitAll(projectDir(), message));
+ipcMain.handle('git:pr', async (_e, args) => {
+  const r = await gitx.openPR(projectDir(), args);
+  shell.openExternal(r.url);
+  return r;
+});
+
+// ---------- IPC: before / after screenshots ----------
+ipcMain.handle('run:saveShot', (_e, { runId, name, dataUrl }) => {
+  runs.saveShot(projectDir(), runId, name, dataUrl);
+  return true;
+});
+ipcMain.handle('run:shots', (_e, runId) => runs.shots(projectDir(), runId));
+
 ipcMain.handle('sourcemap:resolve', (_e, frame) => sourcemap.resolve(frame, loadSettings().projectDir));
 
 // ---------- IPC: dev server ----------

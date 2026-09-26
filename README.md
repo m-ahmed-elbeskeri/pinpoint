@@ -68,6 +68,26 @@ Open the full diff viewer for any run, revert a single file or undo the whole ru
 
 <br />
 
+## See the difference
+
+Every run that changes the open page gets a **before and after** screenshot. Drag the slider across them, view them side by side, or switch to **Changes** to see exactly which pixels moved. **Check all sizes** captures the result at phone, tablet and desktop widths so you catch responsive breakage before it ships.
+
+<img src="docs/media/compare.gif" alt="Before and after compare" width="100%" />
+
+<br />
+
+## Ship it through git
+
+Click the branch chip above the composer:
+
+- **New branch for each chat:** every new conversation starts on its own `pinpoint/...` branch.
+- **Commit after each run:** Pinpoint commits exactly the files the agent changed, never your other work, with a message written from what you asked for.
+- **Open PR:** pushes the branch and opens a pull request with your GitHub CLI login. The description is drafted from the chat: what you asked for, which files changed and the commits.
+
+Not a git repo yet? The same menu can initialize one. Runs that weren't auto-committed get a **Commit** button on their card.
+
+<br />
+
 ## Teach it your taste
 
 - **Design rules:** a `DESIGN.md` at your project root with your colors, type, spacing and components. Click **Draft from page** and Pinpoint reads them off your rendered site, CSS variables included. It's sent at the start of each chat and lives in your repo, so your team shares it.
@@ -86,6 +106,7 @@ Open the full diff viewer for any run, revert a single file or undo the whole ru
 | **Routes** | Pinpoint finds your pages (Next.js, Astro, Nuxt, SvelteKit, Remix, React Router, plain HTML) and tells the agent which file renders the current one. |
 | **Models and access** | Pick the model and thinking level per agent, and how much the agent may do: **Plan only**, **Edit files** or **Full access**. |
 | **Chat history** | Conversations are saved per project and reopen where you left off. |
+| **Git** | Branch per chat, commit per run, and pull requests through the GitHub CLI (`gh`). |
 | **Dev server** | Start your dev server from the built-in terminal. Pinpoint opens the URL it prints. |
 | **Responsive** | Switch between desktop, tablet and phone widths from the URL bar. |
 

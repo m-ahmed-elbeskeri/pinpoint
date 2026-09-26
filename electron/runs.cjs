@@ -28,7 +28,7 @@ function readMaybe(file) {
   try { return fs.readFileSync(file); } catch { return null; }
 }
 
-function save(root, runId, snap, changes) {
+function save(root, runId, snap, changes, meta = {}) {
   const dir = runDir(root, runId);
   fs.mkdirSync(dir, { recursive: true });
   const entries = changes.map((c, i) => {
@@ -52,7 +52,7 @@ function save(root, runId, snap, changes) {
       reverted: false,
     };
   });
-  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ runId, createdAt: Date.now(), changes: entries }, null, 2));
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ runId, createdAt: Date.now(), ...meta, changes: entries }, null, 2));
   prune(root);
   return entries.map(({ path: p, kind, add, del }) => ({ path: p, kind, add, del }));
 }
@@ -118,4 +118,33 @@ function revert(root, runId, paths, force) {
   return result;
 }
 
-module.exports = { save, diff, revert };
+function readMeta(root, runId) { return load(root, runId); }
+
+function setMeta(root, runId, patch) {
+  const run = load(root, runId);
+  fs.writeFileSync(path.join(runDir(root, runId), 'run.json'), JSON.stringify({ ...run, ...patch }, null, 2));
+}
+
+// Before/after screenshots live next to the run record.
+function saveShot(root, runId, name, dataUrl) {
+  const dir = runDir(root, runId);
+  fs.mkdirSync(dir, { recursive: true });
+  const [meta, b64] = dataUrl.split(',');
+  const ext = /jpeg/.test(meta) ? 'jpg' : 'png';
+  fs.writeFileSync(path.join(dir, `shot-${name.replace(/[^\w-]/g, '')}.${ext}`), Buffer.from(b64, 'base64'));
+}
+
+function shots(root, runId) {
+  const dir = runDir(root, runId);
+  let files = [];
+  try { files = fs.readdirSync(dir).filter((f) => /^shot-/.test(f)); } catch { return {}; }
+  const out = {};
+  for (const f of files) {
+    const name = f.replace(/^shot-/, '').replace(/\.\w+$/, '');
+    const mime = f.endsWith('.jpg') ? 'image/jpeg' : 'image/png';
+    out[name] = `data:${mime};base64,${fs.readFileSync(path.join(dir, f)).toString('base64')}`;
+  }
+  return out;
+}
+
+module.exports = { save, diff, revert, readMeta, setMeta, saveShot, shots };

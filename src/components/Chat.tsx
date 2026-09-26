@@ -3,7 +3,7 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, CornerDownRight, Zap, Clock,
+  ExternalLink, CornerDownRight, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal,
 } from 'lucide-react';
 import type { ChatItem, DiffFile, FileChange, RevertResult } from '../lib/types';
 
@@ -14,6 +14,26 @@ const loadDiff = (runId: string) => {
   return diffCache.get(runId)!;
 };
 export const invalidateDiff = (runId: string) => diffCache.delete(runId);
+
+// Before/after thumbnails under a run; click opens the compare view.
+const shotCache = new Map<string, Promise<Record<string, string>>>();
+function ShotStrip({ runId, onOpen }: { runId: string; onOpen(): void }) {
+  const [shots, setShots] = useState<Record<string, string> | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (!shotCache.has(runId)) shotCache.set(runId, window.pinpoint.runShots(runId).catch(() => ({})));
+    shotCache.get(runId)!.then((s) => { if (live) setShots(s); });
+    return () => { live = false; };
+  }, [runId]);
+  if (!shots?.before || !shots?.after) return null;
+  return (
+    <button className="shot-strip" onClick={onOpen} title="Compare before and after">
+      <figure><img src={shots.before} alt="Before" /><figcaption>Before</figcaption></figure>
+      <figure><img src={shots.after} alt="After" /><figcaption>After</figcaption></figure>
+      <span className="shot-cta"><SplitSquareHorizontal size={12} /> Compare</span>
+    </button>
+  );
+}
 
 // Compact inline diff for one file, shown inside the chat.
 function InlineDiff({ runId, path, onFirstLine }: { runId: string; path: string; onFirstLine(line: number): void }) {
@@ -218,6 +238,9 @@ interface ItemProps {
   onMemory(id: string, action: 'save' | 'dismiss'): void;
   onRevertFile(runId: string, path: string, force?: boolean): Promise<RevertResult | null>;
   onOpenFile(path: string, line?: number): void;
+  onCommit(runId: string): void;
+  onCompare(runId: string): void;
+  gitRepo: boolean;
 }
 
 const CHANGE_ICON = { add: FilePlus2, modify: FilePen, delete: FileMinus2 };
@@ -228,7 +251,7 @@ const STEER_TAG = {
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
 
-export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile }: ItemProps) {
+export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, gitRepo }: ItemProps) {
   switch (item.kind) {
     case 'user': {
       const tag = item.steer ? STEER_TAG[item.steer] : null;
@@ -291,6 +314,11 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
               {item.durationMs ? `${Math.round(item.durationMs / 1000)}s` : ''}
               {item.cost ? ` · $${item.cost.toFixed(2)}` : ''}
             </span>
+            {item.commit && (
+              <span className="commit-chip" title={item.commit.subject} onClick={() => navigator.clipboard?.writeText(item.commit!.hash)}>
+                <GitCommitHorizontal size={12} /> {item.commit.hash}
+              </span>
+            )}
           </div>
           {n > 0 && (
             <ul className="done-files">
@@ -307,6 +335,7 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
               ))}
             </ul>
           )}
+          {item.shots && <ShotStrip runId={item.runId} onOpen={() => onCompare(item.runId)} />}
           <div className="done-actions">
             {n > 0 && (
               <button className="btn xs" onClick={() => onReview(item.runId)} title="See exactly what changed and revert individual files">
@@ -318,8 +347,13 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
                 <Undo2 size={12} /> Undo
               </button>
             )}
+            {gitRepo && n > 0 && !item.undone && !item.commit && item.ok && (
+              <button className="btn ghost xs" disabled={busy} onClick={() => onCommit(item.runId)} title="Commit the files this run changed">
+                <GitCommitHorizontal size={12} /> Commit
+              </button>
+            )}
             <div className="spacer" />
-            <button className="btn ghost xs" onClick={onReload} title="Reload the page"><RotateCw size={12} /> Reload page</button>
+            <button className="btn ghost xs" onClick={onReload} title="Reload the page"><RotateCw size={12} /><span className="btn-text">Reload</span></button>
           </div>
         </div>
       );

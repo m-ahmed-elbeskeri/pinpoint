@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlertTriangle, Brain, FileCode2, Palette, Wrench, X } from 'lucide-react';
 import type { ConsoleEntry, NetworkFailure, RouteInfo } from '../lib/types';
 
 interface Props {
+  lead?: ReactNode;
   designOn: boolean;
   designExists: boolean;
   designChanged: boolean;
@@ -34,6 +35,7 @@ export function ContextBar(p: Props) {
   return (
     <div className="ctx-bar">
       <div className="ctx-chips">
+        {p.lead}
         <button
           className={`chip ${p.designChanged ? 'warn' : p.designExists && p.designOn ? 'on' : 'muted'}`}
           onClick={p.onOpenDesign}

@@ -57,11 +57,18 @@ export type ChatItem =
   | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string }
   | { kind: 'error'; id: string; text: string }
   | { kind: 'status'; id: string; text: string }
-  | { kind: 'done'; id: string; runId: string; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; undone?: boolean }
+  | { kind: 'done'; id: string; runId: string; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; undone?: boolean; commit?: GitCommit | null; shots?: boolean }
   | { kind: 'memory'; id: string; text: string; status: 'pending' | 'saved' | 'dismissed' };
 
 export interface ModelOption { id: string; label: string; desc?: string; efforts: string[]; defaultEffort?: string }
 export type ModelCatalog = Record<AgentId, { models: ModelOption[]; defaultLabel: string; defaultModel?: string; defaultEffort?: string }>;
+
+export interface GitCommit { hash: string; subject: string }
+export interface GitStatus {
+  repo: boolean; root?: string; branch?: string; defaultBranch?: string; remote?: string | null; hasCommits?: boolean;
+  dirty?: number; ahead?: number; behind?: number; upstream?: boolean;
+  gh: { installed: boolean; authed: boolean; user: string | null };
+}
 
 export interface FileChange { path: string; kind: 'add' | 'modify' | 'delete'; reverted?: boolean; add?: number; del?: number }
 
@@ -112,6 +119,8 @@ export interface Settings {
   useDesign: boolean;
   useMemory: boolean;
   editorCommand: string;
+  gitBranchPerChat: boolean;
+  gitAutoCommit: boolean;
 }
 
 export type AgentEvent =
@@ -126,7 +135,8 @@ export type AgentEvent =
   | { runId: string; type: 'file'; path: string; kind: string }
   | { runId: string; type: 'log'; text: string }
   | { runId: string; type: 'error'; text: string }
-  | { runId: string; type: 'done'; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[] };
+  | { runId: string; type: 'done'; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; commit?: GitCommit | null }
+  | { runId: string; type: 'git'; branch: string };
 
 export type DevEvent =
   | { type: 'log'; text: string }
@@ -161,6 +171,14 @@ export interface PinpointAPI {
   listRoutes(): Promise<RouteInfo[]>;
   resolveSourceMap(frame: { url: string; line: number; column: number }): Promise<{ file: string; line?: number; column?: number } | null>;
   onNetworkError(cb: (e: NetworkFailure) => void): () => void;
+  gitStatus(): Promise<GitStatus>;
+  gitInit(): Promise<GitStatus>;
+  gitBranch(hint?: string): Promise<{ branch: string }>;
+  gitCommitRun(runId: string): Promise<GitCommit>;
+  gitCommitAll(message: string): Promise<GitCommit>;
+  gitOpenPR(args: { title: string; body: string; draft?: boolean }): Promise<{ url: string; existed: boolean }>;
+  saveShot(runId: string, name: string, dataUrl: string): Promise<boolean>;
+  runShots(runId: string): Promise<Record<string, string>>;
   onAgentEvent(cb: (e: AgentEvent) => void): () => void;
   startDev(command: string): Promise<boolean>;
   stopDev(): Promise<boolean>;

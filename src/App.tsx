@@ -18,10 +18,12 @@ import { ContextBar } from './components/ContextBar';
 import { DiffViewer } from './components/DiffViewer';
 import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
+import { GitPanel } from './components/GitPanel';
+import { CompareView } from './components/CompareView';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
   AgentEvent, AgentId, Annotation, ChatItem, ConsoleEntry, DesignDoc, MemoryItem, Mode, ModelCatalog, NetworkFailure,
-  Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
+  GitStatus, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
 } from './lib/types';
 
 const api = window.pinpoint;
@@ -122,6 +124,21 @@ function healChat(items: ChatItem[]): ChatItem[] {
     ...items.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
     { kind: 'error', id: uid(), text: 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.' },
   ];
+}
+
+// Screenshots for before/after are stored as JPEG to keep run folders small.
+function toJpeg(dataUrl: string, quality = 0.86): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      c.getContext('2d')!.drawImage(img, 0, 0);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
 }
 
 const stripAnsi = (s: string) => s.replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '');
@@ -231,6 +248,10 @@ export default function App() {
   const [netFails, setNetFails] = useState<NetworkFailure[]>([]);
   const [includeDiag, setIncludeDiag] = useState(true);
   const [dragOver, setDragOver] = useState(false);
+  const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
+  const [compare, setCompare] = useState<string | null>(null); // runId shown in the before/after view
+  const runPageRef = useRef<Record<string, string>>({});       // runId -> page URL when it started
+  const loadingRef = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Refs mirror state for async handlers and IPC subscriptions.
@@ -261,12 +282,14 @@ export default function App() {
   // ---------- project context ----------
   const projectDir = settings?.projectDir || '';
   const refreshRoutes = useCallback(() => { api.listRoutes().then(setRoutes).catch(() => setRoutes([])); }, []);
+  const refreshGit = useCallback(async () => { await api.gitStatus().then(setGitStatus).catch(() => setGitStatus(null)); }, []);
 
   useEffect(() => {
     if (!projectDir) return;
     api.readDesign().then(setDesign).catch(() => setDesign(null));
     api.readMemory().then(setMemory).catch(() => setMemory([]));
     refreshRoutes();
+    refreshGit();
     // Reopen the most recent conversation for this project.
     api.listChats().then(async (list) => {
       const last = list[0] ? await api.loadChat(list[0].id) : null;
@@ -443,9 +466,11 @@ export default function App() {
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
-  const startRun = async (request: AgentRequest) => {
+  const startRun = async (request: AgentRequest, before?: string | null) => {
     if (!settings) return;
     const id = uid();
+    runPageRef.current[id] = request.url;
+    if (before) api.saveShot(id, 'before', before).catch(() => {});
     setAgentLog('');
     setRunId(id);
     runRef.current = id;
@@ -496,6 +521,9 @@ export default function App() {
         try { overview = await b.capture(); } catch { /* ignore */ }
       }
 
+      // A clean "before" screenshot for the before/after compare (new runs only).
+      const before = hasPage && !runRef.current ? await cleanCapture() : null;
+
       const devTail = stripAnsi(devLog).split('\n').slice(-40).join('\n');
       const devHasErrors = devRunning && /error|failed|exception/i.test(devTail);
       const diagnostics = includeDiag && (consoleLog.length || netFails.length || devHasErrors)
@@ -532,7 +560,7 @@ export default function App() {
       }
 
       setChat((c) => [...c, { kind: 'user', id: uid(), text: request.instruction, annotations: thumbs, agent: settings.agent }]);
-      await startRun(request);
+      await startRun(request, before);
     } catch (e) {
       setChat((c) => [...c, { kind: 'error', id: uid(), text: errText(e) }]);
     } finally { setBusy(null); }
@@ -558,6 +586,73 @@ export default function App() {
       return r;
     } catch (e) { flash(errText(e)); return null; }
   };
+  // Page screenshot without Pinpoint's hover box or pins.
+  const cleanCapture = async (): Promise<string | null> => {
+    const b = browser.current;
+    if (!b) return null;
+    b.send('hide', true);
+    await sleep(90);
+    try { return await toJpeg(await b.capture()); } catch { return null; } finally { b.send('hide', false); }
+  };
+
+  // After a run, wait for hot reload (or our own reload for file:// pages) to settle, then shoot.
+  const captureAfter = async (id: string) => {
+    const url = runPageRef.current[id];
+    if (!url) return;
+    await sleep(/^file:/.test(url) ? 500 : 1800);
+    for (let i = 0; i < 40 && loadingRef.current; i++) await sleep(200);
+    await sleep(400);
+    if (navRef.current.url !== url) return; // user moved to another page meanwhile
+    const shot = await cleanCapture();
+    if (!shot) return;
+    await api.saveShot(id, 'after', shot);
+    setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === id ? { ...it, shots: true } : it)));
+  };
+  const captureAfterRef = useRef(captureAfter);
+  captureAfterRef.current = captureAfter;
+
+  // Screenshot the current page at phone, tablet and desktop widths for a run.
+  const captureSizes = async (id: string) => {
+    const original = viewport;
+    const plan: [Viewport, number][] = [['mobile', 390], ['tablet', 820], ['full', 0]];
+    try {
+      for (const [v, w] of plan) {
+        setViewport(v);
+        await sleep(1200);
+        const shot = await cleanCapture();
+        if (shot) await api.saveShot(id, `size-${w}`, shot);
+      }
+    } finally { setViewport(original); }
+  };
+
+  const commitRun = async (id: string) => {
+    try {
+      const c = await api.gitCommitRun(id);
+      setChat((cs) => cs.map((it) => (it.kind === 'done' && it.runId === id ? { ...it, commit: c } : it)));
+      flash(`Committed ${c.hash}`);
+      refreshGit();
+    } catch (e) { flash(errText(e)); }
+  };
+
+  // Pull request title/description drafted from this chat.
+  const prDefaults = () => {
+    const users = chat.filter((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }>[];
+    const first = users[0];
+    const title = (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || 'Visual edits').split('\n')[0].slice(0, 72);
+    const lines = ['## What changed', ''];
+    for (const it of chat) {
+      if (it.kind === 'user') {
+        const asks = [it.text, ...it.annotations.map((a) => a.note)].filter((t) => t && t.trim());
+        if (asks.length) lines.push(`- **Asked:** ${asks.map((t) => t.trim().split('\n')[0]).join('; ')}`);
+      } else if (it.kind === 'done' && it.changes.length && !it.undone) {
+        const files = it.changes.filter((c) => !c.reverted).map((c) => `\`${c.path}\``).join(', ');
+        if (files) lines.push(`  - Changed ${files}${it.commit ? ` (${it.commit.hash})` : ''}`);
+      }
+    }
+    lines.push('', '---', 'Made with [Pinpoint](https://github.com/m-ahmed-elbeskeri/pinpoint).');
+    return { title, body: lines.join('\n') };
+  };
+
   const openFile = (path: string, line?: number) => {
     api.openFile(path, line)
       .then((r) => flash(r.via === 'folder' ? `No editor found, so ${path} is shown in its folder` : `Opened ${path}${r.via !== 'system' ? ` in ${r.via}` : ''}`))
@@ -647,6 +742,7 @@ export default function App() {
         break;
       case 'status': push({ kind: 'status', id: uid(), text: e.text }); break;
       case 'session': setSession({ id: e.sessionId, agent: (settingsRef.current?.agent || 'claude') }); break;
+      case 'git': refreshGitRef.current(); break;
       case 'text': {
         // The agent proposes memories with a trailing "REMEMBER: …" line.
         const m = e.text.match(/^\s*`?REMEMBER:\s*(.+?)`?\s*$/m);
@@ -666,13 +762,15 @@ export default function App() {
         setChat((c) => [
           ...c.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'ok' as const }
             : (it.kind === 'text' || it.kind === 'thinking') && it.streaming ? { ...it, streaming: false } : it)),
-          { kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [] },
+          { kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [], commit: e.commit || null },
         ]);
         setRunId(null);
         runRef.current = null;
         // Static files have no hot reload, so refresh them ourselves.
         if (e.changes?.length && /^file:/.test(navRef.current.url)) browser.current?.reload();
+        refreshGitRef.current();
         if (e.changes?.length) {
+          captureAfterRef.current(e.runId);
           refreshRoutes();
           if (e.changes.some((c) => /^DESIGN\.md$/i.test(c.path))) api.readDesign().then(setDesign);
         }
@@ -682,6 +780,8 @@ export default function App() {
 
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const refreshGitRef = useRef(refreshGit);
+  refreshGitRef.current = refreshGit;
 
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat]);
 
@@ -883,7 +983,7 @@ export default function App() {
               initialUrl={settings.url ? normalizeUrl(settings.url) : ''}
               onPicked={onPicked}
               onNavigate={(s) => { setNav(s); if (document.activeElement?.closest('.urlbar') == null) setUrlInput(s.url === 'about:blank' ? '' : s.url); }}
-              onLoading={setLoading}
+              onLoading={(l) => { loadingRef.current = l; setLoading(l); }}
               onReady={syncPage}
               onKey={(k) => handleKey(k)}
               onError={setLoadError}
@@ -999,7 +1099,7 @@ export default function App() {
                 <div className="warn-box">{settings.agent === 'claude' ? 'Claude Code' : 'Codex'} CLI wasn't found. Install it or set its path in Settings.</div>
               )}
             </div>
-          ) : chat.map((item) => <ChatItemView key={item.id} item={item} root={root} onReload={() => browser.current?.reload()} onUndo={undoRun} onReview={(runId, path) => setDiffView({ runId, path })} onMemory={onMemoryAction} onRevertFile={revertFile} onOpenFile={openFile} busy={!!runId} />)}
+          ) : chat.map((item) => <ChatItemView key={item.id} item={item} root={root} onReload={() => browser.current?.reload()} onUndo={undoRun} onReview={(runId, path) => setDiffView({ runId, path })} onMemory={onMemoryAction} onRevertFile={revertFile} onOpenFile={openFile} onCommit={commitRun} onCompare={setCompare} gitRepo={!!gitStatus?.repo} busy={!!runId} />)}
           {runId && <div className="working"><Loader2 size={14} className="spin" /> {settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is working…</div>}
           <div ref={chatEnd} />
         </div>
@@ -1007,6 +1107,7 @@ export default function App() {
         <div className="composer">
           {projectDir && (
             <ContextBar
+              lead={<GitPanel status={gitStatus} refresh={refreshGit} settings={settings} saveSettings={saveSettings} busy={!!runId} prDefaults={prDefaults} flash={flash} />}
               designOn={settings.useDesign} designExists={!!design?.exists} designChanged={designChanged}
               memoryCount={settings.useMemory ? memory.filter((m) => m.enabled).length : 0}
               route={currentRoute}
@@ -1117,6 +1218,7 @@ export default function App() {
           chatBusy={!!runId}
         />
       )}
+      {compare && <CompareView runId={compare} onClose={() => setCompare(null)} captureSizes={captureSizes} />}
       {diffView && (
         <DiffViewer
           runId={diffView.runId} initialPath={diffView.path}

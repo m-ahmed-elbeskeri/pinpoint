@@ -4,6 +4,17 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-26
+
+### Added
+
+- **Git workflow.** A branch chip above the composer shows the current branch and uncommitted changes, and can initialize a repository. Optional **new branch for each chat** (`pinpoint/...`) and **commit after each run**, which commits only the files the agent changed with a message written from your request. **Open PR** pushes the branch and opens a pull request through the GitHub CLI, with a description drafted from the chat. Runs that weren't auto-committed get a **Commit** button.
+- **Before and after.** Runs that change the open page capture a screenshot before and after (once hot reload settles). Compare them with a slider, side by side, or a **Changes** view that highlights the pixels that moved. **Check all sizes** captures the page at phone, tablet and desktop widths.
+
+### Fixed
+
+- The run cost lost its dollar sign in the chat.
+
 ## [0.1.0] - 2026-09-26
 
 The first public release.
@@ -41,5 +52,6 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/releases/tag/v0.1.0
