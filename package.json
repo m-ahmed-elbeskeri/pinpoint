@@ -1,0 +1,130 @@
+{
+  "name": "pinpoint",
+  "productName": "Pinpoint",
+  "version": "0.1.0",
+  "description": "Point at it. Draw on it. Ship it. A desktop visual editor that lets Claude Code or Codex change your web app from clicks, drawings and sketches.",
+  "keywords": [
+    "electron",
+    "visual-editor",
+    "claude-code",
+    "codex",
+    "ai",
+    "web-development",
+    "design",
+    "annotation",
+    "devtools"
+  ],
+  "homepage": "https://github.com/m-ahmed-elbeskeri/pinpoint#readme",
+  "bugs": {
+    "url": "https://github.com/m-ahmed-elbeskeri/pinpoint/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/m-ahmed-elbeskeri/pinpoint.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "m-ahmed-elbeskeri",
+    "url": "https://github.com/m-ahmed-elbeskeri"
+  },
+  "main": "electron/main.cjs",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "typecheck": "tsc --noEmit",
+    "icons": "electron scripts/make-icons.cjs",
+    "dist:win": "vite build && electron-builder --win",
+    "dist:mac": "vite build && electron-builder --mac",
+    "dist:linux": "vite build && electron-builder --linux",
+    "release": "vite build && electron-builder --publish always",
+    "dist:dir": "vite build && electron-builder --dir"
+  },
+  "dependencies": {
+    "diff": "^9.0.0",
+    "source-map-js": "^1.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "lucide-react": "^1.48.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  },
+  "build": {
+    "appId": "dev.pinpoint.app",
+    "productName": "Pinpoint",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "m-ahmed-elbeskeri",
+        "repo": "pinpoint",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Pinpoint: highlighter-yellow tile, pointer, markup stroke. Solid colors only. -->
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="#ffd60a"/>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="none" stroke="#000" stroke-opacity=".08" stroke-width="6"/>
+  <path d="M236 770 C 360 700, 520 836, 790 716" fill="none" stroke="#ff4f3a" stroke-width="64" stroke-linecap="round"/>
+  <path d="M352 214 L352 628 L454 534 L524 690 L596 658 L528 504 L666 504 Z" fill="#111113" stroke="#111113" stroke-width="52" stroke-linejoin="round"/>
+</svg>

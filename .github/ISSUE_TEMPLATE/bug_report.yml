@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in Pinpoint doesn't work the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report this. A short screen recording or screenshot helps a lot.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a Vite + React project
+        2. Press S and click the hero button
+        3. ...
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options: [Claude Code, Codex, Not agent related]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Pinpoint version
+      placeholder: v0.1.0
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Your project's framework
+      placeholder: Next.js 15, Vite + React 19, Astro, plain HTML...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Anything from the Agent logs tab (terminal icon in the top bar) or the dev server output.
+      render: text

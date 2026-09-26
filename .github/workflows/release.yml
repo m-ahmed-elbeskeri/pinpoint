@@ -1,0 +1,97 @@
+name: Release
+
+# Push a tag like v0.2.0 (matching "version" in package.json) to build
+# installers for every platform and publish them as a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Check tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${pkg}" >&2
+            exit 1
+          fi
+
+      - name: Build installers
+        run: npm run build && npx electron-builder --publish never
+        env:
+          # Builds are unsigned until signing secrets are configured.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinpoint-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+
+  publish:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[?" v "\\]?" { on=1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "See CHANGELOG.md" > notes.md; fi
+          {
+            echo
+            echo "### Install"
+            echo
+            echo "- **Windows:** download the \`.exe\` installer."
+            echo "- **macOS:** download the \`.dmg\` for your Mac (\`arm64\` for Apple Silicon, \`x64\` for Intel). The build is unsigned, so the first time right-click the app and choose **Open**."
+            echo "- **Linux:** download the \`.AppImage\`, then \`chmod +x\` it and run it."
+            echo
+            echo "Pinpoint needs [Claude Code](https://docs.claude.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in."
+          } >> notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Pinpoint ${{ github.ref_name }}
+          body_path: notes.md
+          files: artifacts/*
+          fail_on_unmatched_files: true
