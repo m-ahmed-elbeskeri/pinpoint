@@ -89,7 +89,7 @@ jobs:
             echo "Pinpoint needs [Claude Code](https://docs.claude.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed and signed in."
           } >> notes.md
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           name: Pinpoint ${{ github.ref_name }}
           body_path: notes.md
