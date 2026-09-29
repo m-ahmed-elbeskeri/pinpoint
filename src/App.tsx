@@ -22,7 +22,7 @@ import { GitPanel } from './components/GitPanel';
 import { CompareView } from './components/CompareView';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  AgentEvent, AgentId, Annotation, ChatItem, ConsoleEntry, DesignDoc, MemoryItem, Mode, ModelCatalog, NetworkFailure,
+  AgentEvent, AgentId, Annotation, ChatItem, ConsoleEntry, DesignDoc, DevDetection, MemoryItem, Mode, ModelCatalog, NetworkFailure,
   GitStatus, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
 } from './lib/types';
 
@@ -230,6 +230,7 @@ export default function App() {
   const [devLog, setDevLog] = useState('');
   const [agentLog, setAgentLog] = useState('');
   const [devRunning, setDevRunning] = useState(false);
+  const [devInfo, setDevInfo] = useState<DevDetection | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -268,7 +269,7 @@ export default function App() {
 
   // ---------- boot ----------
   useEffect(() => {
-    api.getSettings().then((s) => { setSettings(s); setUrlInput(s.url); });
+    api.getSettings().then((s) => { setSettings(s); setUrlInput(s.projectDir ? s.url : ''); });
     api.detectAgents().then(setAgents);
     api.modelCatalog().then(setCatalog);
   }, []);
@@ -800,14 +801,34 @@ export default function App() {
   const loadErrorRef = useRef(loadError);
   loadErrorRef.current = loadError;
 
+  // Work out the project's dev command, and whether its server is already up.
+  // (We only offer that URL: another app could be on the same port.)
+  useEffect(() => {
+    setDevInfo(null);
+    if (!projectDir) return;
+    let live = true;
+    api.detectDev().then((d) => { if (live) setDevInfo(d); }).catch(() => {});
+    return () => { live = false; };
+  }, [projectDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  const devCommand = settings?.devCommand || devInfo?.command || '';
+
   const startDev = async (cmd: string) => {
     try { await api.startDev(cmd); saveSettings({ devCommand: cmd }); }
     catch (e) { flash((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
   };
+  // One click from the welcome screen or a load error: run the detected command.
+  const quickStartDev = () => {
+    setDrawerOpen(true); setDrawerTab('dev');
+    if (devCommand && !devRunning) startDev(devCommand);
+  };
 
   const pickProject = async () => {
+    const prev = settings?.projectDir;
     const dir = await api.pickFolder();
-    if (dir) { setSettings(await api.getSettings()); setSession(null); flash(`Project: ${dir}`); }
+    if (!dir) return;
+    setSettings(await api.getSettings()); setSession(null); flash(`Project: ${dir}`);
+    // A different project starts from its welcome screen, not the old project's page.
+    if (dir !== prev) { browser.current?.load('about:blank'); setUrlInput(''); setDevLog(''); }
   };
 
   // ---------- layout ----------
@@ -980,7 +1001,7 @@ export default function App() {
           <div ref={frame} className={`frame mode-${mode}`} style={vpWidth ? { width: vpWidth } : undefined}>
             <BrowserView
               ref={browser}
-              initialUrl={settings.url ? normalizeUrl(settings.url) : ''}
+              initialUrl={settings.projectDir && settings.url ? normalizeUrl(settings.url) : ''}
               onPicked={onPicked}
               onNavigate={(s) => { setNav(s); if (document.activeElement?.closest('.urlbar') == null) setUrlInput(s.url === 'about:blank' ? '' : s.url); }}
               onLoading={(l) => { loadingRef.current = l; setLoading(l); }}
@@ -1038,7 +1059,12 @@ export default function App() {
               <Welcome
                 projectDir={settings.projectDir}
                 onOpenProject={pickProject}
-                onStartDev={() => { setDrawerOpen(true); setDrawerTab('dev'); }}
+                devCommand={devCommand}
+                devLabel={devInfo?.candidates.find((c) => c.command === devCommand)?.label}
+                devRunning={devRunning}
+                runningUrl={devRunning ? null : devInfo?.runningUrl}
+                onOpenUrl={go}
+                onStartDev={quickStartDev}
                 onSketch={() => setMode('sketch')}
               />
             )}
@@ -1047,7 +1073,7 @@ export default function App() {
                 <b>Couldn't load the page</b><span>{loadError}</span>
                 <div>
                   <button className="btn xs" onClick={() => browser.current?.reload()}>Retry</button>
-                  <button className="btn xs ghost" onClick={() => { setDrawerOpen(true); setDrawerTab('dev'); }}>Start dev server</button>
+                  <button className="btn xs ghost" onClick={quickStartDev} title={devCommand || undefined}>Start dev server</button>
                 </div>
               </div>
             )}
@@ -1195,7 +1221,7 @@ export default function App() {
         <div className={`resizer row ${resizing === 'drawer' ? 'on' : ''}`} onPointerDown={startResize('drawer')} />
         <Drawer
           tab={drawerTab} setTab={setDrawerTab} devLog={devLog} agentLog={agentLog}
-          devRunning={devRunning} devCommand={settings.devCommand}
+          devRunning={devRunning} devCommand={devCommand} devCandidates={devInfo?.candidates}
           onStartDev={startDev} onStopDev={() => api.stopDev()} onClose={() => setDrawerOpen(false)}
         />
         </div>

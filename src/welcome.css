@@ -197,3 +197,7 @@
 @media (prefers-reduced-motion: reduce) {
   .welcome *, .welcome *::before, .welcome *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; }
 }
+.welcome-dev { color: var(--text-2); opacity: .8; overflow: hidden; text-overflow: ellipsis; }
+.welcome-dev::before { content: '·'; margin-right: 8px; color: var(--muted); }
+.welcome-dev { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.welcome-dev::before { content: '·'; margin-right: 8px; color: var(--muted); }

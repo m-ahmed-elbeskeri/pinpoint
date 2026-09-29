@@ -13,6 +13,7 @@ const project = require('./project.cjs');
 const { listRoutes } = require('./routes.cjs');
 const sourcemap = require('./sourcemap.cjs');
 const gitx = require('./git.cjs');
+const devserver = require('./devserver.cjs');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 if (process.env.PINPOINT_USER_DATA) app.setPath('userData', process.env.PINPOINT_USER_DATA);
@@ -144,7 +145,10 @@ ipcMain.handle('dialog:pickFolder', async () => {
   const dir = r.filePaths[0];
   const s = loadSettings();
   const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8);
-  saveSettings({ projectDir: dir, recentProjects: recent });
+  // A new project gets its own dev server: stop the old one and re-detect the command.
+  const switched = path.resolve(dir) !== path.resolve(s.projectDir || '.');
+  if (switched) { killTree(devProc); devProc = null; }
+  saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '' }) });
   return dir;
 });
 
@@ -378,6 +382,7 @@ ipcMain.handle('dev:start', (e, { command }) => {
   send({ type: 'started', pid: proc.pid });
   return true;
 });
+ipcMain.handle('dev:detect', () => devserver.inspect(loadSettings().projectDir));
 ipcMain.handle('dev:stop', () => { killTree(devProc); devProc = null; return true; });
 
 // ---------- lifecycle ----------

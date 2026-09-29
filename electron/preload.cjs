@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   runShots: (runId) => ipcRenderer.invoke('run:shots', runId),
   onAgentEvent: on('agent:event'),
   startDev: (command) => ipcRenderer.invoke('dev:start', { command }),
+  detectDev: () => ipcRenderer.invoke('dev:detect'),
   stopDev: () => ipcRenderer.invoke('dev:stop'),
   onDevEvent: on('dev:event'),
 });

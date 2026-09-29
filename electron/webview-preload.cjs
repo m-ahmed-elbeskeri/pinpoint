@@ -179,7 +179,12 @@ function tagElement(el) {
   return uid;
 }
 
-function info(el, withDetail = true) {
+// Styles worth sending for elements under a drawing: enough to act on "less loud"
+// or "more space" without the full set a direct pick gets.
+const HIT_STYLE_KEYS = new Set(['display', 'margin', 'padding', 'color', 'background-color', 'font-size', 'font-weight', 'border', 'border-radius', 'gap', 'box-shadow', 'opacity']);
+
+// detail: true = everything (direct pick), 'hit' = compact (under a drawing), false = identity only.
+function info(el, detail = true) {
   const r = el.getBoundingClientRect();
   const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
   const base = {
@@ -189,14 +194,16 @@ function info(el, withDetail = true) {
     text: text.length > 160 ? text.slice(0, 160) + '…' : text,
     rect: { x: r.left, y: r.top, width: r.width, height: r.height },
   };
-  if (!withDetail) return base;
+  if (!detail) return base;
+  const all = styles(el);
   return {
     ...base,
     id: el.id || undefined,
     classes: [...el.classList].slice(0, 16),
     path: domPath(el),
-    html: cleanHtml(el),
-    styles: styles(el),
+    ...(detail === 'hit'
+      ? { styles: Object.fromEntries(Object.entries(all).filter(([k]) => HIT_STYLE_KEYS.has(k))) }
+      : { html: cleanHtml(el), styles: all }),
   };
 }
 
@@ -302,7 +309,7 @@ ipcRenderer.on('hitTest', (_e, { reqId, points }) => {
   }
   // Prefer the innermost elements; drop ancestors of other hits.
   const specific = hits.filter((el) => !hits.some((o) => o !== el && el.contains(o))).slice(0, 8);
-  ipcRenderer.sendToHost('hits', { reqId, hits: specific.map((el) => info(el, false)) });
+  ipcRenderer.sendToHost('hits', { reqId, hits: specific.map((el) => info(el, 'hit')) });
 });
 
 ipcRenderer.on('scrollTo', (_e, uid) => {

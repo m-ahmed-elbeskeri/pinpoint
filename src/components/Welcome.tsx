@@ -1,8 +1,13 @@
-import { FolderOpen, MousePointer2, PenTool, SquarePen, TerminalSquare, ArrowRight } from 'lucide-react';
+import { FolderOpen, Globe, MousePointer2, PenTool, SquarePen, TerminalSquare, ArrowRight } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface Props {
   projectDir: string;
+  devCommand: string;   // saved or detected; '' when we couldn't tell
+  devLabel?: string;    // e.g. "Next.js"
+  devRunning: boolean;
+  runningUrl?: string | null; // something already answers on the expected port
+  onOpenUrl(url: string): void;
   onOpenProject(): void;
   onStartDev(): void;
   onSketch(): void;
@@ -11,7 +16,7 @@ interface Props {
 // First-run stage in the product's own language (hand markup on a page): the
 // headline gets circled, scribbled and highlighted as it appears, and a looping
 // demo plays the whole flow: point, pin, note, circle, agent, shipped.
-export function Welcome({ projectDir, onOpenProject, onStartDev, onSketch }: Props) {
+export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningUrl, onOpenUrl, onOpenProject, onStartDev, onSketch }: Props) {
   return (
     <div className="welcome">
       <div className="backdrop" aria-hidden="true">
@@ -43,10 +48,19 @@ export function Welcome({ projectDir, onOpenProject, onStartDev, onSketch }: Pro
             <button className="cta-primary" onClick={onOpenProject}>
               <FolderOpen size={16} /> {projectDir ? 'Switch project' : 'Open your project'} <ArrowRight size={15} className="arrow" />
             </button>
-            <button className="cta-secondary" onClick={onStartDev}><TerminalSquare size={15} /> Start dev server</button>
+            {projectDir && runningUrl && (
+              <button className="cta-secondary" onClick={() => onOpenUrl(runningUrl)} title="A server is already running on this project's port">
+                <Globe size={15} /> Open {runningUrl.replace(/^https?:\/\//, '')}
+              </button>
+            )}
+            {projectDir && (
+              <button className="cta-secondary" onClick={onStartDev} title={devCommand ? `Runs: ${devCommand}` : 'Open the dev server terminal'}>
+                <TerminalSquare size={15} /> {devRunning ? 'Dev server starting…' : devCommand ? 'Start dev server' : 'Set up dev server'}
+              </button>
+            )}
             <button className="cta-secondary" onClick={onSketch}><SquarePen size={15} /> Start from a sketch</button>
           </div>
-          {projectDir && <div className="welcome-project" title={projectDir}><span className="dot" /> {projectDir.split(/[\\/]/).filter(Boolean).pop()}</div>}
+          {projectDir && <div className="welcome-project" title={projectDir}><span className="dot" /> {projectDir.split(/[\\/]/).filter(Boolean).pop()}{devCommand && <span className="welcome-dev">$ {devCommand}{devLabel && devLabel !== devCommand.split(' ').pop() ? ` · ${devLabel}` : ''}</span>}</div>}
           <div className="welcome-hints">
             <span><kbd>S</kbd> select</span><span><kbd>D</kbd> draw</span><span><kbd>K</kbd> sketch</span><span><kbd>↵</kbd> send</span>
           </div>

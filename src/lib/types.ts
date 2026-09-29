@@ -144,6 +144,9 @@ export type DevEvent =
   | { type: 'started'; pid: number }
   | { type: 'exit'; code: number | null };
 
+export interface DevCandidate { command: string; label: string; dir: string; script?: string; port: number | null }
+export interface DevDetection { command: string; candidates: DevCandidate[]; runningUrl: string | null }
+
 export interface PinpointAPI {
   platform: 'darwin' | 'win32' | 'linux' | string;
   onFullscreen(cb: (fs: boolean) => void): () => void;
@@ -181,6 +184,7 @@ export interface PinpointAPI {
   runShots(runId: string): Promise<Record<string, string>>;
   onAgentEvent(cb: (e: AgentEvent) => void): () => void;
   startDev(command: string): Promise<boolean>;
+  detectDev(): Promise<DevDetection>;
   stopDev(): Promise<boolean>;
   onDevEvent(cb: (e: DevEvent) => void): () => void;
 }

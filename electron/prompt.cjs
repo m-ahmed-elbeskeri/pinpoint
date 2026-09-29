@@ -23,6 +23,19 @@ function fmtSource(src) {
   return parts.length ? parts.join('  ') : null;
 }
 
+// One entry per element a drawing touches: what it is, where it lives, how it looks.
+function describeHit(h) {
+  const parts = [`\`${h.selector}\``];
+  if (h.text) parts.push(`"${h.text.length > 80 ? h.text.slice(0, 80) + '…' : h.text}"`);
+  if (h.rect) parts.push(`${Math.round(h.rect.width)}×${Math.round(h.rect.height)}px`);
+  const src = fmtSource(h.source);
+  if (src) parts.push(`source: ${src}`);
+  const lines = [`  - ${parts.join(' · ')}`];
+  if (h.path) lines.push(`    DOM path: ${h.path}`);
+  if (h.styles && Object.keys(h.styles).length) lines.push(`    Styles: ${fmtStyles(h.styles)}`);
+  return lines.join('\n');
+}
+
 function describeAnnotation(a) {
   const lines = [];
   const note = a.note?.trim() ? a.note.trim() : '(no note; infer the intent from the image and the overall request)';
@@ -44,7 +57,10 @@ function describeAnnotation(a) {
     lines.push(`### [${a.n}] Markup drawn on the page: ${note}`);
     lines.push(`- Screenshot of the page with the user's markup on top: ${a.imageFile}`);
     if (a.region) lines.push(`- The markup covers roughly x ${a.region.x}–${a.region.x + a.region.width}, y ${a.region.y}–${a.region.y + a.region.height} (CSS px, viewport ${a.viewport?.width}×${a.viewport?.height}).`);
-    if (a.hits?.length) lines.push(`- Elements under the markup: ${a.hits.map((h) => `\`${h.selector}\`${h.text ? ` ("${h.text}")` : ''}${h.source?.file ? ` [${h.source.file}${h.source.line ? ':' + h.source.line : ''}]` : ''}`).join(', ')}`);
+    if (a.hits?.length) {
+      lines.push('- Elements under the markup (innermost first):');
+      for (const h of a.hits) lines.push(describeHit(h));
+    }
   } else if (a.kind === 'reference') {
     lines.push(`### [${a.n}] Reference image: ${note}`);
     lines.push(`- Image: ${a.imageFile}`);
@@ -153,7 +169,7 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory }) {
   }
 
   out.push('## How to work');
-  out.push('1. Look at the screenshots first (open each image path above). They show exactly what the user sees and marked up.');
+  out.push('1. Look at the screenshots first. They are attached to this message (the paths above are the same files) and show exactly what the user sees and marked up.');
   out.push('2. Find the source that renders each annotated element. Start from the source hint if there is one; otherwise search for distinctive visible text, class names or ids from the rendered HTML. The rendered HTML is compiled output: map it back to the component/template that produces it, and do not edit build output.');
   out.push("3. Read the user's markup this way: arrows mean move or point to; circles or boxes mean focus on this; a cross or scribble means remove; handwritten words are instructions. The pen color is only markup, not a color the user wants, unless the note says so.");
   out.push('4. Make focused edits that do exactly what was asked. Follow the conventions already in the codebase (styling approach, design tokens, component patterns). Don\'t refactor unrelated code.');

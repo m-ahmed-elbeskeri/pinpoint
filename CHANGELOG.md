@@ -4,6 +4,17 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+- **Dev server detection.** Opening a project works out how to start it: the package manager (from `packageManager` or the lockfile), the right script (`dev`, `start`, … ranked by what they run), apps in `frontend/`, `client/`, `apps/*` and similar subfolders, and non-Node stacks (Django, Laravel, Rails, Jekyll, Hugo, static sites). It installs dependencies first when `node_modules` is missing. **Start dev server** on the welcome screen runs it in one click, the terminal offers the other candidates, and if something already answers on the expected port you get an **Open** button for it.
+- Screenshots are now attached to Claude Code runs as images, not just file paths, so Claude always sees what you pointed at and drew.
+- Elements under a drawing now include their DOM path, size and key styles, so requests like "tone this down" don't need a separate select.
+
+### Changed
+
+- With no project open, Pinpoint starts on the welcome screen instead of trying `localhost:3000`.
+- Switching projects stops the previous project's dev server and returns to the welcome screen.
+
 ## [0.2.0] - 2026-09-26
 
 ### Added
