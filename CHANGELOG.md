@@ -4,6 +4,8 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-29
+
 ### Added
 
 - **Dev server detection.** Opening a project works out how to start it: the package manager (from `packageManager` or the lockfile), the right script (`dev`, `start`, … ranked by what they run), apps in `frontend/`, `client/`, `apps/*` and similar subfolders, and non-Node stacks (Django, Laravel, Rails, Jekyll, Hugo, static sites). It installs dependencies first when `node_modules` is missing. **Start dev server** on the welcome screen runs it in one click, the terminal offers the other candidates, and if something already answers on the expected port you get an **Open** button for it.
@@ -63,6 +65,7 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/releases/tag/v0.1.0
