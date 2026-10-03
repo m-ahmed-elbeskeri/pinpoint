@@ -2021,6 +2021,9 @@ export default function App() {
               <m.icon size={15} /><span>{m.label}</span><kbd>{m.key}</kbd>
             </button>
           ))}
+          <button className={rec ? 'rec' : ''} onClick={toggleRecording} disabled={!/^(https?|file):/.test(nav.url)} title={rec ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
+            <CircleDot size={15} /><span>{rec ? 'Stop' : 'Record'}</span>
+          </button>
         </div>
 
         <div className="spacer" />
@@ -2031,9 +2034,6 @@ export default function App() {
               <Download size={13} /> {update.status === 'ready' ? 'Restart to update' : update.status === 'available' ? `Get ${update.version}` : `Updating${update.percent ? ` ${update.percent}%` : '…'}`}
             </button>
           )}
-          <button className={`icon-btn ${rec ? 'rec' : ''}`} onClick={toggleRecording} disabled={!/^(https?|file):/.test(nav.url)} title={rec ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
-            <CircleDot size={16} />
-          </button>
           <button className={`icon-btn ${drawerOpen ? 'on' : ''}`} onClick={() => setDrawerOpen(!drawerOpen)} title="Dev server & logs">
             <TerminalSquare size={16} />{devRunning && <span className="live-dot abs" />}
           </button>

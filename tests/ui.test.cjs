@@ -154,7 +154,7 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(800);
 
       // ---- record an interaction, then replay it with real input
-      await ui(`document.querySelector('.top-right .icon-btn').click(); 0`);
+      await ui(`document.querySelector('.mode-seg button:last-child').click(); 0`);
       await sleep(400);
       guest.focus();
       await clickIn('#rb');
@@ -166,7 +166,7 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(600);
       const live = await ui(`document.querySelector('.frozen-tag.rec')?.textContent || ''`);
       await shot('recording');
-      await ui(`document.querySelector('.top-right .icon-btn').click(); 0`);
+      await ui(`document.querySelector('.mode-seg button:last-child').click(); 0`);
       await sleep(400);
       const flow = await ui(`[...document.querySelectorAll('.ann-title')].map((s) => s.textContent).join(' / ')`);
       log('recording captured the steps', /Recorded interaction/.test(flow) && /[3-5] steps/.test(flow), `${live} => ${flow}`);

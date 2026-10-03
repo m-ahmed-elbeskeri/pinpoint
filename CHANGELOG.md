@@ -4,6 +4,10 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Changed
+
+- **Record** sits with Browse, Select, Draw and Sketch in the top bar instead of among the icons on the right.
+
 ## [0.4.1] - 2026-10-03
 
 ### Added

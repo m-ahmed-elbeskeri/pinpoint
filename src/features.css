@@ -382,7 +382,8 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .vp-toggles .cond-pop .cond-reset { justify-self: start; margin-top: 4px; padding: 0 8px; }
 
 /* ---------- recording / isolate tags ---------- */
-.icon-btn.rec { color: #ff5d73; background: rgba(255, 77, 109, .14); animation: recpulse 1.4s ease-in-out infinite; }
+.mode-seg button:disabled { opacity: .4; cursor: default; }
+.mode-seg button.rec, .icon-btn.rec { color: #ff5d73; background: rgba(255, 77, 109, .14); animation: recpulse 1.4s ease-in-out infinite; }
 @keyframes recpulse { 50% { opacity: .55; } }
 .frozen-tag.rec, .frozen-tag.iso { pointer-events: auto; top: 44px; }
 .frozen-tag.rec { color: #ff8aa0; border-color: rgba(255, 77, 109, .45); }
