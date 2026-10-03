@@ -62,6 +62,7 @@ function describeElementExtras(a) {
     const added = after.filter((c) => !before.includes(c)), removed = before.filter((c) => !after.includes(c));
     lines.push(`- Class change (tried live in the browser):${added.length ? ` add \`${added.join(' ')}\`` : ''}${added.length && removed.length ? ';' : ''}${removed.length ? ` remove \`${removed.join(' ')}\`` : ''}. Apply it to this element's class list in source.`);
   }
+  if (a.reorder) lines.push(`- Moved: the user dragged this element from position ${a.reorder.from + 1} to position ${a.reorder.to + 1} of ${a.reorder.count} among its siblings${a.reorder.before ? ` (it now sits before ${a.reorder.before})` : ' (it is now last)'}. Make that the order in source.`);
   const propEdits = Object.entries(a.propEdits || {});
   if (propEdits.length) lines.push(`- Prop changes (tried live on \`<${el.component?.name || 'the component'}>\`): ${propEdits.map(([k, v]) => `${k} ${v.from} → ${v.to}`).join(', ')}. Make them at this element's call site.`);
   if (el.rules?.length) {
@@ -193,6 +194,7 @@ function contextSections({ design, memory, diagnostics, route, env, designSystem
   if (env?.colorScheme) emulated.push(`prefers-color-scheme: ${env.colorScheme} (the user is looking at the ${env.colorScheme} theme, so the request is about that theme unless they say otherwise; keep the other theme intact)`);
   if (env?.reducedMotion) emulated.push('prefers-reduced-motion: reduce (the request is about the reduced-motion experience)');
   if (env?.frozen) emulated.push('the page is frozen with transient UI (a menu, tooltip, popover or modal) held open, so some annotated elements only exist while that UI is open');
+  if (env?.profile) emulated.push(`viewing as the "${env.profile.name}" profile${env.profile.detail ? ` (${env.profile.detail})` : ''}: what is on screen is what that user sees`);
   if (env?.states?.length) emulated.push(`simulated conditions, switched on by the user to test the layout: ${env.states.join('; ')}. The page is meant to cope with these; don't "fix" the simulated content itself`);
   if (emulated.length) out.push('Page state when the user sent this:', ...emulated.map((l) => `- ${l}`), '');
   const diag = fmtDiagnostics(diagnostics);
@@ -293,7 +295,9 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
   out.push('2. Find the source that renders each annotated element. Start from the source hint if there is one; otherwise search for distinctive visible text, class names or ids from the rendered HTML. The rendered HTML is compiled output: map it back to the component/template that produces it, and do not edit build output.');
   out.push("3. Read the user's markup this way: arrows mean move or point to; circles or boxes mean focus on this; a cross or scribble means remove; handwritten words are instructions. The pen color is only markup, not a color the user wants, unless the note says so.");
   out.push('4. Make focused edits that do exactly what was asked. Follow the conventions already in the codebase (styling approach, design tokens, component patterns). Don\'t refactor unrelated code.');
-  out.push('5. The dev server is already running with hot reload, so don\'t start servers or run production builds. Run a quick type check or lint only if it is cheap.');
+  out.push(request.background
+    ? '5. You are working in a separate copy of the project so the user can keep working in theirs. No dev server is running here; don\'t start one or run builds. Make the edits and finish.'
+    : '5. The dev server is already running with hot reload, so don\'t start servers or run production builds. Run a quick type check or lint only if it is cheap.');
   out.push('6. Finish with a short summary: what you changed, with file paths, and anything you could not do or had to guess.');
   out.push('');
   out.push(REMEMBER_RULE);

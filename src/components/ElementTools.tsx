@@ -34,6 +34,8 @@ type Field = { prop: string; label: string; kind?: 'color' | 'weight'; step?: nu
 const FIELDS: Field[] = [
   { prop: 'padding', label: 'Padding', wide: true },
   { prop: 'margin', label: 'Margin', wide: true },
+  { prop: 'width', label: 'Width' },
+  { prop: 'height', label: 'Height' },
   { prop: 'gap', label: 'Gap' },
   { prop: 'border-radius', label: 'Radius' },
   { prop: 'font-size', label: 'Size' },

@@ -1,0 +1,73 @@
+# Pinpoint's checks on every pull request: which pages look different from the
+# base branch and what changed on them, new accessibility problems, and the
+# size of the production build.
+#
+# Copy this file to .github/workflows/ in your project and set the three values
+# under `env`. The report is posted as a comment on the pull request; the
+# before/after screenshots are attached to the run as an artifact.
+name: Visual check
+
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  START: npm run dev            # the command that serves your site
+  URL: http://localhost:3000    # where it serves it
+  FAIL_ON: none                 # none | changes | a11y | any
+
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: Get Pinpoint
+        run: |
+          git clone --depth 1 https://github.com/m-ahmed-elbeskeri/pinpoint.git "$RUNNER_TEMP/pinpoint"
+          cd "$RUNNER_TEMP/pinpoint" && npm ci
+          sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Screenshot the base branch
+        run: |
+          git checkout --quiet ${{ github.event.pull_request.base.sha }}
+          npm ci
+          ($START > "$RUNNER_TEMP/base.log" 2>&1 &) && npx --yes wait-on "$URL" --timeout 120000
+          cd "$RUNNER_TEMP/pinpoint" && xvfb-run -a npx electron . --no-sandbox --ci capture --url="$URL" --project="$GITHUB_WORKSPACE" --out="$RUNNER_TEMP/shots/before"
+          npx --yes kill-port "$(echo "$URL" | sed -E 's/.*:([0-9]+).*/\1/')"
+
+      - name: Screenshot the pull request
+        run: |
+          git checkout --quiet ${{ github.event.pull_request.head.sha }}
+          npm ci
+          ($START > "$RUNNER_TEMP/head.log" 2>&1 &) && npx --yes wait-on "$URL" --timeout 120000
+          cd "$RUNNER_TEMP/pinpoint" && xvfb-run -a npx electron . --no-sandbox --ci capture --url="$URL" --project="$GITHUB_WORKSPACE" --out="$RUNNER_TEMP/shots/after"
+
+      - name: Compare
+        id: compare
+        run: |
+          cd "$RUNNER_TEMP/pinpoint" && xvfb-run -a npx electron . --no-sandbox --ci compare \
+            --before="$RUNNER_TEMP/shots/before" --after="$RUNNER_TEMP/shots/after" \
+            --url="$URL" --report="$RUNNER_TEMP/report.md" --fail-on="$FAIL_ON"
+
+      - name: Build size
+        if: always()
+        run: |
+          cd "$RUNNER_TEMP/pinpoint" && xvfb-run -a npx electron . --no-sandbox --ci build-size --project="$GITHUB_WORKSPACE" >> "$RUNNER_TEMP/report.md" || true
+
+      - name: Comment on the pull request
+        if: always()
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file "$RUNNER_TEMP/report.md" --edit-last || gh pr comment ${{ github.event.pull_request.number }} --body-file "$RUNNER_TEMP/report.md"
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinpoint-screenshots
+          path: ${{ runner.temp }}/shots

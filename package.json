@@ -27,13 +27,15 @@
     "name": "m-ahmed-elbeskeri",
     "url": "https://github.com/m-ahmed-elbeskeri"
   },
-  "main": "electron/main.cjs",
+  "main": "electron/entry.cjs",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "vite build",
     "start": "vite build && electron .",
     "typecheck": "tsc --noEmit",
+    "test": "node tests/run.cjs",
+    "test:fixtures": "node tests/setup-fixtures.cjs",
     "icons": "electron scripts/make-icons.cjs",
     "dist:win": "vite build && electron-builder --win",
     "dist:mac": "vite build && electron-builder --mac",
@@ -42,8 +44,10 @@
     "dist:dir": "vite build && electron-builder --dir"
   },
   "dependencies": {
+    "@babel/parser": "^7.29.9",
     "axe-core": "^4.13.0",
     "diff": "^9.0.0",
+    "electron-updater": "^6.8.9",
     "source-map-js": "^1.2.1"
   },
   "devDependencies": {

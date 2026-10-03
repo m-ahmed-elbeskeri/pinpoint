@@ -6,6 +6,7 @@ import { tokenMatchScript } from '../lib/tokens';
 import { a11yScript } from '../lib/a11y';
 import { breakpointsScript, type Breakpoint } from './DeviceBar';
 import { classNamesScript, setPropScript } from '../lib/pagetools';
+import { closeWorkspaceScript, storageScript, workspaceScript, type WorkspaceSpec } from '../lib/workspace';
 import type { FlowStep } from '../lib/types';
 import type { A11yIssue } from '../lib/types';
 
@@ -48,6 +49,9 @@ export interface BrowserHandle {
   breakpoints(): Promise<Breakpoint[]>;                     // widths the page's CSS switches at
   classNames(): Promise<string[]>;                          // class names the page's CSS defines
   hasHmr(): Promise<boolean>;                               // the page updates itself when files change
+  workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>; // render a component alone, over the page
+  closeWorkspace(): void;
+  setStorage(entries: [string, string][]): Promise<boolean>; // true when a value changed
   setProp(uid: string, owner: string, name: string, value: unknown): Promise<boolean>; // live React prop change
 
   url(): string;
@@ -57,6 +61,8 @@ export interface BrowserHandle {
 interface Props {
   initialUrl: string;
   hidden?: boolean; // a background tab: kept alive, not shown
+  partition?: string; // which browser storage the page lives in (a "view as" profile)
+  onManip(m: { uid: string; kind: 'resize' | 'reorder'; width?: string | null; height?: string | null; from?: number; to?: number; count?: number; before?: string | null }): void;
   onPicked(el: PickedElement): void;
   onNavigate(state: { url: string; title: string; canBack: boolean; canForward: boolean }): void;
   onLoading(loading: boolean): void;
@@ -128,6 +134,13 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     reveal(selector) {
       wv.current?.executeJavaScript(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ behavior: 'smooth', block: 'center' })`).catch(() => {});
     },
+    async workspace(spec) {
+      try { return await wv.current!.executeJavaScript(workspaceScript(spec)); } catch (e) { return { ok: false, error: String((e as Error).message || e) }; }
+    },
+    closeWorkspace() { wv.current?.executeJavaScript(closeWorkspaceScript).catch(() => {}); },
+    async setStorage(entries) {
+      try { return !!(await wv.current!.executeJavaScript(storageScript(entries))); } catch { return false; }
+    },
     async hasHmr() {
       const code = `!!(document.querySelector('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="/_next/static/chunks/"],script[src*="livereload"],script[src*="browser-sync"]') || window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__NUXT__ || window.__sveltekit_dev || Object.keys(window).some((k) => /^(webpackHotUpdate|webpackChunk|__webpack_hmr|__turbopack|__NEXT_HMR|__next_f$|__remixContext|__reactRouterContext)/.test(k)))`;
       try { return !!(await wv.current!.executeJavaScript(code)); } catch { return false; }
@@ -178,6 +191,7 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         else if (e.channel === 'ready') cb.current.onReady();
         else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
         else if (e.channel === 'step') cb.current.onStep(data);
+        else if (e.channel === 'manip') cb.current.onManip(data);
         else if (e.channel === 'hits' || e.channel === 'reply') {
           const res = pending.current.get(data.reqId);
           if (res) { pending.current.delete(data.reqId); res(e.channel === 'hits' ? data.hits : data.data); }
@@ -190,7 +204,7 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
 
   // visibility, not display: a webview that is display:none loses its page.
   // allowpopups lets window.open / target=_blank reach the main process, which turns them into tabs (no window is ever created).
-  return <webview ref={wv as any} src={src} partition="persist:pinpoint" className={`webview ${props.hidden ? 'bg-tab' : ''}`} {...({ allowpopups: 'true' } as object)} />;
+  return <webview ref={wv as any} src={src} partition={props.partition || 'persist:pinpoint'} className={`webview ${props.hidden ? 'bg-tab' : ''}`} {...({ allowpopups: 'true' } as object)} />;
 });
 
 export { sleep };

@@ -339,6 +339,7 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
       return (
         <div className={`msg user ${item.steer ? 'steer' : ''}`}>
           {tag && <div className="steer-tag"><tag.icon size={11} /> {tag.text}</div>}
+          {item.background && <div className="steer-tag"><Layers size={11} /> Running in the background</div>}
           {item.variants && <div className="steer-tag"><Layers size={11} /> {item.variants} variants</div>}
           {item.annotations.length > 0 && (
             <div className="msg-attachments">
@@ -401,7 +402,9 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
           <div className="done-head">
             {item.verify && item.ok ? <ShieldCheck size={15} /> : item.ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
             <span>
-              {item.variant ? `Variant ${item.variant.index} of ${item.variant.total}${n ? ` · ${files}` : ''}${item.ok ? '' : ' · stopped'}`
+              {item.instant && !item.undone ? `Applied instantly · ${files}`
+                : item.background && !item.undone ? `Background run applied · ${files}`
+                : item.variant ? `Variant ${item.variant.index} of ${item.variant.total}${n ? ` · ${files}` : ''}${item.ok ? '' : ' · stopped'}`
                 : item.verify ? (n ? `Checked the result and fixed ${files}` : item.ok ? 'Checked the result: looks right' : 'Check stopped')
                   : item.undone ? 'Reverted' : n ? `Changed ${files}` : item.ok ? 'Done, no file changes' : 'Stopped'}
             </span>

@@ -113,6 +113,20 @@ Press the record button to capture an interaction as steps ("click Menu, type in
 
 <br />
 
+## Edit without waiting
+
+Small, unambiguous changes don't need the agent. When you tweak a style, fix some copy, change the class list or drag an element to a new place, **Apply now** writes it straight into your source: Tailwind classes or the plain-CSS rule for styles, the JSX for text, classes and order. It lands in the chat like any other change, with a diff and Undo. If the change can't be made exactly (the text comes from a variable, the styles come from a preprocessor), the note says so and you send it to the agent as usual.
+
+With an element selected, **drag its edges to resize it** and **drag its body to move it** among its siblings.
+
+<br />
+
+## Components on their own
+
+The boxes button opens the component workspace: every exported React component in your project, rendered alone with controls for its props and a grid of all its variants. It runs in the page with your app's own styles, so you can pick it, tweak it and send requests about it. It needs a Vite dev server and nothing else: no Storybook, no config.
+
+<br />
+
 ## Responsive mode
 
 The tablet and phone buttons next to the address bar open a device toolbar like the one in browser dev tools: device presets, exact width and height, rotate, touch emulation, zoom-to-fit, and drag handles on the page's edges. The page's own CSS breakpoints are listed as one-click sizes. Anything you send from here is scoped to that width. The columns button shows phone, tablet and desktop side by side, live and scroll-synced.
@@ -143,6 +157,11 @@ The tablet and phone buttons next to the address bar open a device toolbar like 
 | **Reference images** | Paste, drag in or attach mockups and screenshots, each with its own note. Lay one over the page with an opacity slider, or diff it against the page. |
 | **Check the result** | Optional (Settings): after each run the agent looks at the after screenshot and new errors, and fixes what's off. |
 | **Variants** | Optional (Settings, or the layers button in the composer): try a request 2 to 8 ways (click a number or type one) and pick one from the screenshots. |
+| **View as** | Show a tab as a saved profile: its own login, language, time zone, feature flags and headers. Two tabs can show two users at once. |
+| **Background runs** | Send a request to run in a separate copy of the project while you keep working. Review its diff and screenshot, then apply or discard. |
+| **Other browsers** | See the page in Safari's engine (WebKit) and Firefox next to Chromium, with a pixel diff. Downloaded once, on request. |
+| **CI** | The same checks on every pull request: see [Use it in CI](#use-it-in-ci). |
+| **Updates** | Windows and Linux builds update themselves; macOS builds tell you when a new version is out. |
 | **Tabs** | Open several pages at once. Annotate on more than one tab and send it as a single request; links that open a new window open a tab; tabs come back with the project. |
 | **Routes** | Pinpoint finds your pages (Next.js, Astro, Nuxt, SvelteKit, Remix, React Router, plain HTML) and tells the agent which file renders the current one. |
 | **Models and access** | One control for the model and its thinking level (click or drag the slider), and how much the agent may do: **Plan only**, **Edit files** or **Full access**. |
@@ -213,6 +232,25 @@ Everything Pinpoint writes goes into `.pinpoint/` in your project (it ignores it
 
 <br />
 
+## Use it in CI
+
+The checks Pinpoint runs after each edit also run headless, so a pull request can't quietly change a page nobody was looking at.
+
+```bash
+# on the base branch, with your site being served
+npx electron . --ci capture --url=http://localhost:3000 --out=shots/before
+# on the pull request
+npx electron . --ci capture --url=http://localhost:3000 --out=shots/after
+npx electron . --ci compare --before=shots/before --after=shots/after --url=http://localhost:3000 --report=report.md --fail-on=changes
+npx electron . --ci build-size --max-js=300
+```
+
+`compare` writes a Markdown report: every page that looks different and what changed on it, accessibility problems that are new, and the JS size difference. `--fail-on` is `none` (the default), `changes`, `a11y` or `any`. Options are written `--name=value`.
+
+[`docs/ci/pinpoint-visual-check.yml`](docs/ci/pinpoint-visual-check.yml) is a GitHub Actions workflow that does all of this and posts the report as a comment on the pull request.
+
+<br />
+
 ## Build from source
 
 Requires Node.js 22+.
@@ -229,6 +267,8 @@ npm run dev          # Vite + Electron, with hot reload for the UI
 | `npm run dev` | Run in development |
 | `npm start` | Production build, run locally |
 | `npm run typecheck` | TypeScript check |
+| `npm test` | Unit checks plus end-to-end runs of the real app (`-- --quick` skips the ones that open a window) |
+| `npm run test:fixtures` | One-time setup of the real projects some test suites use |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Build installers into `release/` |
 | `npm run icons` | Re-render the app icons from `build/icon.svg` |
 
@@ -240,6 +280,8 @@ Releases are built by GitHub Actions: pushing a `v*` tag builds every platform a
 
 **Does my code leave my machine?**
 Only through the agent you choose, exactly as when you use Claude Code or Codex in a terminal. Pinpoint has no server and no telemetry. See [SECURITY.md](SECURITY.md).
+
+Three things do reach the network. The installed app checks GitHub for a newer release by itself. The other two happen only when you ask for them: **Other browsers** downloads WebKit and Firefox from Playwright the first time, and **Create GitHub issue** uploads the hand-off file as a secret gist on your account.
 
 **Which frameworks work?**
 Anything that runs in a browser. Source-file lookup is best with React, Vue, Svelte, Astro and Angular dev builds. For anything else the agent finds the code from the selector, text and HTML.

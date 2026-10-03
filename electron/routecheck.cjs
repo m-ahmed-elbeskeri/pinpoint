@@ -39,10 +39,13 @@ function fingerprint(root) {
 }
 
 // Loads a URL in a hidden window, lets it settle, and hands the page to `use`.
-async function visit(url, use) {
+const DEFAULT_PARTITION = 'persist:pinpoint';
+
+// `partition` is the browser profile to load the page in (so a "view as" profile's login is used).
+async function visit(url, use, partition = DEFAULT_PARTITION) {
   const win = new BrowserWindow({
     show: false, frame: false, useContentSize: true, ...SIZE,
-    webPreferences: { partition: 'persist:pinpoint', offscreen: true, backgroundThrottling: false },
+    webPreferences: { partition, offscreen: true, backgroundThrottling: false },
   });
   const id = win.webContents.id;
   captureIds.add(id);
@@ -111,7 +114,7 @@ function compare(a, b) {
 
 // One page: two captures a moment apart. What differs between them is content
 // that moves by itself, and is not held against a run.
-const shoot = (url) => visit(url, async (wc) => {
+const shoot = (url, partition) => visit(url, async (wc) => {
   const first = await wc.capturePage();
   if (first.isEmpty()) return null;
   await sleep(NOISE_GAP_MS);
@@ -122,14 +125,14 @@ const shoot = (url) => visit(url, async (wc) => {
     noisy = cellDiff(first.toBitmap(), second.toBitmap(), s1.width, s1.height).cells.map((c) => c.i);
   }
   return { jpg: first.toJPEG(82), noisy };
-});
+}, partition);
 
-async function shootAll(routes) {
+async function shootAll(routes, partition) {
   const shots = new Map();
   const queue = [...routes];
   const worker = async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
-      const shot = await shoot(r.url);
+      const shot = await shoot(r.url, partition);
       if (shot) shots.set(keyFor(r.route), shot);
     }
   };
@@ -166,9 +169,9 @@ const NAME_AREAS = (cells, targets) => `(${((cells, targets) => {
 }).toString()})(${JSON.stringify(cells)}, ${JSON.stringify(targets)})`;
 
 // → { areas: what changed (minus what was asked for), asked: what was asked for }, both as element names.
-async function nameAreas(url, where, targets = []) {
+async function nameAreas(url, where, targets = [], partition) {
   if (where.whole || !where.cells.length) return { areas: ['most of the page (the layout shifted, or the background changed)'], asked: [] };
-  const named = (await visit(url, (wc) => wc.executeJavaScript(NAME_AREAS(where.cells, targets))).catch(() => null)) || [];
+  const named = (await visit(url, (wc) => wc.executeJavaScript(NAME_AREAS(where.cells, targets)), partition).catch(() => null)) || [];
   const pick = (asked) => [...new Set(named.filter((n) => n.asked === asked).map((n) => n.name))];
   return { areas: pick(false), asked: pick(true) };
 }
@@ -189,11 +192,11 @@ const PROBE = `(async () => {
   await new Promise((r) => setTimeout(r, 300));
   return { js: sum(js), css: sum(css), requests: res.length, nodes: document.getElementsByTagName('*').length, lcp: Math.round(lcp), cls: Math.round(cls * 1000) / 1000 };
 })()`;
-const probe = (url) => visit(url, (wc) => wc.executeJavaScript(PROBE));
+const probe = (url, partition) => visit(url, (wc) => wc.executeJavaScript(PROBE), partition);
 // A few tries: a page that is mid-rebuild can fail a load.
-const measure = async (url) => {
+const measure = async (url, partition) => {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const m = await probe(url);
+    const m = await probe(url, partition);
     if (m) return m;
     await sleep(400);
   }
@@ -201,22 +204,22 @@ const measure = async (url) => {
 };
 
 // ---------- baselines ----------
-const usable = (b, root, origin, fp, list) => !!b && b.root === root && b.origin === origin && b.fingerprint === fp && (!b.shots || list.every((r) => b.shots.has(keyFor(r.route))));
+const usable = (b, root, origin, fp, list, partition = DEFAULT_PARTITION) => !!b && b.root === root && b.origin === origin && b.partition === partition && b.fingerprint === fp && (!b.shots || list.every((r) => b.shots.has(keyFor(r.route))));
 
 // Take the "before" screenshots now, while nothing is running, so the next run
 // doesn't have to wait for them. Does nothing when they are already current.
-function prewarm(root, routes) {
+function prewarm(root, routes, partition = DEFAULT_PARTITION) {
   const list = routes.slice(0, MAX_ROUTES);
   if (!list.length) return;
   const origin = originOf(list[0].url);
   const fp = fingerprint(root);
-  if (usable(baseline, root, origin, fp, list) || usable(warming, root, origin, fp, list)) return;
-  const promise = shootAll(list).then((shots) => {
+  if (usable(baseline, root, origin, fp, list, partition) || usable(warming, root, origin, fp, list, partition)) return;
+  const promise = shootAll(list, partition).then((shots) => {
     // Only keep it if nothing was edited while the pages were loading.
-    if (fingerprint(root) === fp) baseline = { root, origin, fingerprint: fp, shots };
+    if (fingerprint(root) === fp) baseline = { root, origin, partition, fingerprint: fp, shots };
     return shots;
   });
-  const mine = { root, origin, fingerprint: fp, promise };
+  const mine = { root, origin, partition, fingerprint: fp, promise };
   warming = mine;
   promise.catch(() => {}).finally(() => { if (warming === mine) warming = null; });
 }
@@ -224,17 +227,17 @@ function prewarm(root, routes) {
 // Call when a run starts. Resolves to the "before" shots: the last run's
 // "after" shots or an idle-time baseline when nothing was edited since.
 // `perfUrl` (the open page) is also measured before and after, for the load-cost delta.
-function begin(root, routes, perfUrl, targets = []) {
+function begin(root, routes, perfUrl, targets = [], partition = DEFAULT_PARTITION) {
   const list = routes.slice(0, MAX_ROUTES);
   if (!list.length && !perfUrl) return null;
   const origin = originOf(list[0]?.url || perfUrl);
   const fp = list.length ? fingerprint(root) : '';
-  const before = usable(baseline, root, origin, fp, list) ? Promise.resolve(baseline.shots)
-    : usable(warming, root, origin, fp, list) ? warming.promise.then((shots) => (list.every((r) => shots.has(keyFor(r.route))) ? shots : shootAll(list)))
-      : shootAll(list);
+  const before = usable(baseline, root, origin, fp, list, partition) ? Promise.resolve(baseline.shots)
+    : usable(warming, root, origin, fp, list, partition) ? warming.promise.then((shots) => (list.every((r) => shots.has(keyFor(r.route))) ? shots : shootAll(list, partition)))
+      : shootAll(list, partition);
   // After the screenshots, so the dev server isn't compiling several pages while we time one.
-  const perfBefore = perfUrl ? before.then(() => measure(perfUrl), () => measure(perfUrl)) : Promise.resolve(null);
-  return { root, origin, routes: list, before, perfUrl, perfBefore, targets };
+  const perfBefore = perfUrl ? before.then(() => measure(perfUrl, partition), () => measure(perfUrl, partition)) : Promise.resolve(null);
+  return { root, origin, routes: list, before, perfUrl, perfBefore, targets, partition };
 }
 
 // Before/after load cost of the open page.
@@ -242,7 +245,7 @@ async function finishPerf(check) {
   if (!check.perfUrl) return null;
   const before = await check.perfBefore.catch(() => null);
   if (!before) return null;
-  const after = await measure(check.perfUrl);
+  const after = await measure(check.perfUrl, check.partition);
   return after ? { before, after } : null;
 }
 
@@ -255,8 +258,8 @@ async function finish(check, save, shared = true) {
   const routes = shared ? check.routes : check.routes.filter((r) => r.current);
   if (!routes.length) return [];
   await sleep(1500); // let the dev server finish rebuilding
-  const after = await shootAll(routes);
-  if (shared) baseline = { root: check.root, origin: check.origin, fingerprint: fingerprint(check.root), shots: after };
+  const after = await shootAll(routes, check.partition);
+  if (shared) baseline = { root: check.root, origin: check.origin, partition: check.partition, fingerprint: fingerprint(check.root), shots: after };
   else baseline = null; // some pages weren't re-shot: start fresh next time
   const results = [];
   for (const r of routes) {
@@ -269,11 +272,11 @@ async function finish(check, save, shared = true) {
       save(`route-${key}-before`, a.jpg);
       save(`route-${key}-after`, b.jpg);
       // Only on the open page is there something the user pointed at.
-      named = await nameAreas(r.url, where, r.current ? check.targets : []);
+      named = await nameAreas(r.url, where, r.current ? check.targets : [], check.partition);
     }
     results.push({ route: r.route, key, pct, changed, current: !!r.current, areas: named.areas, asked: named.asked?.length ? named.asked : undefined });
   }
   return results;
 }
 
-module.exports = { begin, finish, finishPerf, prewarm, shoot, compare, nameAreas, captureIds };
+module.exports = { begin, finish, finishPerf, prewarm, shoot, compare, nameAreas, visit, measure, keyFor, captureIds };

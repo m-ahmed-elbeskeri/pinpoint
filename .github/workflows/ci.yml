@@ -38,6 +38,13 @@ jobs:
         shell: bash
         run: for f in electron/*.cjs; do node --check "$f"; done
 
+      # The suites that don't open a window: source edits, CI mode, page tools.
+      # New on hosted runners, so a failure here is reported without failing the build.
+      - name: Tests
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        run: npm test -- --quick
+
       - name: Package (unpacked, smoke test)
         run: npx electron-builder --dir --publish never
         env:

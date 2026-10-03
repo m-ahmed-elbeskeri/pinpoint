@@ -72,6 +72,18 @@ export interface BuildSize { js: number; css: number; jsGzip: number; cssGzip: n
 
 export interface Pin { id: string; url: string; label: string; pinnedAt: number; checkedAt?: number; pct?: number; changed?: boolean; error?: string; areas?: string[] }
 
+// A component found in the project, for the workspace.
+export interface ComponentProp { name: string; required: boolean; type: 'string' | 'number' | 'boolean' | 'enum' | 'node' | 'other'; options?: string[]; default?: string | number | boolean }
+export interface ComponentEntry { name: string; file: string; isDefault: boolean; props: ComponentProp[] }
+
+// A "view as" profile: its own browser storage (so its own login), plus settings applied to pages shown under it.
+export interface Profile { id: string; name: string; locale?: string; timezone?: string; flags?: string; headers?: string }
+
+// A request being handled in a separate copy of the project.
+export interface BgRun { id: string; title: string; status: 'running' | 'done' | 'failed'; step?: string; summary?: string; files?: FileChange[]; shot?: boolean }
+
+export interface UpdateState { status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'none' | 'error'; version?: string; percent?: number; url?: string; manual?: boolean }
+
 export type NetworkMode = 'normal' | 'slow' | 'hang' | 'error' | 'offline';
 
 // A request someone annotated for a developer to run, saved as one file.
@@ -122,10 +134,11 @@ export interface Annotation {
   textEdit?: { from: string; to: string };                    // copy edited in place
   classEdit?: { from: string; to: string };                   // class list edited in place
   propEdits?: Record<string, { from: string; to: string }>;   // component props changed live
+  reorder?: { from: number; to: number; count: number; before?: string | null }; // dragged to a new place among its siblings
 }
 
 export type ChatItem =
-  | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later'; variants?: number }
+  | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later'; variants?: number; background?: boolean }
   | { kind: 'text'; id: string; text: string; streaming?: boolean }
   | { kind: 'thinking'; id: string; text: string; streaming?: boolean }
   | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string }
@@ -139,6 +152,8 @@ export type ChatItem =
     perf?: { before: PerfMetrics; after: PerfMetrics }; // the open page's load cost
     build?: { now: BuildSize; previous: BuildSize | null }; // production build size, measured on request
     visual?: 'none' | 'changed'; // whether the page on screen looked any different afterwards
+    instant?: boolean;           // written straight to the source, no agent
+    background?: boolean;        // came from a background run
   }
   | { kind: 'variants'; id: string; options: { runId: string; index: number; files: number }[]; chosen?: string | null }
   | { kind: 'memory'; id: string; text: string; status: 'pending' | 'saved' | 'dismissed' };
@@ -205,6 +220,7 @@ export interface Settings {
   gitBranchPerChat: boolean;
   gitAutoCommit: boolean;
   tabs?: string[];
+  tabProfiles?: string[];
   activeTab?: number;
   autoVerify: boolean;
   variants: number;
@@ -249,7 +265,7 @@ export interface PinpointAPI {
   pickFolder(): Promise<string | null>;
   openPath(p: string): Promise<string>;
   capture(webContentsId: number, rect?: Rect): Promise<string>;
-  runAgent(args: { runId: string; request: unknown; sessionId?: string | null; check?: { routes: { route: string; url: string; current?: boolean }[]; currentFile?: string; perfUrl?: string; targets?: string[] } }): Promise<{ requestDir: string }>;
+  runAgent(args: { runId: string; request: unknown; sessionId?: string | null; check?: { routes: { route: string; url: string; current?: boolean }[]; currentFile?: string; perfUrl?: string; targets?: string[]; partition?: string } }): Promise<{ requestDir: string }>;
   cancelAgent(runId: string): Promise<boolean>;
   steerAgent(args: { runId: string; steerId: string; request: unknown; mode: 'queue' | 'now' }): Promise<{ delivered: boolean }>;
   openFile(rel: string, line?: number): Promise<{ via: string }>;
@@ -269,7 +285,27 @@ export interface PinpointAPI {
   replay(webContentsId: number, steps: FlowStep[]): Promise<{ done: number; total: number }>;
   tailwindCss(classes: string[]): Promise<string | null>;
   measureBuild(pageUrl?: string): Promise<{ now: BuildSize; previous: BuildSize | null; restarted?: boolean }>;
-  prewarmRoutes(list: { route: string; url: string; current?: boolean }[]): Promise<boolean>;
+  prewarmRoutes(list: { route: string; url: string; current?: boolean }[], partition?: string): Promise<boolean>;
+  instantPlan(annotation: unknown): Promise<{ ok: boolean; summary?: string[]; files?: string[]; reason?: string }>;
+  instantApply(runId: string, annotation: unknown): Promise<{ changes: FileChange[]; summary: string[] }>;
+  listComponents(): Promise<ComponentEntry[]>;
+  readProfiles(): Promise<Profile[]>;
+  writeProfiles(list: Profile[]): Promise<Profile[]>;
+  applyProfile(webContentsId: number, settings: { locale: string; timezone: string; headers: Record<string, string> }): Promise<boolean>;
+  enginesStatus(): Promise<{ ready: boolean; installed: string[] }>;
+  enginesInstall(): Promise<{ ready: boolean; installed: string[] }>;
+  onEnginesProgress(cb: (text: string) => void): () => void;
+  enginesShoot(args: { webContentsId: number; url: string; width: number; height: number }): Promise<Record<string, string | { error: string }>>;
+  bgBlocker(): Promise<string | null>;
+  bgStart(args: { id: string; request: unknown }): Promise<boolean>;
+  bgDiff(id: string): Promise<string>;
+  bgShot(id: string): Promise<string | null>;
+  bgApply(args: { id: string; runId: string; instruction: string }): Promise<{ changes: FileChange[] }>;
+  bgDiscard(id: string): Promise<boolean>;
+  onBgEvent(cb: (e: { id: string; type: 'step' | 'done'; text?: string; ok?: boolean; files?: FileChange[]; summary?: string; shot?: boolean }) => void): () => void;
+  updateState(): Promise<UpdateState>;
+  updateInstall(): Promise<boolean>;
+  onUpdateState(cb: (s: UpdateState) => void): () => void;
   listPins(): Promise<Pin[]>;
   addPin(pin: { url: string; label: string }): Promise<Pin[]>;
   checkPins(): Promise<Pin[]>;

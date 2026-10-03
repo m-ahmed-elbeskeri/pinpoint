@@ -80,16 +80,21 @@ function ensureUI() {
       .kid{position:fixed;box-sizing:border-box;pointer-events:none;border:1px dashed #a78bfa}
       .rule{position:fixed;pointer-events:none;background:#f0f}
       .dist{position:fixed;pointer-events:none;font:700 10px/1 ui-monospace,monospace;color:#fff;background:#f0f;padding:2px 4px;border-radius:3px;transform:translate(-50%,-50%)}
+      .mark.active::after,.mark.active::before{content:'';position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid var(--c);border-radius:2px}
+      .mark.active::after{right:-5px;bottom:-5px}
+      .mark.active::before{right:-5px;top:calc(50% - 4px)}
+      .drop{position:fixed;pointer-events:none;background:#2f7bff;border-radius:2px;box-shadow:0 0 0 1px #fff}
       .badge{position:fixed;pointer-events:none;min-width:20px;height:20px;border-radius:10px;background:var(--c);color:#fff;
         font:700 11px/20px ui-sans-serif,system-ui,sans-serif;text-align:center;padding:0 5px;box-sizing:border-box;
         box-shadow:0 2px 6px rgba(0,0,0,.35);border:1.5px solid #fff}
     </style>
     <div id="marks"></div>
     <div id="layout"></div>
+    <div class="drop" id="drop" hidden></div>
     <div class="box hover" id="hover" hidden></div>
     <div class="label" id="label" hidden></div>`;
   (document.body || document.documentElement).appendChild(host);
-  ui = { host, root, hover: root.getElementById('hover'), label: root.getElementById('label'), marks: root.getElementById('marks'), layout: root.getElementById('layout') };
+  ui = { host, root, hover: root.getElementById('hover'), label: root.getElementById('label'), marks: root.getElementById('marks'), layout: root.getElementById('layout'), drop: root.getElementById('drop') };
   return ui;
 }
 
@@ -355,6 +360,7 @@ function swallow(e) {
 function onClick(e) {
   if (mode !== 'select') return;
   swallow(e);
+  if (suppressClick) { suppressClick = false; return; } // the end of a drag, not a pick
   const el = hoverEl || targetAt(e.clientX, e.clientY);
   if (!el) return;
   const payload = info(el);
@@ -377,6 +383,111 @@ function onKey(e) {
     onClick({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, shiftKey: e.shiftKey, clientX: 0, clientY: 0 });
   }
 }
+
+// ---------- direct manipulation: resize by the edges, drag to reorder ----------
+// Works on the selected element (the active pin). Its right and bottom edges
+// resize it; dragging its body moves it among its siblings. Both show at once
+// in the page and are reported to the host, which records them on the annotation.
+let manip = null;
+let suppressClick = false;
+const EDGE = 7;
+const activeEl = () => { const m = markers.find((x) => x.active); return m ? byUid(m.uid) : null; };
+
+function zoneAt(el, x, y) {
+  const r = el.getBoundingClientRect();
+  if (x < r.left || x > r.right + EDGE || y < r.top || y > r.bottom + EDGE) return null;
+  const right = Math.abs(x - r.right) <= EDGE, bottom = Math.abs(y - r.bottom) <= EDGE;
+  if (right && bottom) return 'xy';
+  if (right) return 'x';
+  if (bottom) return 'y';
+  return 'move';
+}
+
+// Where a dragged element would land: before which sibling, and where to draw the line.
+function dropTarget(el, x, y) {
+  const parent = el.parentElement;
+  if (!parent) return null;
+  const all = [...parent.children].filter((c) => !isOurs(c));
+  const sibs = all.filter((c) => c !== el);
+  if (!sibs.length) return null;
+  // Laid out in a row when neighbours share a top edge; otherwise stacked.
+  const a = all[0].getBoundingClientRect(), b = all[1].getBoundingClientRect();
+  const row = Math.abs(a.top - b.top) < Math.min(a.height, b.height) / 2;
+  let before = null;
+  for (const s of sibs) {
+    const r = s.getBoundingClientRect();
+    if ((row ? x : y) < (row ? r.left + r.width / 2 : r.top + r.height / 2)) { before = s; break; }
+  }
+  const r = (before || sibs[sibs.length - 1]).getBoundingClientRect();
+  const line = row
+    ? { left: before ? r.left - 4 : r.right + 1, top: r.top, width: 3, height: r.height }
+    : { left: r.left, top: before ? r.top - 4 : r.bottom + 1, width: r.width, height: 3 };
+  return { before, line };
+}
+
+function manipDown(e) {
+  if (mode !== 'select' || e.button !== 0) return;
+  const el = activeEl();
+  const zone = el && zoneAt(el, e.clientX, e.clientY);
+  if (!zone) return;
+  const r = el.getBoundingClientRect();
+  manip = { el, zone, x: e.clientX, y: e.clientY, w: r.width, h: r.height, moved: false, target: null };
+}
+
+function manipMove(e) {
+  if (mode !== 'select') return;
+  if (!manip) {
+    const el = activeEl();
+    const z = el && zoneAt(el, e.clientX, e.clientY);
+    document.documentElement.style.cursor = z === 'x' ? 'ew-resize' : z === 'y' ? 'ns-resize' : z === 'xy' ? 'nwse-resize' : z === 'move' ? 'grab' : 'crosshair';
+    return;
+  }
+  const dx = e.clientX - manip.x, dy = e.clientY - manip.y;
+  if (!manip.moved && Math.hypot(dx, dy) < 5) return;
+  manip.moved = true;
+  const u = ensureUI();
+  if (manip.zone === 'move') {
+    manip.target = dropTarget(manip.el, e.clientX, e.clientY);
+    u.drop.hidden = !manip.target;
+    if (manip.target) place(u.drop, manip.target.line);
+    return;
+  }
+  const rec = tweakRecord(manip.el);
+  if (manip.zone !== 'y') rec.props.set('width', Math.max(8, Math.round(manip.w + dx)) + 'px');
+  if (manip.zone !== 'x') rec.props.set('height', Math.max(8, Math.round(manip.h + dy)) + 'px');
+  applyTweaks(manip.el, rec);
+}
+
+function manipUp() {
+  if (!manip) return;
+  const m = manip;
+  manip = null;
+  ensureUI().drop.hidden = true;
+  if (!m.moved) return; // a plain click: handled as a pick
+  suppressClick = true;
+  setTimeout(() => { suppressClick = false; }, 80);
+  const uid = m.el.getAttribute('data-pinpoint');
+  const rec = tweakRecord(m.el);
+  if (m.zone !== 'move') {
+    ipcRenderer.sendToHost('manip', { uid, kind: 'resize', width: m.zone !== 'y' ? rec.props.get('width') : null, height: m.zone !== 'x' ? rec.props.get('height') : null });
+    return;
+  }
+  if (!m.target) return;
+  const parent = m.el.parentElement;
+  const kids = () => [...parent.children].filter((c) => !isOurs(c));
+  // Remember where it started (once), so the move can be undone and reported from the original position.
+  if (!rec.order) rec.order = { parent, next: m.el.nextElementSibling, from: kids().indexOf(m.el) };
+  parent.insertBefore(m.el, m.target.before);
+  const now = kids();
+  const next = m.el.nextElementSibling;
+  const label = next ? describeShort(next) + ((next.innerText || '').trim() ? ' "' + next.innerText.trim().replace(/\s+/g, ' ').slice(0, 30) + '"' : '') : null;
+  ipcRenderer.sendToHost('manip', { uid, kind: 'reorder', from: rec.order.from, to: now.indexOf(m.el), count: now.length, before: label });
+}
+
+// Registered before the listeners that swallow page input in select mode, so these still see it.
+window.addEventListener('pointerdown', manipDown, true);
+window.addEventListener('pointermove', manipMove, true);
+window.addEventListener('pointerup', manipUp, true);
 
 for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'dblclick', 'contextmenu', 'auxclick', 'submit']) {
   window.addEventListener(t, swallow, true);
@@ -429,7 +540,7 @@ const byUid = (uid) => document.querySelector(`[data-pinpoint="${uid}"]`);
 
 function tweakRecord(el) {
   let rec = tweaked.get(el);
-  if (!rec) tweaked.set(el, rec = { style: el.getAttribute('style'), props: new Map(), disabled: null, text: null, cls: null });
+  if (!rec) tweaked.set(el, rec = { style: el.getAttribute('style'), props: new Map(), disabled: null, text: null, cls: null, order: null });
   return rec;
 }
 
@@ -450,6 +561,7 @@ function untweak(el) {
     if (rec.disabled != null) el.toggleAttribute('disabled', rec.disabled);
     if (rec.text != null) el.textContent = rec.text;
     if (rec.cls != null) el.setAttribute('class', rec.cls);
+    if (rec.order && rec.order.parent.isConnected) rec.order.parent.insertBefore(el, rec.order.next && rec.order.next.parentElement === rec.order.parent ? rec.order.next : null);
   }
   tweaked.delete(el);
 }

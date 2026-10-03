@@ -3,7 +3,7 @@ import {
   ArrowLeft, ArrowRight, Bug, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
   PenTool, Plus, RotateCw, Send, Settings as SettingsIcon, Smartphone, Square, SquarePen, Tablet,
   TerminalSquare, Trash2, X, PanelLeft, PanelRight, Paperclip, Palette, ImagePlus, Zap, CornerDownRight,
-  Blend, Brain, CircleDot, ClipboardCopy, Columns3, Snowflake,
+  AppWindow, Blend, Boxes, Brain, CircleDot, ClipboardCopy, Columns3, Download, Snowflake, SquareStack,
 } from 'lucide-react';
 import { BrowserView, sleep, type BrowserHandle, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
@@ -24,11 +24,12 @@ import { CompareView, diffOverlay, type CompareTarget } from './components/Compa
 import { ElementTools, type ToolSection } from './components/ElementTools';
 import { ConditionsMenu, HandoffMenu, MAX_VARIANTS, NO_CONDITIONS, PinsChip, VariantsMenu, describeConditions, type Conditions } from './components/PageTools';
 import { MultiView } from './components/MultiView';
+import { BackgroundRuns, ComponentsPanel, EnginesView, ProfileMenu } from './components/Workbench';
 import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverlay';
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  A11yIssue, AgentEvent, AgentId, Annotation, ChatItem, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog, NetworkFailure,
+  A11yIssue, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog, NetworkFailure,
   GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
 } from './lib/types';
 
@@ -107,7 +108,7 @@ interface AgentRequest {
   annotations: Omit<Annotation, 'id' | 'color'>[];
   diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string; a11y?: A11yIssue[] };
   route?: { path: string; file: string; framework: string };
-  env?: PageEnv & { frozen: boolean; states?: string[] };
+  env?: PageEnv & { frozen: boolean; states?: string[]; profile?: { name: string; detail: string } };
   variant?: { index: number; total: number };
   verify?: { before?: string; after: string; same?: boolean };
   note?: string; // something Pinpoint did that the agent should know (e.g. which variant was picked)
@@ -195,7 +196,7 @@ const describe = (a: Annotation, root: string) => {
   if (a.kind === 'element' && a.element) {
     const el = a.element;
     const cls = el.classes?.filter((c) => c.length < 24).slice(0, 2).join('.') || '';
-    const extras = [...(a.states || []).map((s) => (s === 'disabled' ? s : ':' + s)), a.tweaks ? `${Object.keys(a.tweaks).length} tweak${Object.keys(a.tweaks).length > 1 ? 's' : ''}` : ''].filter(Boolean);
+    const extras = [a.reorder ? `moved to ${a.reorder.to + 1}` : '', ...(a.states || []).map((s) => (s === 'disabled' ? s : ':' + s)), a.tweaks ? `${Object.keys(a.tweaks).length} tweak${Object.keys(a.tweaks).length > 1 ? 's' : ''}` : ''].filter(Boolean);
     return {
       title: `<${el.tag}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''}>`,
       sub: (el.source?.file ? shortPath(el.source.file, root) + (el.source.line ? `:${el.source.line}` : '')
@@ -250,8 +251,13 @@ function handoffMarkdown(h: Handoff, root: string) {
 }
 
 // One page open in Pinpoint's browser.
-interface Tab { id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean; error: string | null; initialUrl: string }
-const makeTab = (url: string): Tab => ({ id: uid(), url: '', title: '', canBack: false, canForward: false, loading: false, error: null, initialUrl: url });
+interface Tab { id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean; error: string | null; initialUrl: string; profile: string }
+const makeTab = (url: string, profile = ''): Tab => ({ id: uid(), url: '', title: '', canBack: false, canForward: false, loading: false, error: null, initialUrl: url, profile });
+// A "view as" profile is a separate browser storage partition.
+const partitionOf = (profile: string) => (profile ? `persist:pinpoint-${profile}` : 'persist:pinpoint');
+// "key=value" / "Name: value" lines from a profile's settings.
+const pairs = (text: string | undefined, sep: string): [string, string][] => (text || '').split('\n').map((l) => l.trim()).filter((l) => l && l.includes(sep))
+  .map((l) => [l.slice(0, l.indexOf(sep)).trim(), l.slice(l.indexOf(sep) + 1).trim()] as [string, string]).filter(([k]) => k);
 const tabLabel = (t: Tab) => {
   if (t.title && t.title !== 'about:blank' && !/^https?:\/\//.test(t.title)) return t.title;
   const u = t.url || t.initialUrl;
@@ -362,6 +368,18 @@ export default function App() {
   const [a11y, setA11y] = useState<A11yIssue[]>([]);
   const [includeA11y, setIncludeA11y] = useState(false);
   const [job, setJob] = useState<string | null>(null);         // label shown between the runs of a variants job
+  const [profiles, setProfiles] = useState<Profile[]>([]);     // "view as" profiles of this project
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
+  const viewAs = profiles.find((p) => p.id === tab?.profile); // who the active tab is being viewed as
+  const profileApplied = useRef<Record<string, string>>({});   // page -> the profile settings it was loaded with
+  const [plan, setPlan] = useState<{ ok: boolean; summary?: string[]; reason?: string } | null>(null); // can the open note be applied without the agent
+  const [wsOpen, setWsOpen] = useState(false);                 // component workspace
+  const [enginesOpen, setEnginesOpen] = useState(false);       // other browser engines
+  const [bgRuns, setBgRuns] = useState<BgRun[]>([]);
+  const [bgBlocked, setBgBlocked] = useState<string | null>(null);
+  const [patchView, setPatchView] = useState<{ title: string; text: string } | null>(null);
+  const [update, setUpdate] = useState<UpdateState | null>(null);
   const runMetaRef = useRef<Record<string, RunMeta>>({});
   const beforeShotRef = useRef<{ id: string; shot: string } | null>(null); // the current run's "before" screenshot
   const variantJob = useRef<{ base: AgentRequest; total: number; index: number; done: { runId: string; index: number; files: number }[] } | null>(null);
@@ -400,7 +418,7 @@ export default function App() {
       setUrlInput(s.projectDir ? s.url : '');
       // Reopen the tabs the project had (or its last page).
       const urls = !s.projectDir ? [''] : s.tabs?.length ? s.tabs : [s.url || ''];
-      const list = urls.map((u) => makeTab(u ? normalizeUrl(u) : ''));
+      const list = urls.map((u, i) => makeTab(u ? normalizeUrl(u) : '', s.tabProfiles?.[i] || ''));
       setTabs(list);
       setActiveTab(list[Math.min(s.activeTab || 0, list.length - 1)].id);
     });
@@ -423,6 +441,7 @@ export default function App() {
     if (!projectDir) return;
     api.readDesign().then(setDesign).catch(() => setDesign(null));
     api.readMemory().then(setMemory).catch(() => setMemory([]));
+    api.readProfiles().then(setProfiles).catch(() => setProfiles([]));
     api.designSystem().then(setDesignSystem).catch(() => setDesignSystem(null));
     refreshRoutes();
     refreshGit();
@@ -516,7 +535,7 @@ export default function App() {
       browser.current?.classNames().then(setClassNames);
       // Baseline screenshots for the unintended-change check, taken now so a run doesn't wait for them.
       const warm = otherRoutes(navRef.current.url);
-      if (warm?.routes.length && !runRef.current) api.prewarmRoutes(warm.routes).catch(() => {});
+      if (warm?.routes.length && !runRef.current) api.prewarmRoutes(warm.routes, warm.partition).catch(() => {});
       // Client-rendered content arrives after load, so stress tests are applied again once it has.
       if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
     }, 1500);
@@ -709,7 +728,7 @@ export default function App() {
   const newTab = (url?: string) => {
     let start = url || '';
     if (!start) { try { const u = new URL(navRef.current.url); if (/^https?:$/.test(u.protocol)) start = u.origin + '/'; } catch { /* a blank tab */ } }
-    const t = makeTab(start);
+    const t = makeTab(start, tabsRef.current.find((x) => x.id === activeTabRef.current)?.profile || ''); // stays the same user
     setTabs((ts) => [...ts, t]);
     switchTab(t.id);
   };
@@ -724,6 +743,112 @@ export default function App() {
     delete handles.current[id];
     setAnnotations((prev) => prev.filter((a) => a.tabId !== id)); // its pins pointed at elements that are gone
   };
+  // ---------- "view as" profiles ----------
+  // Language, time zone, headers and flags for a tab's page. They only take
+  // effect on a fresh load, so the page is reloaded once when they change.
+  const applyTabProfile = async (t: Tab) => {
+    const h = handles.current[t.id];
+    const id = h?.id();
+    if (!h || id == null) return;
+    const p = profilesRef.current.find((x) => x.id === t.profile);
+    const headers = Object.fromEntries(pairs(p?.headers, ':'));
+    try { await api.applyProfile(id, { locale: p?.locale?.trim() || '', timezone: p?.timezone?.trim() || '', headers }); } catch (e) { flash(errText(e)); return; }
+    const flags = pairs(p?.flags, '=');
+    const changed = flags.length ? await h.setStorage(flags) : false;
+    const sig = JSON.stringify([p?.locale || '', p?.timezone || '', p?.headers || '']);
+    const was = profileApplied.current[`${t.id}:${id}`];
+    profileApplied.current[`${t.id}:${id}`] = sig;
+    if (changed || (was !== sig && (was !== undefined || sig !== '["","",""]'))) h.reload();
+  };
+  const setTabProfile = (id: string, profile: string) => {
+    const t = tabsRef.current.find((x) => x.id === id);
+    if (!t || t.profile === profile) return;
+    setPopover(null);
+    setAnnotations((prev) => prev.filter((a) => a.tabId !== id)); // the page is loaded again as someone else
+    patchTab(id, { profile, initialUrl: t.url && t.url !== 'about:blank' ? t.url : t.initialUrl });
+  };
+  const saveProfiles = (list: Profile[]) => {
+    setProfiles(list);
+    profilesRef.current = list;
+    api.writeProfiles(list).catch((e) => flash(errText(e)));
+    for (const t of tabsRef.current) if (t.profile) applyTabProfile(t);
+  };
+
+  // ---------- instant edits ----------
+  // Whether the open note's changes can go straight into the source, and why not when they can't.
+  const editKey = popover ? JSON.stringify((({ tweaks, textEdit, classEdit, reorder, propEdits, states, element }) => [tweaks, textEdit, classEdit, reorder, propEdits, states, element?.source, element?.rules?.length])(annotations.find((a) => a.id === popover.id) || ({} as Annotation))) : '';
+  useEffect(() => {
+    const a = popover && annRef.current.find((x) => x.id === popover.id);
+    if (!a || a.kind !== 'element' || !(a.tweaks || a.textEdit || a.classEdit || a.reorder)) { setPlan(null); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      const { image: _i, ...bare } = a;
+      api.instantPlan(bare).then((p) => { if (live) setPlan(p); }).catch(() => { if (live) setPlan(null); });
+    }, 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [editKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyInstant = async (id: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    if (!a) return;
+    const { image: _i, ...bare } = a;
+    const runId = uid();
+    try {
+      const res = await api.instantApply(runId, bare);
+      // The source says it now; the live preview of the same thing comes off so the real result shows.
+      await releaseElement(a);
+      (a.tabId ? handles.current[a.tabId] : browser.current)?.send('clear');
+      setAnnotations((prev) => prev.filter((x) => x.id !== id));
+      setPopover(null);
+      if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
+      setChat((c) => [...c,
+        { kind: 'status', id: uid(), text: `Instant edit: ${res.summary.join('; ')}` },
+        { kind: 'done', id: uid(), runId, ok: true, changes: res.changes, instant: true },
+      ]);
+      if (/^file:/.test(navRef.current.url)) browser.current?.reload();
+      refreshGit();
+    } catch (e) { flash(errText(e)); }
+  };
+
+  // Dragging on the page: an edge resizes the selected element, its body moves it among its siblings.
+  const onManip = (m: { uid: string; kind: 'resize' | 'reorder'; width?: string | null; height?: string | null; from?: number; to?: number; count?: number; before?: string | null }) => {
+    const a = annRef.current.find((x) => x.element?.uid === m.uid);
+    if (!a) return;
+    if (m.kind === 'resize') {
+      if (m.width) tweak(a.id, 'width', m.width);
+      if (m.height) tweak(a.id, 'height', m.height);
+    } else if (m.from != null && m.to != null) {
+      patchAnn(a.id, (x) => ({ ...x, reorder: m.from === m.to ? undefined : { from: m.from!, to: m.to!, count: m.count || 0, before: m.before } }));
+    }
+    setActiveId(a.id);
+  };
+
+  // ---------- background runs ----------
+  useEffect(() => api.onBgEvent((e) => {
+    setBgRuns((list) => list.map((r) => (r.id !== e.id ? r
+      : e.type === 'step' ? { ...r, step: e.text }
+        : { ...r, status: e.ok && e.files?.length ? 'done' : e.ok ? 'done' : 'failed', files: e.files, summary: e.summary || (e.ok ? 'Finished without changing any files.' : 'The run did not finish.'), shot: e.shot, step: undefined })));
+  }), []);
+  useEffect(() => { if (projectDir) api.bgBlocker().then(setBgBlocked).catch(() => setBgBlocked('unavailable')); }, [projectDir, gitStatus?.repo, gitStatus?.hasCommits]);
+  const applyBg = async (r: BgRun) => {
+    const runId = uid();
+    try {
+      const { changes } = await api.bgApply({ id: r.id, runId, instruction: r.title });
+      setBgRuns((list) => list.filter((x) => x.id !== r.id));
+      if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
+      setChat((c) => [...c,
+        ...(r.summary ? [{ kind: 'text' as const, id: uid(), text: r.summary }] : []),
+        { kind: 'done', id: uid(), runId, ok: true, changes, background: true },
+      ]);
+      if (/^file:/.test(navRef.current.url)) browser.current?.reload();
+      refreshGit();
+    } catch (e) { flash(errText(e)); }
+  };
+  const discardBg = (r: BgRun) => { api.bgDiscard(r.id).catch(() => {}); setBgRuns((list) => list.filter((x) => x.id !== r.id)); };
+
+  // ---------- updates ----------
+  useEffect(() => { api.updateState().then(setUpdate).catch(() => {}); return api.onUpdateState(setUpdate); }, []);
+
   // The newly shown tab gets the current mode, markers and page settings; page problems start over.
   useEffect(() => {
     if (!activeTab) return;
@@ -745,7 +870,8 @@ export default function App() {
   useEffect(() => {
     if (!projectDir || !tabs.length) return;
     const t = setTimeout(() => {
-      saveSettings({ tabs: tabUrls.split('\n').filter(Boolean), activeTab: Math.max(0, tabsRef.current.findIndex((x) => x.id === activeTabRef.current)) });
+      const open = tabsRef.current.filter((t) => (t.url && t.url !== 'about:blank') || t.initialUrl);
+      saveSettings({ tabs: tabUrls.split('\n').filter(Boolean), tabProfiles: open.map((t) => t.profile), activeTab: Math.max(0, tabsRef.current.findIndex((x) => x.id === activeTabRef.current)) });
     }, 800);
     return () => clearTimeout(t);
   }, [tabUrls, activeTab, projectDir]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1003,7 +1129,9 @@ export default function App() {
       { route: currentRoute?.route || here, url, current: true },
       ...routes.filter((r) => !r.dynamic && r.route !== currentRoute?.route).slice(0, 8).map((r) => ({ route: r.route, url: origin + r.route })),
     ];
-    return { routes: list, currentFile: currentRoute?.file, perfUrl: settingsRef.current?.perfCheck === false ? undefined : url, targets };
+    // The pages are loaded the way the open tab sees them (its "view as" profile).
+    const partition = partitionOf(tabsRef.current.find((t) => t.id === activeTabRef.current)?.profile || '');
+    return { routes: list, currentFile: currentRoute?.file, perfUrl: settingsRef.current?.perfCheck === false ? undefined : url, targets, partition };
   };
 
   const startRun = async (request: AgentRequest, before?: string | null, meta: RunMeta = {}) => {
@@ -1039,8 +1167,8 @@ export default function App() {
     startRun(merged);
   }, [runId, flushTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const send = async (mode: 'queue' | 'now' = 'queue') => {
-    if (!settings || busy || (job && !runRef.current)) return;
+  const send = async (mode: 'queue' | 'now' | 'bg' = 'queue') => {
+    if (!settings || busy || (mode !== 'bg' && job && !runRef.current)) return;
     verifyPending.current = null; // the user moved on; don't start a check on top of their message
     if (!settings.projectDir) {
       flash('Pick the project folder the agent should edit.');
@@ -1091,7 +1219,9 @@ export default function App() {
         annotations: anns.map(({ id: _i, color: _c, ...a }) => a),
         diagnostics,
         route: currentRoute ? { path: currentRoute.route, file: currentRoute.file, framework: currentRoute.framework } : undefined,
-        env: env.colorScheme || env.reducedMotion || frozen || describeConditions(cond).length ? { ...env, frozen, states: describeConditions(cond) } : undefined,
+        env: env.colorScheme || env.reducedMotion || frozen || describeConditions(cond).length || viewAs
+          ? { ...env, frozen, states: describeConditions(cond), ...(viewAs && { profile: { name: viewAs.name, detail: [viewAs.locale, viewAs.timezone, viewAs.flags?.trim() && `flags: ${pairs(viewAs.flags, '=').map(([k, v]) => `${k}=${v}`).join(', ')}`].filter(Boolean).join(', ') } }) }
+          : undefined,
         note: pendingNote.current || undefined,
       };
       pendingNote.current = null;
@@ -1105,6 +1235,16 @@ export default function App() {
       for (const h of Object.values(handles.current)) h?.send('clear'); // pins can be on several tabs
       if (hasDiag) clearDiagnostics();
       if (a11yIssues) setIncludeA11y(false);
+
+      // Background: handled in a separate copy of the project while this chat stays free.
+      if (mode === 'bg') {
+        const id = uid();
+        const title = (request.instruction || anns.map((a) => a.note).find(Boolean) || 'Background request').split('\n')[0].slice(0, 80);
+        setBgRuns((list) => [...list, { id, title, status: 'running' }]);
+        try { await api.bgStart({ id, request }); }
+        catch (e) { setBgRuns((list) => list.filter((r) => r.id !== id)); flash(errText(e)); }
+        return;
+      }
 
       const running = runRef.current;
       if (running) {
@@ -1675,6 +1815,11 @@ export default function App() {
         <div className="spacer" />
 
         <div className="top-right">
+          {update && (update.status === 'ready' || update.status === 'available' || update.status === 'downloading') && (
+            <button className={`update-chip ${update.status}`} disabled={update.status === 'downloading'} onClick={() => api.updateInstall()} title={update.status === 'ready' ? `Version ${update.version} is downloaded. Click to restart into it.` : update.status === 'available' ? `Version ${update.version} is out. Click to open the download page.` : `Downloading version ${update.version}…`}>
+              <Download size={13} /> {update.status === 'ready' ? 'Restart to update' : update.status === 'available' ? `Get ${update.version}` : `Updating${update.percent ? ` ${update.percent}%` : '…'}`}
+            </button>
+          )}
           <button className={`icon-btn ${rec ? 'rec' : ''}`} onClick={toggleRecording} disabled={!/^(https?|file):/.test(nav.url)} title={rec ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
             <CircleDot size={16} />
           </button>
@@ -1743,7 +1888,11 @@ export default function App() {
             ) : <Globe size={14} className="url-icon" />}
             <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} onFocus={(e) => e.target.select()} placeholder="localhost:3000, a URL, or a path to an .html file" spellCheck={false} />
           </form>
+          <ProfileMenu profiles={profiles} current={tab?.profile || ''} onPick={(p) => tab && setTabProfile(tab.id, p)} onSave={saveProfiles} />
           <div className="vp-toggles">
+            <button type="button" className={wsOpen ? 'on' : ''} onClick={() => { if (wsOpen) browser.current?.closeWorkspace(); setWsOpen(!wsOpen); }} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Components: render any component from the project on its own, with its props and variants"><Boxes size={14} /></button>
+            <button type="button" onClick={() => setEnginesOpen(true)} disabled={!/^https?:/.test(nav.url)} title="Other browsers: see this page in Safari's engine (WebKit) and Firefox"><AppWindow size={14} /></button>
+            <span className="vp-sep" />
             {QUICK_SIZES.map((q) => {
               const on = q.w ? device.on && device.w === q.w : !device.on;
               return <button type="button" key={q.label} className={on && !multi ? 'on' : ''} onClick={() => { setMulti(false); setDevice(q.w ? { on: true, w: q.w, h: q.h, zoom: device.zoom, touch: device.touch } : DEVICE_OFF); }} title={q.label}><q.icon size={14} /></button>;
@@ -1768,17 +1917,19 @@ export default function App() {
               const here = () => t.id === activeTabRef.current; // background tabs stay loaded but don't drive the UI
               return (
                 <BrowserView
-                  key={t.id}
+                  key={`${t.id}:${t.profile}`}
                   ref={(h) => { handles.current[t.id] = h; if (here()) browser.current = h; }}
                   hidden={t.id !== activeTab}
+                  partition={partitionOf(t.profile)}
                   initialUrl={t.initialUrl}
+                  onManip={(m) => { if (here()) onManip(m); }}
                   onPicked={(el) => { if (here()) onPicked(el); }}
                   onNavigate={(s) => {
                     patchTab(t.id, s);
                     if (here() && document.activeElement?.closest('.urlbar') == null) setUrlInput(s.url === 'about:blank' ? '' : s.url);
                   }}
                   onLoading={(l) => patchTab(t.id, { loading: l })}
-                  onReady={() => { if (here()) syncPage(); }}
+                  onReady={() => { applyTabProfile(t); if (here()) syncPage(); }}
                   onKey={(k) => { if (here()) handleKey(k); }}
                   onError={(msg) => patchTab(t.id, { error: msg })}
                   onConsole={(c) => { if (here()) onConsole(c); }}
@@ -1837,8 +1988,11 @@ export default function App() {
                 )}
                 <div className="note-pop-foot">
                   <button className="btn ghost xs" onClick={() => removeAnn(popAnn.id)}><Trash2 size={12} /> Remove</button>
-                  <span className="hint">Enter to save · {MOD}+Enter to send</span>
+                  {plan
+                    ? <button className="btn xs primary" disabled={!plan.ok} onClick={() => applyInstant(popAnn.id)} title={plan.ok ? `Write it straight into the source, no agent:\n${plan.summary?.join('\n')}` : `Can't be written directly: ${plan.reason}\nSend it and the agent will do it.`}><Zap size={12} /> Apply now</button>
+                    : <span className="hint">Enter to save · {MOD}+Enter to send</span>}
                 </div>
+                {plan && !plan.ok && <p className="hint plan-why">Needs the agent: {plan.reason}</p>}
               </div>
             )}
 
@@ -1887,6 +2041,13 @@ export default function App() {
           )}
           </div>
           </div>
+          {wsOpen && (
+            <ComponentsPanel
+              render={(spec) => browser.current?.workspace({ ...spec, left: Math.round(270 / deviceScale) }) ?? Promise.resolve(null)}
+              close={() => browser.current?.closeWorkspace()}
+              onClose={() => setWsOpen(false)}
+            />
+          )}
           {multi && <MultiView url={nav.url} onNavigate={go} onPick={(w, h) => { setMulti(false); setDevice({ on: true, w, h, zoom: 'fit', touch: device.touch }); }} onClose={() => setMulti(false)} />}
         </div>
       </main>
@@ -1948,6 +2109,10 @@ export default function App() {
         </div>
 
         <div className="composer">
+          <BackgroundRuns
+            runs={bgRuns} onApply={applyBg} onDiscard={discardBg}
+            onDiff={(r) => api.bgDiff(r.id).then((text) => setPatchView({ title: r.title, text }))}
+          />
           {projectDir && (
             <ContextBar
               lead={<>
@@ -2040,7 +2205,10 @@ export default function App() {
                   <button className="btn primary sm send-btn" disabled={!canSend} onClick={() => send('queue')} title="Send after the agent's current step (Enter)"><CornerDownRight size={13} /><span className="btn-text">Steer</span></button>
                 </div>
               ) : (
-                <button className="btn primary sm send-btn" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><Send size={13} /><span className="btn-text">Send</span></button>
+                <div className="run-actions">
+                  <button className="icon-btn bg-btn" disabled={!canSend || !!bgBlocked} onClick={() => send('bg')} title={bgBlocked || 'Run in the background: in a separate copy of the project, so you can keep working and send more'}><SquareStack size={15} /></button>
+                  <button className="btn primary sm send-btn" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><Send size={13} /><span className="btn-text">Send</span></button>
+                </div>
               )}
             </div>
           </div>
@@ -2074,6 +2242,23 @@ export default function App() {
           onNewChat={() => { newChat(); setSheet(null); flash('New chat: the next request sends the updated design rules.'); }}
           chatBusy={!!runId}
         />
+      )}
+      {enginesOpen && (
+        <EnginesView
+          url={nav.url}
+          capture={cleanCapture}
+          shoot={() => api.enginesShoot({ webContentsId: browser.current!.id()!, url: navRef.current.url, ...browser.current!.size() })}
+          onCompare={(images, labels, title) => setCompare({ images, labels, title })}
+          onClose={() => setEnginesOpen(false)}
+        />
+      )}
+      {patchView && (
+        <div className="modal-backdrop" onMouseDown={() => setPatchView(null)}>
+          <div className="compare-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="diff-head"><h3>{patchView.title}</h3><div className="spacer" /><button className="icon-btn" onClick={() => setPatchView(null)}><X size={16} /></button></div>
+            <pre className="patch-view">{patchView.text.split('\n').map((l, i) => <span key={i} className={l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : l.startsWith('@@') || l.startsWith('diff ') ? 'meta' : ''}>{l + '\n'}</span>)}</pre>
+          </div>
+        </div>
       )}
       {compare && <CompareView {...compare} onClose={() => setCompare(null)} captureSizes={captureSizes} />}
       {diffView && (

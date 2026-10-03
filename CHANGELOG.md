@@ -10,6 +10,15 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ### Added
 
+- **Instant edits.** A style tweak, a copy fix, a class change or a reorder is written straight into the source in milliseconds, with no agent, when the place to write it is unambiguous: the element's JSX (Tailwind classes, text, class list, order) or the plain-CSS rule that sets the property. It shows in the chat as a normal change with a diff and Undo. When it can't be done exactly, the note says why and the agent does it.
+- **Drag on the page.** With an element selected, drag its right or bottom edge to resize it, or drag its body to move it among its siblings. Both show at once and go to the agent or to an instant edit.
+- **Component workspace.** Any exported React component in the project, rendered alone in the page with controls for its props (read from its types) and a grid of every variant. Needs a Vite dev server; no Storybook.
+- **"View as" profiles.** A tab can be shown as a saved profile: its own cookies and storage (log in once, it stays logged in), plus a language, time zone, feature flags and request headers. Two tabs can show two users side by side.
+- **Background runs.** Send a request to run in a separate copy of the project (a git worktree) while you keep working and send more. When it finishes you see its summary, diff and a screenshot, then apply or discard it. Applying merges; a run that touched the same lines you did is refused, never half-applied.
+- **Other browsers.** See the open page as WebKit (Safari's engine) and Firefox render it, next to Chromium, with a pixel diff. The engines are downloaded once, on request (about 300 MB), through Playwright.
+- **CI mode.** `electron . --ci capture | compare | build-size` runs the visual change check, accessibility check and build-size check headless. `docs/ci/pinpoint-visual-check.yml` is a ready-made GitHub Actions workflow that comments the result on each pull request.
+- **Auto-update.** Windows and Linux builds download new releases in the background and install on restart. macOS builds, not being signed, show that a newer version is out and link to it.
+- **Test suite.** `npm test` runs the unit checks and drives the real app end to end, with a stand-in agent so no tokens are spent.
 - **Browser tabs.** Open several pages at once, each with its own history. Annotations made on different tabs go out as one request, and each tab shows when it has some. Links that open a new window open a tab. Tabs are restored with the project. <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>T</kbd> opens one; middle-click closes.
 - **Browser-style layout.** Back, forward, reload and the address bar sit under the tabs with the page tools (sizes, freeze, test conditions); the top bar keeps the project, the modes and app-level buttons. Design rules and memory are icons in the top bar.
 - **Model and thinking level in one control.** One button in the composer shows the model and a level meter (and more detail when the sidebar is wide). Its menu lists the models and has a slider you click or drag to set the thinking level.

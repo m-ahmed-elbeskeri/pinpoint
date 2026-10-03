@@ -74,4 +74,18 @@ function writeMemory(root, items) {
   return items;
 }
 
-module.exports = { ensureDir, listChats, loadChat, saveChat, deleteChat, readDesign, writeDesign, readMemory, writeMemory };
+// ---------- "view as" profiles ----------
+// Each profile is its own browser storage (so its login persists) plus a
+// language, a time zone, flags and headers. Logins live in the app's data, not here.
+function readProfiles(root) {
+  try { return JSON.parse(fs.readFileSync(pp(root, 'profiles.json'), 'utf8')); }
+  catch { return []; }
+}
+
+function writeProfiles(root, list) {
+  ensureDir(root);
+  fs.writeFileSync(pp(root, 'profiles.json'), JSON.stringify(list, null, 2));
+  return list;
+}
+
+module.exports = { ensureDir, listChats, loadChat, saveChat, deleteChat, readDesign, writeDesign, readMemory, writeMemory, readProfiles, writeProfiles };
