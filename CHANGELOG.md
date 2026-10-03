@@ -4,6 +4,10 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Changed
+
+- **License.** Now the GNU Affero General Public License v3.0 or later (0.4.0 was GPL v3). The same terms as before, and they also apply when a modified Pinpoint is offered to people as a service over a network.
+
 ## [0.4.0] - 2026-10-03
 
 ### Changed
