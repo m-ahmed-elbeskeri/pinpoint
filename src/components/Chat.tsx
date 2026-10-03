@@ -3,9 +3,9 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, CornerDownRight, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal,
+  ExternalLink, CornerDownRight, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, ShieldCheck, Gauge, EyeOff,
 } from 'lucide-react';
-import type { ChatItem, DiffFile, FileChange, RevertResult } from '../lib/types';
+import type { BuildSize, ChatItem, DiffFile, FileChange, PerfMetrics, RevertResult } from '../lib/types';
 
 // Diffs per run are fetched once and shared by every file row of that run.
 const diffCache = new Map<string, Promise<DiffFile[]>>();
@@ -32,6 +32,85 @@ function ShotStrip({ runId, onOpen }: { runId: string; onOpen(): void }) {
       <figure><img src={shots.after} alt="After" /><figcaption>After</figcaption></figure>
       <span className="shot-cta"><SplitSquareHorizontal size={12} /> Compare</span>
     </button>
+  );
+}
+
+// What the run did to the open page's load cost. Only changes worth a look are listed.
+function PerfLine({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } }) {
+  const { before: b, after: a } = perf;
+  const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
+  const sign = (n: number) => (n > 0 ? '+' : '−');
+  const items: { text: string; worse: boolean }[] = [];
+  const bytes = (label: string, x: number, y: number) => {
+    const d = y - x;
+    if (Math.abs(d) >= 1024 && Math.abs(d) >= x * 0.01) items.push({ text: `${label} ${sign(d)}${kb(Math.abs(d))}`, worse: d > 0 });
+  };
+  bytes('JS', b.js, a.js);
+  bytes('CSS', b.css, a.css);
+  if (a.requests !== b.requests) items.push({ text: `${sign(a.requests - b.requests)}${Math.abs(a.requests - b.requests)} request${Math.abs(a.requests - b.requests) > 1 ? 's' : ''}`, worse: a.requests > b.requests });
+  if (Math.abs(a.nodes - b.nodes) >= 5) items.push({ text: `DOM ${sign(a.nodes - b.nodes)}${Math.abs(a.nodes - b.nodes)} nodes`, worse: a.nodes - b.nodes > 50 });
+  if (Math.abs(a.cls - b.cls) >= 0.01) items.push({ text: `layout shift ${b.cls} → ${a.cls}`, worse: a.cls > b.cls });
+  if (b.lcp && a.lcp && Math.abs(a.lcp - b.lcp) >= 150) items.push({ text: `largest paint ${b.lcp} → ${a.lcp} ms`, worse: a.lcp > b.lcp });
+  const title = `Before → after, measured on a fresh load of this page (dev build)\nJS ${kb(b.js)} → ${kb(a.js)}\nCSS ${kb(b.css)} → ${kb(a.css)}\nRequests ${b.requests} → ${a.requests}\nDOM nodes ${b.nodes} → ${a.nodes}\nLayout shift ${b.cls} → ${a.cls}\nLargest paint ${b.lcp || '?'} → ${a.lcp || '?'} ms`;
+  return (
+    <div className={`route-check ${items.some((i) => i.worse) ? 'moved' : ''}`} title={title}>
+      <Gauge size={12} />
+      {items.length ? items.map((i) => <span key={i.text} className={i.worse ? 'worse' : 'better'}>{i.text}</span>)
+        : <span>Load cost unchanged{a.js || a.lcp ? ` (${[a.js ? `${kb(a.js)} JS` : '', a.lcp ? `${a.lcp} ms to largest paint` : ''].filter(Boolean).join(', ')})` : ''}</span>}
+    </div>
+  );
+}
+
+// Size of the real production build, measured when asked.
+function BuildLine({ build }: { build: { now: BuildSize; previous: BuildSize | null } }) {
+  const { now, previous } = build;
+  const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
+  const delta = (a: number, b: number) => { const d = a - b; return Math.abs(d) < 100 ? 'no change' : `${d > 0 ? '+' : '−'}${kb(Math.abs(d))}`; };
+  const worse = !!previous && (now.jsGzip - previous.jsGzip > 100 || now.cssGzip - previous.cssGzip > 100);
+  return (
+    <div className={`route-check ${worse ? 'moved' : ''}`} title={`Production build, ${now.files} files\nJS ${kb(now.js)} (${kb(now.jsGzip)} gzipped)\nCSS ${kb(now.css)} (${kb(now.cssGzip)} gzipped)`}>
+      <Gauge size={12} />
+      <span>Production build: JS {kb(now.jsGzip)}, CSS {kb(now.cssGzip)} gzipped</span>
+      {previous
+        ? <span className={worse ? 'worse' : ''}>since last measured: JS {delta(now.jsGzip, previous.jsGzip)}, CSS {delta(now.cssGzip, previous.cssGzip)}</span>
+        : <span>first measurement; the next one will show the difference</span>}
+    </div>
+  );
+}
+
+// The takes on one request, side by side: look, compare, pick.
+function VariantPicker({ item, busy, onPick, onCompare }: {
+  item: Extract<ChatItem, { kind: 'variants' }>; busy: boolean;
+  onPick(runId: string): void; onCompare(runId: string): void;
+}) {
+  const [shots, setShots] = useState<Record<string, string | undefined>>({});
+  useEffect(() => {
+    let live = true;
+    for (const o of item.options) {
+      window.pinpoint.runShots(o.runId).then((s) => { if (live) setShots((prev) => ({ ...prev, [o.runId]: s.after })); }).catch(() => {});
+    }
+    return () => { live = false; };
+  }, [item.options]);
+  return (
+    <div className="variants-card">
+      <div className="variants-head"><Layers size={14} /> {item.chosen ? 'Variant applied' : `Pick one of ${item.options.length} variants`}<span className="hint">{item.chosen ? 'You can still switch.' : 'Nothing is applied until you choose.'}</span></div>
+      <div className="variants-grid">
+        {item.options.map((o) => (
+          <figure key={o.runId} className={item.chosen === o.runId ? 'chosen' : ''}>
+            <button className="variant-shot" onClick={() => onCompare(o.runId)} title="Compare with before">
+              {shots[o.runId] ? <img src={shots[o.runId]} alt={`Variant ${o.index}`} /> : <span className="hint">No screenshot</span>}
+            </button>
+            <figcaption>
+              <b>Variant {o.index}</b><small>{o.files} file{o.files > 1 ? 's' : ''}</small>
+              <div className="spacer" />
+              {item.chosen === o.runId
+                ? <span className="df-tag"><Check size={11} /> Applied</span>
+                : <button className="btn xs primary" disabled={busy} onClick={() => onPick(o.runId)}>Use this</button>}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -239,7 +318,9 @@ interface ItemProps {
   onRevertFile(runId: string, path: string, force?: boolean): Promise<RevertResult | null>;
   onOpenFile(path: string, line?: number): void;
   onCommit(runId: string): void;
-  onCompare(runId: string): void;
+  onCompare(runId: string, pair?: string): void;
+  onPickVariant(itemId: string, runId: string): void;
+  onMeasureBuild(runId: string): void;
   gitRepo: boolean;
 }
 
@@ -251,18 +332,19 @@ const STEER_TAG = {
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
 
-export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, gitRepo }: ItemProps) {
+export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, gitRepo }: ItemProps) {
   switch (item.kind) {
     case 'user': {
       const tag = item.steer ? STEER_TAG[item.steer] : null;
       return (
         <div className={`msg user ${item.steer ? 'steer' : ''}`}>
           {tag && <div className="steer-tag"><tag.icon size={11} /> {tag.text}</div>}
+          {item.variants && <div className="steer-tag"><Layers size={11} /> {item.variants} variants</div>}
           {item.annotations.length > 0 && (
             <div className="msg-attachments">
               {item.annotations.map((a) => (
                 <div key={a.id} className="msg-att" title={a.note}>
-                  {a.image ? <img src={a.image} alt="" /> : <div className="msg-att-empty" />}
+                  {a.image ? <img src={a.image} alt="" /> : <div className="msg-att-empty">{a.kind === 'flow' ? `${a.steps?.length || 0} steps` : ''}</div>}
                   <span className="badge" style={{ background: a.color }}>{a.n}</span>
                 </div>
               ))}
@@ -301,19 +383,33 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
           ) : null}
         </div>
       );
+    case 'variants':
+      return <VariantPicker item={item} busy={busy} onPick={(runId) => onPickVariant(item.id, runId)} onCompare={(runId) => onCompare(runId)} />;
     case 'done': {
       const n = item.changes.length;
+      const files = `${n} file${n > 1 ? 's' : ''}`;
+      const moved = item.routeCheck?.filter((r) => r.changed) || [];
+      // Files changed but the page looks the same: worth saying loudly. A fresh load of the
+      // page (the route check) is the better witness; the on-screen screenshots are the fallback.
+      const here = item.routeCheck?.find((r) => r.current);
+      const noVisual = n > 0 && item.ok && !item.undone && !item.variant && !item.verify && (here ? !here.changed : item.visual === 'none');
+      const elsewhere = moved.filter((r) => !r.current); // pages the user wasn't looking at
+      const sideEffects = moved.some((r) => r.current && r.asked?.length && r.areas?.length); // more changed here than was pointed at
+      const others = (item.routeCheck?.filter((r) => !r.current) || []).length;
       return (
         <div className={`done-card ${item.ok ? 'ok' : 'fail'} ${item.undone ? 'undone' : ''}`}>
           <div className="done-head">
-            {item.ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+            {item.verify && item.ok ? <ShieldCheck size={15} /> : item.ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
             <span>
-              {item.undone ? 'Reverted' : n ? `Changed ${n} file${n > 1 ? 's' : ''}` : item.ok ? 'Done, no file changes' : 'Stopped'}
+              {item.variant ? `Variant ${item.variant.index} of ${item.variant.total}${n ? ` · ${files}` : ''}${item.ok ? '' : ' · stopped'}`
+                : item.verify ? (n ? `Checked the result and fixed ${files}` : item.ok ? 'Checked the result: looks right' : 'Check stopped')
+                  : item.undone ? 'Reverted' : n ? `Changed ${files}` : item.ok ? 'Done, no file changes' : 'Stopped'}
             </span>
             <span className="done-meta">
               {item.durationMs ? `${Math.round(item.durationMs / 1000)}s` : ''}
               {item.cost ? ` · $${item.cost.toFixed(2)}` : ''}
             </span>
+            {noVisual && <span className="no-visual-tag"><EyeOff size={11} /> No visible change</span>}
             {item.commit && (
               <span className="commit-chip" title={item.commit.subject} onClick={() => navigator.clipboard?.writeText(item.commit!.hash)}>
                 <GitCommitHorizontal size={12} /> {item.commit.hash}
@@ -335,26 +431,63 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
               ))}
             </ul>
           )}
-          {item.shots && <ShotStrip runId={item.runId} onOpen={() => onCompare(item.runId)} />}
-          <div className="done-actions">
+          {noVisual && (
+            <div className="no-visual">
+              <EyeOff size={14} />
+              <div>
+                <b>No visible change on this page</b>
+                <span>The files were edited, but the page looks the same as before{moved.length ? ' (other pages did change, below)' : ''}. The change may not apply to what's on screen, may be overridden by another style, or may only show in another state or size.</span>
+              </div>
+            </div>
+          )}
+          {item.shots && !noVisual && <ShotStrip runId={item.runId} onOpen={() => onCompare(item.runId)} />}
+          {item.routeCheck && (
+            <div className={`where ${elsewhere.length || sideEffects ? 'moved' : ''}`}>
+              <div className="where-head">
+                <Route size={12} />
+                {elsewhere.length
+                  ? <span>Also changed {elsewhere.length} other page{elsewhere.length > 1 ? 's' : ''}. Check {elsewhere.length > 1 ? 'they were' : 'it was'} meant to:</span>
+                  : sideEffects ? <span>More changed on this page than you pointed at:</span>
+                  : moved.length ? <span>What changed visually ({others} other page{others === 1 ? '' : 's'} checked, none changed):</span>
+                    : <span>{item.routeCheck.length} page{item.routeCheck.length > 1 ? 's' : ''} checked, none look different</span>}
+              </div>
+              {moved.map((r) => (
+                <div key={r.key} className="where-row">
+                  <button className={`chip mono ${r.current ? '' : 'warn'}`} onClick={() => onCompare(item.runId, `route-${r.key}`)} title="Compare this page before and after">{r.current ? 'this page' : r.route} · {r.pct}%</button>
+                  {r.asked?.length
+                    ? <span>{r.asked.join(', ')} <i>(what you pointed at)</i>{r.areas?.length ? <b> and also {r.areas.join(', ')}</b> : '; nothing else here'}</span>
+                    : <span>{r.areas?.length ? r.areas.join(', ') : 'changed'}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {item.perf && <PerfLine perf={item.perf} />}
+          {item.build && <BuildLine build={item.build} />}
+          {/* A check that changed nothing has nothing to review or undo. */}
+          {!(item.verify && n === 0) && <div className="done-actions">
             {n > 0 && (
               <button className="btn xs" onClick={() => onReview(item.runId)} title="See exactly what changed and revert individual files">
-                <GitCompareArrows size={12} /> Review changes
+                <GitCompareArrows size={12} /> Review
               </button>
             )}
             {n > 0 && !item.undone && (
               <button className="btn ghost xs" disabled={busy} onClick={() => onUndo(item.id, item.runId)} title="Restore these files to how they were before this run">
-                <Undo2 size={12} /> Undo
+                <Undo2 size={12} /><span className="btn-text">Undo</span>
               </button>
             )}
             {gitRepo && n > 0 && !item.undone && !item.commit && item.ok && (
               <button className="btn ghost xs" disabled={busy} onClick={() => onCommit(item.runId)} title="Commit the files this run changed">
-                <GitCommitHorizontal size={12} /> Commit
+                <GitCommitHorizontal size={12} /><span className="btn-text">Commit</span>
+              </button>
+            )}
+            {n > 0 && !item.undone && item.ok && (
+              <button className="btn ghost xs" disabled={busy} onClick={() => onMeasureBuild(item.runId)} title="Run the project's build and measure the JS and CSS it produces (the per-run numbers come from the dev server)">
+                <Gauge size={12} /><span className="btn-text">Build size</span>
               </button>
             )}
             <div className="spacer" />
             <button className="btn ghost xs" onClick={onReload} title="Reload the page"><RotateCw size={12} /><span className="btn-text">Reload</span></button>
-          </div>
+          </div>}
         </div>
       );
     }

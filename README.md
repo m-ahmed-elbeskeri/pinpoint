@@ -88,10 +88,42 @@ Not a git repo yet? The same menu can initialize one. Runs that weren't auto-com
 
 <br />
 
+## Tweak it live
+
+A picked element's note has a **Tweak styles** panel: padding, margin, gap, radius, type and colors. Changes show in the page as you type (arrow keys nudge), and on send the agent writes the final values into your source, using your design tokens where they match.
+
+The same note lets you force `:hover`, `:focus`, `:active` or `disabled`, so you can point at a state instead of describing it. Press <kbd>F</kbd> while pointing at the page to **freeze** it: open menus, tooltips and popovers stay put so you can select them (timers and animations pause too). 
+
+The note's tabs go further:
+
+- **Styles:** the tweak panel. Hover a field to see which rule and token set it.
+- **Content:** edit the copy and the class list in place, with autocomplete from the page's CSS. New Tailwind utilities are generated on the spot with your project's own Tailwind, so they show immediately.
+- **Props:** change a React or Vue 3 component's props live, **Isolate** it (the rest of the page drops away and the component sits alone, still live), or open (or ask for) its Storybook story.
+- **CSS:** every rule that styles the element, most specific first, with file and line. Click to open it in your editor.
+
+While you select, the hovered element shows its margin and padding, and flex and grid containers outline their children. Hold <kbd>Alt</kbd> to measure from the selected element to the one you're pointing at.
+
+<br />
+
+## Test it under pressure
+
+The flask button next to the address bar controls how the page is shown: light or dark color scheme, reduced motion, the layout overlay, and conditions that break layouts: long text, pseudo-localized text, right-to-left, empty lists, a slow or offline network, API requests that hang (loading state) or fail (error state), and slowed, paused or stepped animations. Whatever is on is told to the agent with your request.
+
+Press the record button to capture an interaction as steps ("click Menu, type in Search, press Enter") when the problem only shows up after you do something. Steps can be copied as a Playwright test.
+
+<br />
+
+## Responsive mode
+
+The tablet and phone buttons next to the address bar open a device toolbar like the one in browser dev tools: device presets, exact width and height, rotate, touch emulation, zoom-to-fit, and drag handles on the page's edges. The page's own CSS breakpoints are listed as one-click sizes. Anything you send from here is scoped to that width. The columns button shows phone, tablet and desktop side by side, live and scroll-synced.
+
+<br />
+
 ## Teach it your taste
 
 - **Design rules:** a `DESIGN.md` at your project root with your colors, type, spacing and components. Click **Draft from page** and Pinpoint reads them off your rendered site, CSS variables included. It's sent at the start of each chat and lives in your repo, so your team shares it.
 - **Memory:** short rules sent with every request, like "buttons are always pill-shaped". When you state a preference in chat, the agent offers to remember it.
+- **Your design system:** Pinpoint detects Tailwind, component libraries, and CSS-variable tokens, and tells the agent to use them instead of raw values. For a picked element it shows the tokens behind its values, the component's props and how many places use it, with a **This one / All uses** switch.
 
 <img src="docs/media/context.gif" alt="Design rules and memory" width="100%" />
 
@@ -102,13 +134,21 @@ Not a git repo yet? The same menu can initialize one. Runs that weren't auto-com
 | | |
 |---|---|
 | **Page problems** | Console errors, failed network requests and dev-server errors show up as a chip. Send them along or hit **Ask to fix**. |
-| **Reference images** | Paste, drag in or attach mockups and screenshots, each with its own note. |
+| **Accessibility** | axe-core checks the open page against WCAG A/AA. Violations show up as a chip with **Ask to fix**. |
+| **No visible change** | When a run edits files but the page looks the same, its card says so in plain sight, and the result check is told to find out why. |
+| **Unintended changes** | Every run screenshots the open page and your other routes before and after, then lists each page that changed and what changed on it ("the header, the footer links"), with a before/after compare. |
+| **Load cost** | Each run shows what it did to the open page's JS and CSS size, requests, DOM size, layout shift and largest paint. **Build size** on a run card runs your real build and reports its gzipped JS and CSS against the last measurement. |
+| **Pinned pages** | Pin a page as a baseline that should not change, then check all pins whenever you like. |
+| **Hand-off** | Save a request as one file for someone else to open and run, copy it as Markdown, or create a GitHub issue from it. |
+| **Reference images** | Paste, drag in or attach mockups and screenshots, each with its own note. Lay one over the page with an opacity slider, or diff it against the page. |
+| **Check the result** | Optional (Settings): after each run the agent looks at the after screenshot and new errors, and fixes what's off. |
+| **Variants** | Optional (Settings, or the layers button in the composer): try a request 2 to 8 ways (click a number or type one) and pick one from the screenshots. |
+| **Tabs** | Open several pages at once. Annotate on more than one tab and send it as a single request; links that open a new window open a tab; tabs come back with the project. |
 | **Routes** | Pinpoint finds your pages (Next.js, Astro, Nuxt, SvelteKit, Remix, React Router, plain HTML) and tells the agent which file renders the current one. |
-| **Models and access** | Pick the model and thinking level per agent, and how much the agent may do: **Plan only**, **Edit files** or **Full access**. |
+| **Models and access** | One control for the model and its thinking level (click or drag the slider), and how much the agent may do: **Plan only**, **Edit files** or **Full access**. |
 | **Chat history** | Conversations are saved per project and reopen where you left off. |
 | **Git** | Branch per chat, commit per run, and pull requests through the GitHub CLI (`gh`). |
 | **Dev server** | Start your dev server from the built-in terminal. Pinpoint opens the URL it prints. |
-| **Responsive** | Switch between desktop, tablet and phone widths from the URL bar. |
 
 <br />
 
@@ -139,11 +179,14 @@ You also need at least one agent installed and signed in:
 |---|---|
 | <kbd>V</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>K</kbd> | Browse, Select, Draw, Sketch |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | In Select mode: pick the parent / child element |
+| <kbd>F</kbd> (<kbd>F8</kbd> while typing) | Freeze the page so open menus and tooltips stay put |
+| <kbd>Alt</kbd> | In Select mode: measure from the selected element to the hovered one |
 | <kbd>P</kbd> <kbd>H</kbd> <kbd>A</kbd> <kbd>R</kbd> <kbd>O</kbd> <kbd>T</kbd> <kbd>E</kbd> | In Draw mode: pen, highlighter, arrow, box, circle, text, eraser |
 | <kbd>Enter</kbd> | Send (or steer, while the agent is working) |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> | Interrupt the agent and send now |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> | Undo a stroke |
 | <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>B</kbd> | Toggle the sidebar |
+| <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>T</kbd> | New tab (middle-click a tab to close it) |
 
 <br />
 

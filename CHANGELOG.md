@@ -4,6 +4,36 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed
+
+- Screenshots of pages that set no background colour came out transparent (dark text on nothing). They are now on white, as the page looks.
+
+### Added
+
+- **Browser tabs.** Open several pages at once, each with its own history. Annotations made on different tabs go out as one request, and each tab shows when it has some. Links that open a new window open a tab. Tabs are restored with the project. <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>T</kbd> opens one; middle-click closes.
+- **Browser-style layout.** Back, forward, reload and the address bar sit under the tabs with the page tools (sizes, freeze, test conditions); the top bar keeps the project, the modes and app-level buttons. Design rules and memory are icons in the top bar.
+- **Model and thinking level in one control.** One button in the composer shows the model and a level meter (and more detail when the sidebar is wide). Its menu lists the models and has a slider you click or drag to set the thinking level.
+- **Live style tweaks.** A picked element's note now has a **Tweak styles** panel (padding, margin, gap, radius, type size, weight, line height, opacity, text and fill color). Changes show instantly in the page; arrow keys nudge. On send, the agent writes the final values into your source.
+- **States and transient UI.** Force `:hover`, `:focus`, `:active` or `disabled` on a picked element; its styles and close-up are re-captured in that state. Emulate dark / light color scheme and reduced motion from the URL bar. **Freeze** (<kbd>F</kbd>, or <kbd>F8</kbd> while typing) holds open menus, tooltips and popovers so they can be picked, pausing the page's timers and animations too. Dark and light also switch sites that theme with a class or attribute.
+- **Responsive mode.** Device presets, exact width and height, drag handles on the page's edges, rotate, touch emulation, and zoom-to-fit, with the page's own CSS breakpoints as one-click sizes. Requests sent in responsive mode are scoped to that width.
+- **Design-system awareness.** Pinpoint detects Tailwind, component libraries (shadcn/ui, MUI, Chakra, …), the styling approach and CSS-variable tokens, and tells the agent to use them. Picked elements show which tokens their values come from, their component's props, and how often the component is used, with a **This one / All uses** switch.
+- **No visible change.** A run that edits files without changing how the page looks is flagged on its card, and the result check is told so it can find out why. A page that didn't hot-reload is reloaded automatically.
+- **Unintended changes.** Each run screenshots the open page and up to 8 other routes before and after. The run card lists every page that changed and names what changed on it, each with a before/after compare. Pinned pages report the same. Content that moves by itself (animations, carousels, clocks) is ignored, and baselines are taken while the app is idle so runs don't wait for them.
+- **Accessibility.** axe-core runs on the open page (WCAG A/AA); violations appear as a chip next to page problems, with **Ask to fix**.
+- **Mockup overlay.** Lay a reference image over the live page with an opacity slider, drag it into place, and open a pixel diff of mockup vs page.
+- **Where a style comes from.** A picked element lists the CSS rules that style it, most specific first, with the file and line of each and which rule currently decides padding, color and the rest. The agent gets the same list.
+- **Layout overlay.** While selecting, the hovered element shows its margin and padding, and flex and grid containers outline their children. Hold <kbd>Alt</kbd> to measure the distance from the selected element.
+- **Text, class and prop editing.** Edit an element's copy and class list in place (with autocomplete from the page's CSS; new Tailwind utilities are generated on the spot with the project's own Tailwind 3 or 4), and change a React or Vue 3 component's props live. The agent writes the result into source.
+- **Component tools.** **Isolate** shows the picked element alone on the page, centered and still live; **Story** opens its Storybook story (starting Storybook if needed) or sets up a request to write one.
+- **Test conditions.** One click for long text, pseudo-localized text, right-to-left and empty lists; simulated slow network, loading (requests hang), error (requests fail) and offline states; and animation speed with pause and step.
+- **All sizes side by side.** Phone, tablet and desktop views of the page, live and scroll-synced.
+- **Interaction recording.** Record clicks and typing as steps the agent can read, copy them as a Playwright test, and have the result check replay them with real mouse and keyboard input.
+- **Load cost per run.** The run card shows what a change did to the open page's JS and CSS size, requests, DOM size, layout shift and largest paint. **Build size** runs the project's build and reports the gzipped JS and CSS it emits, compared with the last measurement.
+- **Pinned pages.** Pin a page as a baseline that should not change, check all pins on demand, compare, and accept intended changes.
+- **Hand-off.** Save a request (notes, picks, screenshots) as one file for someone else to open and run, copy it as Markdown, or create a GitHub issue from it (screenshots travel in a secret gist linked from the issue).
+- **Check the result** (off by default, Settings): after a run, the agent gets the after screenshot and any new errors and fixes what's off.
+- **Variants** (off by default, Settings or the layers button in the composer): try a request 2 to 8 ways (click a number or type one), one after another from the same starting point, then pick one from the screenshots.
+
 ## [0.3.0] - 2026-09-29
 
 ### Added

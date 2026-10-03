@@ -4,7 +4,23 @@
 function locate(uid: string) {
   const el = document.querySelector(`[data-pinpoint="${uid}"]`) as any;
   if (!el) return null;
-  const out: { file?: string; line?: number; column?: number; components: string[]; framework?: string; frame?: { url: string; line: number; column: number } } = { components: [] };
+  const out: { file?: string; line?: number; column?: number; components: string[]; framework?: string; frame?: { url: string; line: number; column: number }; owner?: string; props?: Record<string, string> } = { components: [] };
+
+  // Props as short strings: enough to tell which variant of a component this is.
+  const summarize = (props: any) => {
+    const o: Record<string, string> = {};
+    if (!props || typeof props !== 'object') return o;
+    for (const k of Object.keys(props)) {
+      if (Object.keys(o).length >= 10) break;
+      const v = props[k];
+      if (v == null || k === 'ref' || k === 'key') continue;
+      if (typeof v === 'string') { if (k !== 'children' || v.length < 40) o[k] = JSON.stringify(v.length > 60 ? v.slice(0, 60) + '…' : v); }
+      else if (typeof v === 'number' || typeof v === 'boolean') o[k] = String(v);
+      else if (typeof v === 'function') { if (!/^on[A-Z]/.test(k)) o[k] = 'ƒ'; }
+      else if (k !== 'children' && k !== 'style') o[k] = Array.isArray(v) ? `[${v.length}]` : '{…}';
+    }
+    return o;
+  };
 
   const cleanFile = (raw: string) => {
     let f = raw.trim();
@@ -70,6 +86,7 @@ function locate(uid: string) {
         const n = t.displayName || t.name || t.render?.displayName || t.render?.name || t.type?.displayName || t.type?.name;
         if (n && !/^(Anonymous|_c\d*|Fragment)$/.test(n) && !names.includes(n) && !/(Provider|Context|Boundary|Router|Layout(Router)?|Suspense|Root|HotReload|AppRouter|InnerLayoutRouter|RedirectBoundary|ScrollAndFocusHandler|RenderFromTemplateContext|OuterLayoutRouter)$/.test(n)) {
           names.push(n);
+          if (!out.owner) { out.owner = n; out.props = summarize(f.memoizedProps); }
         }
       }
     }
@@ -85,6 +102,7 @@ function locate(uid: string) {
       for (let i = inst; i && out.components.length < 6; i = i.parent) {
         const n = i.type?.name || i.type?.__name || (i.type?.__file || '').split('/').pop()?.replace(/\.vue$/, '');
         if (n) out.components.unshift(n);
+        if (n && !out.owner) { out.owner = n; out.props = summarize(i.props); }
         if (!out.file && i.type?.__file) out.file = i.type.__file;
       }
     } else {
@@ -114,6 +132,7 @@ function locate(uid: string) {
   }
 
   if (out.file) out.file = cleanFile(out.file);
+  if (!out.owner && out.components.length) out.owner = out.components[out.components.length - 1];
   return out.file || out.components.length || out.framework ? out : null;
 }
 

@@ -3,6 +3,7 @@ import {
   ArrowLeft, ArrowRight, Bug, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
   PenTool, Plus, RotateCw, Send, Settings as SettingsIcon, Smartphone, Square, SquarePen, Tablet,
   TerminalSquare, Trash2, X, PanelLeft, PanelRight, Paperclip, Palette, ImagePlus, Zap, CornerDownRight,
+  Blend, Brain, CircleDot, ClipboardCopy, Columns3, Snowflake,
 } from 'lucide-react';
 import { BrowserView, sleep, type BrowserHandle, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
@@ -19,11 +20,16 @@ import { DiffViewer } from './components/DiffViewer';
 import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
 import { GitPanel } from './components/GitPanel';
-import { CompareView } from './components/CompareView';
+import { CompareView, diffOverlay, type CompareTarget } from './components/CompareView';
+import { ElementTools, type ToolSection } from './components/ElementTools';
+import { ConditionsMenu, HandoffMenu, MAX_VARIANTS, NO_CONDITIONS, PinsChip, VariantsMenu, describeConditions, type Conditions } from './components/PageTools';
+import { MultiView } from './components/MultiView';
+import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverlay';
+import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  AgentEvent, AgentId, Annotation, ChatItem, ConsoleEntry, DesignDoc, DevDetection, MemoryItem, Mode, ModelCatalog, NetworkFailure,
-  GitStatus, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
+  A11yIssue, AgentEvent, AgentId, Annotation, ChatItem, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog, NetworkFailure,
+  GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
 } from './lib/types';
 
 const api = window.pinpoint;
@@ -95,12 +101,20 @@ function readImage(file: File, maxEdge = 1800): Promise<string> {
 }
 
 interface AgentRequest {
-  url: string; title: string; viewport: { width: number; height: number };
+  url: string; title: string; viewport: { width: number; height: number; responsive?: boolean };
+  breakpoints?: Breakpoint[];
   instruction: string; overview?: string;
   annotations: Omit<Annotation, 'id' | 'color'>[];
-  diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string };
+  diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string; a11y?: A11yIssue[] };
   route?: { path: string; file: string; framework: string };
+  env?: PageEnv & { frozen: boolean; states?: string[] };
+  variant?: { index: number; total: number };
+  verify?: { before?: string; after: string; same?: boolean };
+  note?: string; // something Pinpoint did that the agent should know (e.g. which variant was picked)
 }
+
+// What kind of run an id is: a normal request, one of several variants, or the automatic check.
+interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number }
 
 // Several queued messages become one follow-up, renumbering their annotations.
 function mergeRequests(reqs: AgentRequest[]): AgentRequest {
@@ -170,27 +184,85 @@ const MODES: { id: Mode; label: string; icon: typeof MousePointer2; key: string;
   { id: 'sketch', label: 'Sketch', icon: SquarePen, key: 'K', hint: 'Sketch a new idea on a blank board' },
 ];
 
-const VIEWPORTS = { full: { w: 0, icon: Monitor, label: 'Responsive' }, tablet: { w: 820, icon: Tablet, label: 'Tablet 820' }, mobile: { w: 390, icon: Smartphone, label: 'Mobile 390' } };
-type Viewport = keyof typeof VIEWPORTS;
+// Quick sizes in the URL bar; responsive mode's own bar has the rest.
+const QUICK_SIZES = [
+  { icon: Monitor, label: 'Fill the window', w: 0, h: 0 },
+  { icon: Tablet, label: 'Tablet 820 × 1180 (responsive mode)', w: 820, h: 1180 },
+  { icon: Smartphone, label: 'Phone 390 × 844 (responsive mode)', w: 390, h: 844 },
+];
 
 const describe = (a: Annotation, root: string) => {
   if (a.kind === 'element' && a.element) {
     const el = a.element;
     const cls = el.classes?.filter((c) => c.length < 24).slice(0, 2).join('.') || '';
+    const extras = [...(a.states || []).map((s) => (s === 'disabled' ? s : ':' + s)), a.tweaks ? `${Object.keys(a.tweaks).length} tweak${Object.keys(a.tweaks).length > 1 ? 's' : ''}` : ''].filter(Boolean);
     return {
       title: `<${el.tag}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''}>`,
-      sub: el.source?.file ? shortPath(el.source.file, root) + (el.source.line ? `:${el.source.line}` : '')
-        : el.source?.components?.length ? el.source.components.slice(-2).join(' › ') : el.text || el.selector,
+      sub: (el.source?.file ? shortPath(el.source.file, root) + (el.source.line ? `:${el.source.line}` : '')
+        : el.source?.components?.length ? el.source.components.slice(-2).join(' › ') : el.text || el.selector) + (extras.length ? ` · ${extras.join(' · ')}` : ''),
     };
   }
   if (a.kind === 'drawing') return { title: 'Drawing on page', sub: a.hits?.length ? `over ${a.hits.length} element${a.hits.length > 1 ? 's' : ''}` : 'markup' };
   if (a.kind === 'reference') return { title: 'Reference image', sub: a.name || 'image' };
+  if (a.kind === 'flow') return { title: 'Recorded interaction', sub: `${a.steps?.length || 0} step${a.steps?.length === 1 ? '' : 's'}` };
   return { title: 'Sketch', sub: 'wireframe' };
+};
+
+// A recorded interaction as a Playwright test.
+function toPlaywright(a: Annotation) {
+  const q = (s: string) => JSON.stringify(s);
+  const lines = ["import { test } from '@playwright/test';", '', `test(${q(a.note.trim() || 'recorded interaction')}, async ({ page }) => {`];
+  if (a.startUrl) lines.push(`  await page.goto(${q(a.startUrl)});`);
+  for (const s of a.steps || []) {
+    const loc = `page.locator(${q(s.selector || '')})`;
+    if (s.type === 'click') lines.push(`  await ${loc}.click();${s.text ? ` // ${s.text}` : ''}`);
+    else if (s.type === 'fill') lines.push(`  await ${loc}.fill(${s.secret ? "process.env.TEST_PASSWORD ?? ''" : q(s.value || '')});`);
+    else if (s.type === 'check') lines.push(`  await ${loc}.setChecked(${s.value === 'true'});`);
+    else if (s.type === 'key') lines.push(`  await page.keyboard.press(${q(s.key || '')});`);
+    else if (s.type === 'navigate') lines.push(`  await page.waitForURL(${q(s.url || '')});`);
+  }
+  lines.push('  // TODO: assert what should be true here', '});', '');
+  return lines.join('\n');
+}
+
+// A request written out for a person: what an issue or ticket needs.
+function handoffMarkdown(h: Handoff, root: string) {
+  const out = ['## Request', '', h.instruction || '_(see the notes below)_', '', `- Page: ${h.url}${h.viewport ? ` (${h.viewport.width}×${h.viewport.height})` : ''}`, ''];
+  for (const a of h.annotations) {
+    const d = describe(a, root);
+    out.push(`### ${a.n}. ${d.title}${a.note.trim() ? `: ${a.note.trim()}` : ''}`);
+    const el = a.element;
+    if (el) {
+      out.push(`- Selector: \`${el.selector}\``);
+      if (el.source?.file) out.push(`- Source: \`${shortPath(el.source.file, root)}${el.source.line ? `:${el.source.line}` : ''}\``);
+      if (el.component?.name) out.push(`- Component: \`<${el.component.name}>\`${a.scope ? ` (${a.scope === 'instance' ? 'this instance only' : 'all uses'})` : ''}`);
+      if (a.states?.length) out.push(`- State: ${a.states.join(', ')}`);
+      for (const [k, v] of Object.entries(a.tweaks || {})) out.push(`- \`${k}\`: ${el.styles?.[k] ? `${el.styles[k]} → ` : ''}${v}`);
+      if (a.textEdit) out.push(`- Text: "${a.textEdit.from}" → "${a.textEdit.to}"`);
+      if (a.classEdit) out.push(`- Classes: \`${a.classEdit.from}\` → \`${a.classEdit.to}\``);
+    }
+    (a.steps || []).forEach((s, i) => out.push(`${i + 1}. ${s.type}${s.selector ? ` \`${s.selector}\`` : ''}${s.text ? ` "${s.text}"` : ''}${s.value && !s.secret ? ` = ${s.value}` : ''}${s.key || s.url ? ` ${s.key || s.url}` : ''}`));
+    if (a.image) out.push('- _Screenshot in the hand-off file_');
+    out.push('');
+  }
+  out.push('---', 'Made with [Pinpoint](https://github.com/m-ahmed-elbeskeri/pinpoint). Open the hand-off file in Pinpoint (share menu → Open hand-off file) to run this request with its screenshots.');
+  return out.join('\n');
+}
+
+// One page open in Pinpoint's browser.
+interface Tab { id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean; error: string | null; initialUrl: string }
+const makeTab = (url: string): Tab => ({ id: uid(), url: '', title: '', canBack: false, canForward: false, loading: false, error: null, initialUrl: url });
+const tabLabel = (t: Tab) => {
+  if (t.title && t.title !== 'about:blank' && !/^https?:\/\//.test(t.title)) return t.title;
+  const u = t.url || t.initialUrl;
+  if (!u || u === 'about:blank') return 'New tab';
+  try { const x = new URL(u); return x.protocol === 'file:' ? decodeURIComponent(x.pathname.split('/').pop() || u) : x.host + (x.pathname === '/' ? '' : x.pathname); } catch { return u; }
 };
 
 // ---------- app ----------
 export default function App() {
-  const browser = useRef<BrowserHandle>(null);
+  const browser = useRef<BrowserHandle | null>(null); // the active tab's page
+  const handles = useRef<Record<string, BrowserHandle | null>>({});
   const frame = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
@@ -199,9 +271,22 @@ export default function App() {
   const [agents, setAgents] = useState<Record<AgentId, { ok: boolean; version?: string }> | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [urlInput, setUrlInput] = useState('');
-  const [nav, setNav] = useState({ url: '', title: '', canBack: false, canForward: false });
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Browser tabs. Everything below that talks about "the page" means the active one.
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeTab, setActiveTab] = useState('');
+  const tab = tabs.find((t) => t.id === activeTab);
+  const nav = useMemo(
+    () => ({ url: tab?.url || '', title: tab?.title || '', canBack: !!tab?.canBack, canForward: !!tab?.canForward }),
+    [tab?.url, tab?.title, tab?.canBack, tab?.canForward],
+  );
+  const loading = !!tab?.loading;
+  const loadError = tab?.error ?? null;
+  browser.current = handles.current[activeTab] ?? null;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const patchTab = (id: string, patch: Partial<Tab>) => setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)));
 
   const [mode, setModeState] = useState<Mode>('browse');
   const [tool, setTool] = useState<Tool>('pen');
@@ -219,13 +304,18 @@ export default function App() {
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [runId, setRunId] = useState<string | null>(null);
   const [session, setSession] = useState<{ id: string; agent: AgentId } | null>(null);
-  const [viewport, setViewport] = useState<Viewport>('full');
+  const [device, setDevice] = useState<Device>(DEVICE_OFF);
+  const [avail, setAvail] = useState({ w: 0, h: 0 }); // room for the page inside the stage
+  const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
+  const area = useRef<HTMLDivElement>(null);
+  const deviceRef = useRef(device);
+  deviceRef.current = device;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Live sizes while dragging a splitter; persisted to settings on release.
   const [panelWidth, setPanelWidth] = useState<number | null>(null);
   const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
-  const [resizing, setResizing] = useState<'panel' | 'drawer' | null>(null);
+  const [resizing, setResizing] = useState<'panel' | 'drawer' | 'device' | null>(null);
   const [drawerTab, setDrawerTab] = useState<'dev' | 'agent'>('dev');
   const [devLog, setDevLog] = useState('');
   const [agentLog, setAgentLog] = useState('');
@@ -250,9 +340,37 @@ export default function App() {
   const [includeDiag, setIncludeDiag] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
-  const [compare, setCompare] = useState<string | null>(null); // runId shown in the before/after view
+  const [compare, setCompare] = useState<CompareTarget | null>(null); // what the before/after view is showing
+  // Page state: emulated media features, a frozen page, a mockup laid over it.
+  const [env, setEnv] = useState<PageEnv>({ colorScheme: null, reducedMotion: false });
+  const [frozen, setFrozenState] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const [toolSection, setToolSection] = useState<ToolSection | null>(null);
+  const [classNames, setClassNames] = useState<string[]>([]);
+  const [generated, setGenerated] = useState<string[]>([]);       // classes Pinpoint generated CSS for (new Tailwind utilities)
+  const twTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [isolated, setIsolated] = useState<string | null>(null);  // annotation shown on its own
+  const [cond, setCond] = useState<Conditions>(NO_CONDITIONS);     // stress tests, data states, animation speed
+  const [multi, setMulti] = useState(false);                       // phone / tablet / desktop side by side
+  const [rec, setRec] = useState<{ steps: FlowStep[]; startUrl: string } | null>(null);
+  const recRef = useRef(rec);
+  recRef.current = rec;
+  const condRef = useRef(cond);
+  condRef.current = cond;
+  const runFlowRef = useRef<Record<string, { steps: FlowStep[]; startUrl: string }>>({}); // runId -> interaction to replay before checking
+  const [designSystem, setDesignSystem] = useState<DesignSystem | null>(null);
+  const [a11y, setA11y] = useState<A11yIssue[]>([]);
+  const [includeA11y, setIncludeA11y] = useState(false);
+  const [job, setJob] = useState<string | null>(null);         // label shown between the runs of a variants job
+  const runMetaRef = useRef<Record<string, RunMeta>>({});
+  const beforeShotRef = useRef<{ id: string; shot: string } | null>(null); // the current run's "before" screenshot
+  const variantJob = useRef<{ base: AgentRequest; total: number; index: number; done: { runId: string; index: number; files: number }[] } | null>(null);
+  const verifyPending = useRef<string | null>(null);           // run waiting for its automatic check
+  const pendingNote = useRef<string | null>(null);
+  const axeRef = useRef<string | null>(null);
   const runPageRef = useRef<Record<string, string>>({});       // runId -> page URL when it started
   const loadingRef = useRef(false);
+  loadingRef.current = loading;
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Refs mirror state for async handlers and IPC subscriptions.
@@ -264,12 +382,28 @@ export default function App() {
   annRef.current = annotations;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const envRef = useRef(env);
+  envRef.current = env;
+  const frozenRef = useRef(frozen);
+  frozenRef.current = frozen;
+  const consoleRef = useRef(consoleLog);
+  consoleRef.current = consoleLog;
+  const netRef = useRef(netFails);
+  netRef.current = netFails;
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500); };
 
   // ---------- boot ----------
   useEffect(() => {
-    api.getSettings().then((s) => { setSettings(s); setUrlInput(s.projectDir ? s.url : ''); });
+    api.getSettings().then((s) => {
+      setSettings(s);
+      setUrlInput(s.projectDir ? s.url : '');
+      // Reopen the tabs the project had (or its last page).
+      const urls = !s.projectDir ? [''] : s.tabs?.length ? s.tabs : [s.url || ''];
+      const list = urls.map((u) => makeTab(u ? normalizeUrl(u) : ''));
+      setTabs(list);
+      setActiveTab(list[Math.min(s.activeTab || 0, list.length - 1)].id);
+    });
     api.detectAgents().then(setAgents);
     api.modelCatalog().then(setCatalog);
   }, []);
@@ -289,6 +423,7 @@ export default function App() {
     if (!projectDir) return;
     api.readDesign().then(setDesign).catch(() => setDesign(null));
     api.readMemory().then(setMemory).catch(() => setMemory([]));
+    api.designSystem().then(setDesignSystem).catch(() => setDesignSystem(null));
     refreshRoutes();
     refreshGit();
     // Reopen the most recent conversation for this project.
@@ -337,6 +472,184 @@ export default function App() {
   }, []);
   const clearDiagnostics = () => { setConsoleLog([]); setNetFails([]); };
 
+  // ---------- page state ----------
+  // Emulated media (and focus, while frozen) are re-applied when they change and on every new page.
+  const applyEnv = useCallback(async (e: PageEnv, isFrozen: boolean) => {
+    const id = browser.current?.id();
+    if (id == null) return;
+    browser.current?.send('scheme', e.colorScheme); // sites that switch theme with a class or attribute
+    // Touch input replaces the mouse, which picking and drawing need, so it is only on while browsing.
+    const touch = deviceRef.current.on && deviceRef.current.touch && modeRef.current === 'browse';
+    try { await api.emulate(id, { ...e, focus: isFrozen, touch }); } catch (err) { flash(errText(err)); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { applyEnv(env, frozen); }, [env, frozen, applyEnv, device.on, device.touch, mode]);
+
+  // The page froze or unfroze: hold :hover on whatever was under the pointer, or let it go.
+  const onFrozen = useCallback(async (on: boolean) => {
+    setFrozenState(on);
+    const b = browser.current;
+    const id = b?.id();
+    if (!b || id == null) return;
+    try {
+      await api.forceState(id, '[data-pinpoint-hover]', on ? ['hover'] : []);
+      // Animations stop with the page, and pick up at the speed that was set.
+      await api.setAnimationRate(id, on ? 0 : condRef.current.anim);
+    } catch (err) { flash(errText(err)); }
+    if (!on) b.send('thaw');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const setFrozen = useCallback((on: boolean) => { browser.current?.send('freeze', on); onFrozen(on); }, [onFrozen]);
+
+  // Accessibility audit of the open page (axe-core), refreshed when the page settles.
+  const runA11y = useCallback(async () => {
+    if (settingsRef.current?.a11yCheck === false || !/^(https?|file):/.test(navRef.current.url)) { setA11y([]); return; }
+    try {
+      axeRef.current ??= await api.a11ySource();
+      const res = await browser.current?.a11y(axeRef.current);
+      if (res) setA11y(res);
+    } catch { /* the page navigated mid-audit */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      runA11y();
+      browser.current?.breakpoints().then(setBreakpoints);
+      browser.current?.classNames().then(setClassNames);
+      // Baseline screenshots for the unintended-change check, taken now so a run doesn't wait for them.
+      const warm = otherRoutes(navRef.current.url);
+      if (warm?.routes.length && !runRef.current) api.prewarmRoutes(warm.routes).catch(() => {});
+      // Client-rendered content arrives after load, so stress tests are applied again once it has.
+      if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [nav.url, loading, settings?.a11yCheck, runA11y]);
+
+  // ---------- test conditions ----------
+  const changeConditions = async (next: Conditions) => {
+    const prev = condRef.current;
+    setCond(next);
+    const b = browser.current;
+    const id = b?.id();
+    if (!b || id == null) return;
+    try {
+      if (next.stress.join() !== prev.stress.join()) b.send('stress', next.stress);
+      if (next.anim !== prev.anim) await api.setAnimationRate(id, next.anim);
+      if (next.network !== prev.network) { await api.setNetwork(id, next.network); b.reload(); } // data states show on the next load
+    } catch (e) { flash(errText(e)); }
+  };
+  const stepAnimation = async () => {
+    const id = browser.current?.id();
+    if (id == null) return;
+    try { await api.setAnimationRate(id, 1); await sleep(100); await api.setAnimationRate(id, 0); } catch (e) { flash(errText(e)); }
+  };
+
+  // ---------- interaction recording ----------
+  const onStep = useCallback((s: FlowStep) => {
+    setRec((r) => {
+      if (!r) return r;
+      const last = r.steps[r.steps.length - 1];
+      if (s.type === 'navigate' && (s.url === r.startUrl && !r.steps.length || last?.url === s.url)) return r;
+      return { ...r, steps: [...r.steps, s].slice(-80) };
+    });
+  }, []);
+  const toggleRecording = () => {
+    const b = browser.current;
+    if (!rec) {
+      setMode('browse');
+      setRec({ steps: [], startUrl: navRef.current.url });
+      b?.send('record', true);
+      return;
+    }
+    b?.send('record', false);
+    setRec(null);
+    if (!rec.steps.length) { flash('Nothing was recorded.'); return; }
+    const n = nextN();
+    const ann: Annotation = { id: uid(), n, kind: 'flow', note: '', color: colorFor(n), steps: rec.steps, startUrl: rec.startUrl };
+    setAnnotations((prev) => [...prev, ann]);
+    setActiveId(ann.id);
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
+  };
+  // Start from the page the recording started on and do the steps again.
+  const replayFlow = async (flow: { steps: FlowStep[]; startUrl: string }) => {
+    const b = browser.current;
+    if (!b) return;
+    setMode('browse'); // select mode would swallow the replayed clicks
+    if (navRef.current.url === flow.startUrl) b.reload(); else b.load(flow.startUrl);
+    await sleep(600);
+    for (let i = 0; i < 50 && loadingRef.current; i++) await sleep(200);
+    await sleep(900);
+    const id = b.id();
+    if (id != null) await api.replay(id, flow.steps).catch(() => null);
+    await sleep(500);
+  };
+
+  // ---------- hand-off ----------
+  const buildHandoff = (): Handoff => ({
+    pinpointHandoff: 1, createdAt: Date.now(), url: navRef.current.url, title: navRef.current.title,
+    viewport: browser.current?.size(), instruction: instruction.trim(), annotations: annRef.current,
+  });
+  const exportHandoff = async () => {
+    const h = buildHandoff();
+    const name = (h.instruction || h.annotations.map((a) => a.note).find(Boolean) || 'request').split('\n')[0].replace(/[^\w -]+/g, '').trim().slice(0, 40) || 'request';
+    try {
+      const file = await api.saveHandoff(name, h);
+      if (file) flash(`Saved ${file.split(/[\\/]/).pop()}. Send it to whoever will run it.`);
+    } catch (e) { flash(errText(e)); }
+  };
+  const copyHandoff = () => { navigator.clipboard?.writeText(handoffMarkdown(buildHandoff(), root)); flash('Request copied as Markdown.'); };
+  const issueHandoff = async () => {
+    const h = buildHandoff();
+    const title = (h.instruction || h.annotations.map((a) => a.note).find(Boolean) || 'Visual change request').split('\n')[0].slice(0, 80);
+    const attach = h.annotations.some((a) => a.image) ? { name: title, data: h } : undefined;
+    try {
+      const r = await api.handoffIssue({ title, body: handoffMarkdown(h, root), attach });
+      flash(attach && !r.gist ? "Issue created, but the screenshots couldn't be uploaded. Send the hand-off file separately." : 'Issue created and opened in your browser.');
+    } catch (e) { flash(errText(e)); }
+  };
+  const importHandoff = async () => {
+    try {
+      const h = await api.openHandoff();
+      if (!h) return;
+      let n = nextN();
+      const added = h.annotations.map((a) => ({ ...a, id: uid(), n: n++, color: colorFor(n - 1) }));
+      setAnnotations((prev) => [...prev, ...added]);
+      if (h.instruction) setInstruction((t) => (t.trim() ? `${t}\n\n${h.instruction}` : h.instruction));
+      flash(`Loaded ${added.length} annotation${added.length === 1 ? '' : 's'} made on ${h.url}. Review, then send.`);
+    } catch (e) { flash(errText(e)); }
+  };
+
+  // ---------- responsive mode ----------
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setAvail({ w: Math.floor(e.contentRect.width), h: Math.floor(e.contentRect.height) }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [!!settings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dragging an edge of the page resizes it, like the handles in browser dev tools.
+  const startDeviceResize = (axis: 'x' | 'y' | 'xy') => (e: React.PointerEvent) => {
+    e.preventDefault();
+    const el = e.currentTarget as Element;
+    el.setPointerCapture(e.pointerId);
+    setResizing('device');
+    const sx = e.clientX, sy = e.clientY, k = deviceScale;
+    const w0 = device.w, h0 = device.h || Math.round(deviceH);
+    const move = (ev: PointerEvent) => {
+      // The page is centered, so its right edge moves half as fast as its width grows.
+      const w = axis === 'y' ? w0 : Math.min(3840, Math.max(240, Math.round(w0 + ((ev.clientX - sx) * 2) / k)));
+      const h = axis === 'x' ? device.h : Math.min(3840, Math.max(240, Math.round(h0 + (ev.clientY - sy) / k)));
+      setDevice((d) => ({ ...d, w, h }));
+    };
+    const up = () => { el.removeEventListener('pointermove', move as EventListener); el.removeEventListener('pointerup', up); setResizing(null); };
+    el.addEventListener('pointermove', move as EventListener);
+    el.addEventListener('pointerup', up);
+  };
+  const askA11y = () => {
+    setIncludeA11y(true);
+    setInstruction((t) => (t.trim() ? t : 'Fix the accessibility problems listed in the diagnostics.'));
+    setTimeout(() => composerRef.current?.focus(), 50);
+  };
+
   // True when DESIGN.md was edited after the current agent session received it.
   const designChanged = !!session && designAtStart !== null && (settings?.useDesign && design?.exists ? design.content : '') !== designAtStart;
 
@@ -371,12 +684,71 @@ export default function App() {
   const syncPage = useCallback(() => {
     browser.current?.send('mode', modeRef.current === 'select' ? 'select' : 'browse');
     browser.current?.send('markers', markerList(annRef.current, null));
-  }, []);
+    applyEnv(envRef.current, frozenRef.current);
+    browser.current?.send('layout', settingsRef.current?.layoutOverlay !== false);
+    browser.current?.send('record', !!recRef.current);
+    if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
+  }, [applyEnv]);
 
-  // Numbered markers for element annotations, drawn inside the page.
+  // Numbered markers for element annotations, drawn inside the page they belong to.
   useEffect(() => {
-    browser.current?.send('markers', markerList(annotations, activeId));
-  }, [annotations, activeId]);
+    browser.current?.send('markers', markerList(annotations.filter((a) => !a.tabId || a.tabId === activeTab), activeId));
+  }, [annotations, activeId, activeTab]);
+
+  // ---------- tabs ----------
+  const switchTab = (id: string) => {
+    if (id === activeTabRef.current) return;
+    // The tab being left goes back to plain browsing: no picking, no frozen page.
+    browser.current?.send('mode', 'browse');
+    if (frozenRef.current) setFrozen(false);
+    if (isolated) isolate(null);
+    setPopover(null);
+    setMulti(false);
+    setActiveTab(id);
+  };
+  const newTab = (url?: string) => {
+    let start = url || '';
+    if (!start) { try { const u = new URL(navRef.current.url); if (/^https?:$/.test(u.protocol)) start = u.origin + '/'; } catch { /* a blank tab */ } }
+    const t = makeTab(start);
+    setTabs((ts) => [...ts, t]);
+    switchTab(t.id);
+  };
+  const closeTab = (id: string) => {
+    const list = tabsRef.current;
+    const i = list.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    const rest = list.filter((t) => t.id !== id);
+    const next = rest.length ? rest : [makeTab('')];
+    if (id === activeTabRef.current) switchTab(next[Math.min(i, next.length - 1)].id);
+    setTabs(next);
+    delete handles.current[id];
+    setAnnotations((prev) => prev.filter((a) => a.tabId !== id)); // its pins pointed at elements that are gone
+  };
+  // The newly shown tab gets the current mode, markers and page settings; page problems start over.
+  useEffect(() => {
+    if (!activeTab) return;
+    syncPage();
+    clearDiagnostics();
+    setA11y([]);
+    const url = tabsRef.current.find((t) => t.id === activeTab)?.url || '';
+    setUrlInput(url === 'about:blank' ? '' : url);
+    const id = browser.current?.id();
+    if (id != null && (condRef.current.anim !== 1 || condRef.current.network !== 'normal')) {
+      api.setAnimationRate(id, condRef.current.anim).catch(() => {});
+      api.setNetwork(id, condRef.current.network).catch(() => {});
+    }
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Links that would open a window open a tab.
+  useEffect(() => api.onNewTab((url) => newTab(url)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Remember the open tabs with the project.
+  const tabUrls = tabs.map((t) => (t.url && t.url !== 'about:blank' ? t.url : t.initialUrl)).join('\n');
+  useEffect(() => {
+    if (!projectDir || !tabs.length) return;
+    const t = setTimeout(() => {
+      saveSettings({ tabs: tabUrls.split('\n').filter(Boolean), activeTab: Math.max(0, tabsRef.current.findIndex((x) => x.id === activeTabRef.current)) });
+    }, 800);
+    return () => clearTimeout(t);
+  }, [tabUrls, activeTab, projectDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const nextN = () => (annRef.current.length ? Math.max(...annRef.current.map((a) => a.n)) + 1 : 1);
   const colorFor = (n: number) => ANNOTATION_COLORS[(n - 1) % ANNOTATION_COLORS.length];
@@ -390,16 +762,168 @@ export default function App() {
     let image: string | undefined;
     try { if (crop.width > 2 && crop.height > 2) image = await browser.current!.capture(crop); } catch { /* page may have navigated */ }
     const { dpr: _d, viewport: _v, shift: _s, ...element } = el;
-    const ann: Annotation = { id: uid(), n, kind: 'element', note: '', color: colorFor(n), image, element, viewport: vp };
+    const ann: Annotation = { id: uid(), n, kind: 'element', note: '', color: colorFor(n), image, element, viewport: vp, tabId: activeTabRef.current, pageUrl: navRef.current.url };
     setAnnotations((prev) => [...prev, ann]);
     setActiveId(ann.id);
+    setToolSection(null);
     setPopover({ id: ann.id, rect: el.rect });
 
+    // Where it comes from, which design tokens it uses, and how widely its component is used.
     const source = await enrichSource(await browser.current!.locateSource(el.uid));
-    if (source) {
-      setAnnotations((prev) => prev.map((a) => (a.id === ann.id ? { ...a, element: { ...a.element!, source } } : a)));
+    const wc = browser.current!.id();
+    const [tokens, usage, rules] = await Promise.all([
+      browser.current!.tokens(el.uid),
+      source?.owner ? api.componentUsage(source.owner).catch(() => null) : null,
+      wc != null ? api.matchedRules(wc, el.uid).catch(() => []) : [],
+    ]);
+    const component = source?.owner ? { name: source.owner, props: source.props, uses: usage?.count, fileCount: usage?.fileCount, files: usage?.files } : null;
+    if (source || tokens || rules.length) {
+      setAnnotations((prev) => prev.map((a) => (a.id === ann.id ? { ...a, element: { ...a.element!, source, tokens: tokens || undefined, component, rules: rules.length ? rules : undefined } } : a)));
     }
   }, []);
+
+  // ---------- element tools: live tweaks, forced states, scope ----------
+  const patchAnn = (id: string, fn: (a: Annotation) => Annotation) => setAnnotations((prev) => prev.map((a) => (a.id === id ? fn(a) : a)));
+
+  const tweak = (id: string, prop: string, value: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    if (!a?.element) return;
+    browser.current?.send('tweak', { uid: a.element.uid, prop, value });
+    patchAnn(id, (x) => {
+      const t = { ...x.tweaks };
+      if (value) t[prop] = value; else delete t[prop];
+      return { ...x, tweaks: Object.keys(t).length ? t : undefined };
+    });
+  };
+  const resetTweaks = (id: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    if (!a?.element) return;
+    for (const prop of Object.keys(a.tweaks || {})) browser.current?.send('tweak', { uid: a.element.uid, prop, value: '' });
+    patchAnn(id, (x) => ({ ...x, tweaks: undefined }));
+  };
+
+  const setStates = async (id: string, states: ForcedState[]) => {
+    const a = annRef.current.find((x) => x.id === id);
+    const b = browser.current;
+    const wc = b?.id();
+    if (!a?.element || !b || wc == null) return;
+    const uid = a.element.uid;
+    const classes = states.flatMap((s) => (s === 'disabled' ? [] : s === 'focus' ? ['focus', 'focus-visible'] : [s]));
+    try { await api.forceState(wc, `[data-pinpoint="${uid}"]`, classes); } catch (e) { flash(errText(e)); return; }
+    if (states.includes('disabled') !== !!a.states?.includes('disabled')) b.send('setDisabled', { uid, on: states.includes('disabled') });
+    patchAnn(id, (x) => ({ ...x, states: states.length ? states : undefined }));
+    // Re-read the element as it looks now: that's what the agent and the thumbnail should show.
+    await sleep(150);
+    const fresh = await b.inspect(uid);
+    if (!fresh) return;
+    const pad = 20;
+    const crop = clampRect({ x: fresh.rect.x - pad, y: fresh.rect.y - pad, width: fresh.rect.width + pad * 2, height: fresh.rect.height + pad * 2 }, b.size());
+    let image: string | undefined;
+    b.send('hide', true);
+    await sleep(90);
+    try { if (crop.width > 2 && crop.height > 2) image = await b.capture(crop); } catch { /* keep the old close-up */ } finally { b.send('hide', false); }
+    patchAnn(id, (x) => (x.element ? { ...x, image: image ?? x.image, element: { ...x.element, styles: fresh.styles, html: fresh.html, rect: fresh.rect } } : x));
+  };
+
+  // Copy and class edits: shown in the page, written to source by the agent.
+  const editText = (id: string, text: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    if (!a?.element) return;
+    browser.current?.send('setText', { uid: a.element.uid, text });
+    patchAnn(id, (x) => ({ ...x, textEdit: text === x.element!.text ? undefined : { from: x.element!.text, to: text } }));
+  };
+  const editClasses = (id: string, value: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    if (!a?.element) return;
+    const from = (a.element.classes || []).join(' ');
+    browser.current?.send('setClass', { uid: a.element.uid, value });
+    patchAnn(id, (x) => ({ ...x, classEdit: value === from ? undefined : { from, to: value } }));
+    // Classes the page's CSS doesn't have yet: ask the project's Tailwind for them, so they show now.
+    const missing = value.split(/\s+/).filter((c) => c && !classNames.includes(c));
+    if (!designSystem?.tailwind || !missing.length) return;
+    clearTimeout(twTimer.current);
+    twTimer.current = setTimeout(async () => {
+      const want = [...new Set([...generated, ...missing])];
+      try {
+        const css = await api.tailwindCss(want);
+        if (css == null) return;
+        browser.current?.send('injectCss', css);
+        // Only the ones that actually produced a rule count as generated.
+        setGenerated(want.filter((c) => css.includes(c.replace(/[^\w-]/g, (ch) => '\\' + ch))));
+      } catch { /* Tailwind isn't installed or the class doesn't exist: it stays marked as pending */ }
+    }, 350);
+  };
+
+  // Production build size for a run card (builds the project; slow but real).
+  const measureBuild = async (runId: string) => {
+    setBusy('Building the project to measure it…');
+    try {
+      const build = await api.measureBuild(navRef.current.url);
+      setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === runId ? { ...it, build } : it)));
+      if (build.restarted) flash('Measured. The dev server was stopped for the build and is starting again.');
+    } catch (e) { flash(errText(e)); } finally { setBusy(null); }
+  };
+
+  // A component prop changed live (React dev builds). Values keep the type they had.
+  const typed = (summary: string, raw: string) => (summary.startsWith('"') ? raw : summary === 'true' || summary === 'false' ? raw === 'true' : Number(raw));
+  const editProp = async (id: string, name: string, raw: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    const comp = a?.element?.component;
+    const from = comp?.props?.[name];
+    if (!a?.element || !comp || from == null) return;
+    const value = typed(from, raw);
+    if (typeof value === 'number' && Number.isNaN(value)) { flash(`${name} is a number.`); return; }
+    const ok = await browser.current?.setProp(a.element.uid, comp.name, name, value);
+    if (!ok) { flash("Couldn't change that prop live. It needs a React development build; reload the page and try again."); return; }
+    const to = JSON.stringify(value);
+    patchAnn(id, (x) => {
+      const edits = { ...x.propEdits };
+      if (to === from) delete edits[name]; else edits[name] = { from, to };
+      return { ...x, propEdits: Object.keys(edits).length ? edits : undefined };
+    });
+  };
+
+  const isolate = (id: string | null) => {
+    const a = id ? annRef.current.find((x) => x.id === id) : null;
+    browser.current?.send('isolate', a?.element?.uid || null);
+    setIsolated(a ? id : null);
+  };
+
+  // Open the component's Storybook story, or set up a request for the agent to write one.
+  const openStory = async (id: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    const comp = a?.element?.component;
+    if (!comp) return;
+    try {
+      const s = await api.findStory(comp.name);
+      if (s.url) { setPopover(null); go(s.url); return; }
+      if (s.file && s.canStart) {
+        setPopover(null);
+        setBusy('Starting Storybook…');
+        try { const url = await api.startStorybook(comp.name); if (url) go(url); } finally { setBusy(null); }
+        return;
+      }
+      if (s.file) { flash(`${s.file} exists, but Storybook isn't running and there's no "storybook" script to start it.`); return; }
+      const args = Object.entries(comp.props || {}).filter(([, v]) => v !== 'ƒ').map(([k, v]) => `${k}=${v}`).join(', ');
+      setInstruction(
+        `Write a Storybook story for <${comp.name}>${a?.element?.source?.file ? ` (${shortPath(a.element.source.file, root)})` : ''}: a default story${args ? ` with these args: ${args}` : ''}, plus one story per meaningful variant and state. `
+        + (s.storybook ? 'Follow the conventions of the existing stories.' : "Storybook isn't set up in this project: say what installing it would add and ask before doing it."),
+      );
+      setPopover(null);
+      setTimeout(() => composerRef.current?.focus(), 50);
+    } catch (e) { flash(errText(e)); }
+  };
+
+  // Puts an element back the way the page had it: no live tweaks, no forced state.
+  const releaseElement = async (a: Annotation) => {
+    const b = (a.tabId && handles.current[a.tabId]) || browser.current; // the tab it was picked in
+    const wc = b?.id();
+    if (!a.element || !b) return;
+    b.send('untweak', a.element.uid);
+    const comp = a.element.component;
+    for (const [name, edit] of Object.entries(a.propEdits || {})) b.setProp(a.element.uid, comp?.name || '', name, JSON.parse(edit.from));
+    if (a.states?.length && wc != null) await api.forceState(wc, `[data-pinpoint="${a.element.uid}"]`, []).catch(() => {});
+  };
 
   // ---------- draw & sketch ----------
   const makeDrawing = async (n: number): Promise<Annotation | null> => {
@@ -418,7 +942,7 @@ export default function App() {
 
   const makeSketch = async (n: number): Promise<Annotation | null> => {
     if (!sketch.shapes.length || !frame.current) return null;
-    const { width, height } = frame.current.getBoundingClientRect();
+    const width = frame.current.clientWidth, height = frame.current.clientHeight;
     const image = await composite({ background: null, width, height, shapes: sketch.shapes, board: true });
     return { id: uid(), n, kind: 'sketch', note: '', color: colorFor(n), image, viewport: { width: Math.round(width), height: Math.round(height) } };
   };
@@ -467,11 +991,29 @@ export default function App() {
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
-  const startRun = async (request: AgentRequest, before?: string | null) => {
+  // The other pages of the app, for the before/after check of pages the user isn't looking at.
+  const otherRoutes = (url: string, targets: string[] = []) => {
+    if (!/^https?:/.test(url)) return undefined;
+    let origin = '';
+    try { origin = new URL(url).origin; } catch { return undefined; }
+    // The open page is checked too: a change can land somewhere on it you weren't looking.
+    let here = '/';
+    try { here = new URL(url).pathname; } catch { /* keep "/" */ }
+    const list = [
+      { route: currentRoute?.route || here, url, current: true },
+      ...routes.filter((r) => !r.dynamic && r.route !== currentRoute?.route).slice(0, 8).map((r) => ({ route: r.route, url: origin + r.route })),
+    ];
+    return { routes: list, currentFile: currentRoute?.file, perfUrl: settingsRef.current?.perfCheck === false ? undefined : url, targets };
+  };
+
+  const startRun = async (request: AgentRequest, before?: string | null, meta: RunMeta = {}) => {
     if (!settings) return;
     const id = uid();
+    runMetaRef.current[id] = { ...meta, startedAt: Date.now() };
+    const flow = request.annotations.find((a) => a.kind === 'flow' && a.steps?.length);
+    if (flow && !meta.verify) runFlowRef.current[id] = { steps: flow.steps!, startUrl: flow.startUrl || request.url };
     runPageRef.current[id] = request.url;
-    if (before) api.saveShot(id, 'before', before).catch(() => {});
+    if (before) { beforeShotRef.current = { id, shot: before }; api.saveShot(id, 'before', before).catch(() => {}); }
     setAgentLog('');
     setRunId(id);
     runRef.current = id;
@@ -479,24 +1021,27 @@ export default function App() {
     const resume = sess && sess.agent === settings.agent ? sess.id : null;
     if (!resume) setDesignAtStart(settings.useDesign && design?.exists ? design.content : '');
     try {
-      await api.runAgent({ runId: id, request, sessionId: resume });
+      await api.runAgent({ runId: id, request, sessionId: resume, check: meta.variant || meta.verify ? undefined : otherRoutes(request.url, request.annotations.flatMap((a) => (a.kind === 'element' && a.element ? [a.element.selector] : (a.hits || []).map((h) => h.selector)))) });
     } catch (e) {
       setChat((c) => [...c, { kind: 'error', id: uid(), text: errText(e) }]);
       setRunId(null);
       runRef.current = null;
+      variantJob.current = null;
+      setJob(null);
     }
   };
 
   // Send whatever piled up while a non-steerable run was going.
   useEffect(() => {
-    if (runId || !queuedRef.current.length) return;
+    if (runId || variantJob.current || !queuedRef.current.length) return;
     const merged = mergeRequests(queuedRef.current);
     queuedRef.current = [];
     startRun(merged);
   }, [runId, flushTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async (mode: 'queue' | 'now' = 'queue') => {
-    if (!settings || busy) return;
+    if (!settings || busy || (job && !runRef.current)) return;
+    verifyPending.current = null; // the user moved on; don't start a check on top of their message
     if (!settings.projectDir) {
       flash('Pick the project folder the agent should edit.');
       const dir = await api.pickFolder();
@@ -521,23 +1066,35 @@ export default function App() {
         await sleep(80);
         try { overview = await b.capture(); } catch { /* ignore */ }
       }
+      // The overview shows live tweaks and forced states; everything after it should see the real page.
+      if (isolated) isolate(null);
+      if (anns.some((a) => a.tweaks || a.states?.length || a.textEdit || a.classEdit || a.propEdits)) {
+        await Promise.all(anns.map(releaseElement));
+        await sleep(120);
+      }
 
       // A clean "before" screenshot for the before/after compare (new runs only).
       const before = hasPage && !runRef.current ? await cleanCapture() : null;
 
       const devTail = stripAnsi(devLog).split('\n').slice(-40).join('\n');
       const devHasErrors = devRunning && /error|failed|exception/i.test(devTail);
-      const diagnostics = includeDiag && (consoleLog.length || netFails.length || devHasErrors)
-        ? { console: consoleLog, network: netFails, devLog: devHasErrors ? devTail : '' }
+      const hasDiag = includeDiag && (consoleLog.length || netFails.length || devHasErrors);
+      const a11yIssues = includeA11y && a11y.length ? a11y : undefined;
+      const diagnostics = hasDiag || a11yIssues
+        ? { console: hasDiag ? consoleLog : [], network: hasDiag ? netFails : [], devLog: hasDiag && devHasErrors ? devTail : '', a11y: a11yIssues }
         : undefined;
       const request: AgentRequest = {
-        url: navRef.current.url, title: navRef.current.title, viewport: b.size(),
+        url: navRef.current.url, title: navRef.current.title, viewport: { ...b.size(), responsive: device.on || undefined },
+        breakpoints: device.on && breakpoints.length ? breakpoints : undefined,
         instruction: instruction.trim(),
         overview,
         annotations: anns.map(({ id: _i, color: _c, ...a }) => a),
         diagnostics,
         route: currentRoute ? { path: currentRoute.route, file: currentRoute.file, framework: currentRoute.framework } : undefined,
+        env: env.colorScheme || env.reducedMotion || frozen || describeConditions(cond).length ? { ...env, frozen, states: describeConditions(cond) } : undefined,
+        note: pendingNote.current || undefined,
       };
+      pendingNote.current = null;
       if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
       const thumbs = await Promise.all(anns.map(async (a) => ({ ...a, image: a.image ? await thumbnail(a.image) : undefined })));
 
@@ -545,8 +1102,9 @@ export default function App() {
       setAnnotations([]);
       setActiveId(null);
       setPopover(null);
-      b.send('clear');
-      if (diagnostics) clearDiagnostics();
+      for (const h of Object.values(handles.current)) h?.send('clear'); // pins can be on several tabs
+      if (hasDiag) clearDiagnostics();
+      if (a11yIssues) setIncludeA11y(false);
 
       const running = runRef.current;
       if (running) {
@@ -560,8 +1118,13 @@ export default function App() {
         return;
       }
 
-      setChat((c) => [...c, { kind: 'user', id: uid(), text: request.instruction, annotations: thumbs, agent: settings.agent }]);
-      await startRun(request, before);
+      // Variants: the same request, run several times from the same starting point.
+      const total = settings.variants >= 2 ? Math.min(MAX_VARIANTS, settings.variants) : 0;
+      setChat((c) => [...c, { kind: 'user', id: uid(), text: request.instruction, annotations: thumbs, agent: settings.agent, ...(total && { variants: total }) }]);
+      if (total) {
+        variantJob.current = { base: request, total, index: 1, done: [] };
+        await startRun({ ...request, variant: { index: 1, total } }, before, { variant: { index: 1, total } });
+      } else await startRun(request, before);
     } catch (e) {
       setChat((c) => [...c, { kind: 'error', id: uid(), text: errText(e) }]);
     } finally { setBusy(null); }
@@ -604,26 +1167,140 @@ export default function App() {
     for (let i = 0; i < 40 && loadingRef.current; i++) await sleep(200);
     await sleep(400);
     if (navRef.current.url !== url) return; // user moved to another page meanwhile
-    const shot = await cleanCapture();
+    let shot = await cleanCapture();
     if (!shot) return;
+    // Did anything on screen actually change? Said plainly on the run's card when it didn't.
+    const before = beforeShotRef.current?.id === id ? beforeShotRef.current.shot : null;
+    const judge = async (after: string): Promise<'none' | 'changed' | undefined> => {
+      if (!before) return undefined;
+      try { return (await diffOverlay(before, after)).pct < 0.01 ? 'none' : 'changed'; } catch { return undefined; } // sizes differ or an image failed to load
+    };
+    let visual = await judge(shot);
+    // Looks the same: maybe the page just wasn't hot-reloaded (a static server). Reload once and look again.
+    // Pages with hot reload are trusted: they would have updated, and a reload would lose their state.
+    if (visual === 'none' && /^https?:/.test(url) && !(await browser.current?.hasHmr())) {
+      browser.current?.reload();
+      await sleep(500);
+      for (let i = 0; i < 40 && loadingRef.current; i++) await sleep(200);
+      await sleep(700);
+      const again = navRef.current.url === url ? await cleanCapture() : null;
+      if (again) { shot = again; visual = await judge(again); }
+    }
     await api.saveShot(id, 'after', shot);
-    setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === id ? { ...it, shots: true } : it)));
+    setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === id ? { ...it, shots: true, visual } : it)));
   };
-  const captureAfterRef = useRef(captureAfter);
-  captureAfterRef.current = captureAfter;
+  // A variant finished: keep its screenshot, put the files back, then start the next one or offer the choice.
+  const nextVariant = async (e: Extract<AgentEvent, { type: 'done' }>) => {
+    const j = variantJob.current;
+    if (!j) return;
+    const n = e.changes?.length || 0;
+    if (n) {
+      setJob(`Saving variant ${j.index} of ${j.total}…`);
+      await captureAfter(e.runId);
+      const r = await api.revertRun(e.runId, null, true).catch(() => null);
+      if (r) applyRevert(e.runId, r);
+      if (e.ok) j.done.push({ runId: e.runId, index: j.index, files: n });
+    }
+    if (!e.ok || j.index >= j.total) {
+      variantJob.current = null;
+      setJob(null);
+      if (j.done.length) setChat((c) => [...c, { kind: 'variants', id: uid(), options: j.done, chosen: null }]);
+      else if (e.ok) flash('None of the variants changed any files.');
+      setFlushTick((t) => t + 1);
+      return;
+    }
+    setJob(`Starting variant ${j.index + 1} of ${j.total}…`);
+    await sleep(1500); // hot reload back to the starting point
+    const before = await cleanCapture();
+    j.index++;
+    setJob(null);
+    // The session already has the request and its screenshots; without one, send it all again.
+    const slim = !!sessionRef.current;
+    const variant = { index: j.index, total: j.total };
+    startRun({ ...j.base, ...(slim && { instruction: '', annotations: [], overview: undefined }), diagnostics: undefined, note: undefined, variant }, before, { variant });
+  };
+
+  // Everything that follows a finished run: screenshots, the next variant, the automatic check.
+  const afterRun = async (e: Extract<AgentEvent, { type: 'done' }>) => {
+    const meta = runMetaRef.current[e.runId] || {};
+    if (meta.variant) return nextVariant(e);
+    if (!e.changes?.length) return;
+    await captureAfter(e.runId);
+    runA11y();
+    if (meta.verify || !e.ok || !settingsRef.current?.autoVerify) return;
+    if (verifyPending.current !== e.runId || runRef.current || queuedRef.current.length) return;
+    verifyPending.current = null;
+    const shots = await api.runShots(e.runId).catch(() => ({} as Record<string, string>));
+    if (!shots.after) return; // the page wasn't open, so there is nothing to look at
+    // The request was about an interaction: get the page back into that state before looking.
+    const flow = runFlowRef.current[e.runId];
+    if (flow) {
+      setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Replaying the recorded interaction…' }]);
+      await replayFlow(flow);
+      const shot = await cleanCapture();
+      if (shot) shots.after = shot;
+      if (runRef.current || queuedRef.current.length) return;
+    }
+    // Identical screenshots: the change didn't show. The check is told, so it looks for why.
+    let same = false;
+    if (shots.before) { try { same = (await diffOverlay(shots.before, shots.after)).pct < 0.01; } catch { /* different sizes */ } }
+    const since = meta.startedAt || 0;
+    const cons = consoleRef.current.filter((c) => c.at >= since);
+    const net = netRef.current.filter((n) => n.at >= since);
+    const request: AgentRequest = {
+      url: navRef.current.url, title: navRef.current.title, viewport: browser.current!.size(),
+      instruction: 'Fix what the automatic check of the result found', annotations: [],
+      verify: { before: shots.before, after: shots.after, same },
+      diagnostics: cons.length || net.length ? { console: cons, network: net, devLog: '' } : undefined,
+    };
+    setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Checking the result…' }]);
+    startRun(request, shots.after, { verify: true });
+  };
+  const afterRunRef = useRef(afterRun);
+  afterRunRef.current = afterRun;
+
+  // Apply one of the variants (switching away from another one if needed).
+  const pickVariant = async (itemId: string, id: string) => {
+    const item = chat.find((c) => c.id === itemId && c.kind === 'variants') as Extract<ChatItem, { kind: 'variants' }> | undefined;
+    if (!item || runRef.current) return;
+    try {
+      if (item.chosen && item.chosen !== id) applyRevert(item.chosen, await api.revertRun(item.chosen, null, true));
+      const r = await api.applyRun(id);
+      invalidateDiff(id);
+      setChat((c) => c.map((it) => (it.id === itemId && it.kind === 'variants' ? { ...it, chosen: id }
+        : it.kind === 'done' && it.runId === id ? { ...it, undone: false, changes: it.changes.map((ch) => ({ ...ch, reverted: false })) } : it)));
+      browser.current?.reload(); // show the chosen variant even when the dev server doesn't hot-reload a restore
+      const opt = item.options.find((o) => o.runId === id);
+      pendingNote.current = `[Pinpoint: the user picked variant ${opt?.index} of the ${item.options.length} you made. Its files are on disk now; the other variants were discarded. Re-read files before editing them.]`;
+      refreshGit();
+      flash(r.failed.length ? `Applied, but couldn't restore ${r.failed.join(', ')}` : `Variant ${opt?.index} applied`);
+    } catch (e) { flash(errText(e)); }
+  };
+
+  // The mockup overlay against the page, pixel by pixel.
+  const diffMockup = async () => {
+    const b = browser.current;
+    if (!overlay || !b) return;
+    const shot = await cleanCapture();
+    if (!shot) { flash("Couldn't capture the page."); return; }
+    try {
+      const fitted = await fitMockup(overlay.image, shot, { x: overlay.x, y: overlay.y }, b.size().width);
+      setCompare({ images: { before: fitted, after: shot }, labels: ['Mockup', 'Page'], title: 'Mockup vs page' });
+    } catch { flash("Couldn't read the mockup image."); }
+  };
 
   // Screenshot the current page at phone, tablet and desktop widths for a run.
   const captureSizes = async (id: string) => {
-    const original = viewport;
-    const plan: [Viewport, number][] = [['mobile', 390], ['tablet', 820], ['full', 0]];
+    const original = device;
+    const plan: Device[] = [{ on: true, w: 390, h: 844, zoom: 'fit', touch: false }, { on: true, w: 820, h: 1180, zoom: 'fit', touch: false }, DEVICE_OFF];
     try {
-      for (const [v, w] of plan) {
-        setViewport(v);
+      for (const d of plan) {
+        setDevice(d);
         await sleep(1200);
         const shot = await cleanCapture();
-        if (shot) await api.saveShot(id, `size-${w}`, shot);
+        if (shot) await api.saveShot(id, `size-${d.w}`, shot);
       }
-    } finally { setViewport(original); }
+    } finally { setDevice(original); }
   };
 
   const commitRun = async (id: string) => {
@@ -729,6 +1406,19 @@ export default function App() {
   };
 
   useEffect(() => api.onAgentEvent((e: AgentEvent) => {
+    // Other pages are compared after the run has already been reported as done.
+    if (e.type === 'routes') {
+      // A fresh load shows the change but the open page doesn't: it wasn't hot-reloaded, so reload it.
+      const fresh = e.results.find((r) => r.current);
+      setChat((c) => c.map((it) => {
+        if (it.kind !== 'done' || it.runId !== e.runId) return it;
+        if (fresh?.changed && it.visual === 'none' && navRef.current.url === runPageRef.current[e.runId]) {
+          browser.current?.hasHmr().then((hot) => { if (!hot) browser.current?.reload(); });
+        }
+        return { ...it, ...(e.results.length && { routeCheck: e.results }), ...(e.perf && { perf: e.perf }) };
+      }));
+      return;
+    }
     if (e.runId !== runRef.current) return;
     const push = (item: ChatItem) => setChat((c) => {
       const last = c[c.length - 1];
@@ -763,15 +1453,20 @@ export default function App() {
         setChat((c) => [
           ...c.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'ok' as const }
             : (it.kind === 'text' || it.kind === 'thinking') && it.streaming ? { ...it, streaming: false } : it)),
-          { kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [], commit: e.commit || null },
+          {
+            kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [], commit: e.commit || null,
+            ...(runMetaRef.current[e.runId]?.verify && { verify: true }),
+            ...(runMetaRef.current[e.runId]?.variant && { variant: runMetaRef.current[e.runId].variant }),
+          },
         ]);
         setRunId(null);
         runRef.current = null;
         // Static files have no hot reload, so refresh them ourselves.
         if (e.changes?.length && /^file:/.test(navRef.current.url)) browser.current?.reload();
         refreshGitRef.current();
+        verifyPending.current = e.runId;
+        afterRunRef.current(e);
         if (e.changes?.length) {
-          captureAfterRef.current(e.runId);
           refreshRoutes();
           if (e.changes.some((c) => /^DESIGN\.md$/i.test(c.path))) api.readDesign().then(setDesign);
         }
@@ -828,7 +1523,15 @@ export default function App() {
     if (!dir) return;
     setSettings(await api.getSettings()); setSession(null); flash(`Project: ${dir}`);
     // A different project starts from its welcome screen, not the old project's page.
-    if (dir !== prev) { browser.current?.load('about:blank'); setUrlInput(''); setDevLog(''); }
+    if (dir !== prev) {
+      const blank = makeTab('');
+      handles.current = {};
+      setTabs([blank]);
+      setActiveTab(blank.id);
+      setAnnotations([]);
+      setUrlInput('');
+      setDevLog('');
+    }
   };
 
   // ---------- layout ----------
@@ -868,10 +1571,11 @@ export default function App() {
     else if (k === 's') setMode('select');
     else if (k === 'd') setMode('draw');
     else if (k === 'k') setMode('sketch');
+    else if (k === 'f' && m !== 'draw' && m !== 'sketch') setFrozen(!frozenRef.current);
     else if ((m === 'draw' || m === 'sketch') && TOOL_KEYS[k]) setTool(TOOL_KEYS[k]);
     else return;
     e?.preventDefault();
-  }, [setMode]);
+  }, [setMode, setFrozen]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -879,6 +1583,7 @@ export default function App() {
       const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
       const m = modeRef.current;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { togglePanel(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') { newTab(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing && (m === 'draw' || m === 'sketch')) {
         const target = m === 'sketch' ? sketch : page;
         e.shiftKey ? target.redo() : target.undo();
@@ -894,28 +1599,43 @@ export default function App() {
 
   // ---------- annotations ----------
   const updateNote = (id: string, note: string) => setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, note } : a)));
-  const removeAnn = (id: string) => { setAnnotations((prev) => prev.filter((a) => a.id !== id)); if (popover?.id === id) setPopover(null); };
+  const removeAnn = (id: string) => {
+    const a = annRef.current.find((x) => x.id === id);
+    if (a) releaseElement(a);
+    if (isolated === id) isolate(null);
+    setAnnotations((prev) => prev.filter((x) => x.id !== id));
+    if (popover?.id === id) setPopover(null);
+  };
   const focusAnn = (a: Annotation) => {
     setActiveId(a.id);
-    if (a.kind === 'element' && a.element) browser.current?.send('scrollTo', a.element.uid);
+    if (a.tabId && a.tabId !== activeTabRef.current && tabsRef.current.some((t) => t.id === a.tabId)) switchTab(a.tabId);
+    if (a.kind === 'element' && a.element) (a.tabId ? handles.current[a.tabId] : browser.current)?.send('scrollTo', a.element.uid);
   };
 
   const agentReady = settings && agents ? agents[settings.agent]?.ok : true;
-  const vpWidth = VIEWPORTS[viewport].w;
+  // Responsive mode: the page gets its exact size and is scaled down to fit when it's bigger than the stage.
+  const deviceScale = !device.on || !avail.w ? 1
+    : device.zoom === 'fit' ? Math.min(1, avail.w / device.w, device.h ? avail.h / device.h : 1) : device.zoom;
+  const deviceH = device.h || avail.h / deviceScale;
   const drawShapes = mode === 'sketch' ? sketch : page;
   const pendingMarks = page.shapes.length + sketch.shapes.length;
   const canSend = !busy && !!(instruction.trim() || annotations.length || pendingMarks);
   const popAnn = popover && annotations.find((a) => a.id === popover.id);
   const root = settings?.projectDir || '';
+  const runMeta = runId ? runMetaRef.current[runId] : undefined;
+  const memoryOn = settings?.useMemory ? memory.filter((m) => m.enabled).length : 0;
 
   const popoverStyle = useMemo(() => {
     if (!popover || !frame.current) return {};
     const fw = frame.current.clientWidth, fh = frame.current.clientHeight;
-    const w = 300;
+    const w = 320;
+    // Element notes carry the state / scope / tweak tools, so they need more room.
+    const isEl = popAnn?.kind === 'element';
+    const h = 130 + (isEl ? 94 + ((popAnn?.element?.component?.uses ?? 0) > 1 ? 30 : 0) + (toolSection ? 200 : 0) : 0);
     const below = popover.rect.y + popover.rect.height + 10;
-    const top = below + 130 < fh ? below : Math.max(8, popover.rect.y - 140);
+    const top = below + h < fh ? below : Math.max(8, Math.min(popover.rect.y - h - 10, fh - h - 8));
     return { left: Math.min(Math.max(8, popover.rect.x), fw - w - 8), top, width: w };
-  }, [popover]);
+  }, [popover, toolSection, popAnn?.kind, popAnn?.element?.component?.uses]);
 
   if (!settings) return <div className="boot"><Loader2 className="spin" /></div>;
 
@@ -944,34 +1664,6 @@ export default function App() {
 
         <div className="tb-div" />
 
-        <div className="nav-btns">
-          <button className="icon-btn" disabled={!nav.canBack} onClick={() => browser.current?.back()} title="Back"><ArrowLeft size={16} /></button>
-          <button className="icon-btn" disabled={!nav.canForward} onClick={() => browser.current?.forward()} title="Forward"><ArrowRight size={16} /></button>
-          <button className="icon-btn" onClick={() => browser.current?.reload()} title="Reload">{loading ? <Loader2 size={16} className="spin" /> : <RotateCw size={15} />}</button>
-        </div>
-
-        <form className="urlbar" onSubmit={(e) => { e.preventDefault(); go(urlInput); }}>
-          {projectDir && /^(https?|file):/.test(nav.url) ? (
-            <RoutePicker
-              routes={routes}
-              current={currentRoute}
-              baseUrl={/^file:/.test(nav.url) ? 'file:///' + projectDir.replace(/\\/g, '/').replace(/^\//, '') : (() => { try { return new URL(nav.url).origin; } catch { return ''; } })()}
-              getLinks={() => browser.current?.links() ?? Promise.resolve([])}
-              onGo={go}
-              onEdit={(u) => { setUrlInput(u); setTimeout(() => (document.querySelector('.urlbar input') as HTMLInputElement | null)?.focus(), 30); }}
-            />
-          ) : <Globe size={14} className="url-icon" />}
-          <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} onFocus={(e) => e.target.select()} placeholder="localhost:3000, a URL, or a path to an .html file" spellCheck={false} />
-          <div className="vp-toggles">
-            {(Object.keys(VIEWPORTS) as Viewport[]).map((v) => {
-              const V = VIEWPORTS[v];
-              return <button type="button" key={v} className={viewport === v ? 'on' : ''} onClick={() => setViewport(v)} title={V.label}><V.icon size={14} /></button>;
-            })}
-          </div>
-        </form>
-
-        <div className="tb-div" />
-
         <div className="seg mode-seg">
           {MODES.map((m) => (
             <button key={m.id} className={mode === m.id ? 'on' : ''} onClick={() => setMode(m.id)} title={`${m.hint} (${m.key})`}>
@@ -980,14 +1672,29 @@ export default function App() {
           ))}
         </div>
 
-        <div className="tb-div" />
+        <div className="spacer" />
 
         <div className="top-right">
+          <button className={`icon-btn ${rec ? 'rec' : ''}`} onClick={toggleRecording} disabled={!/^(https?|file):/.test(nav.url)} title={rec ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
+            <CircleDot size={16} />
+          </button>
           <button className={`icon-btn ${drawerOpen ? 'on' : ''}`} onClick={() => setDrawerOpen(!drawerOpen)} title="Dev server & logs">
             <TerminalSquare size={16} />{devRunning && <span className="live-dot abs" />}
           </button>
-          <button className={`icon-btn ${sheet ? 'on' : ''}`} onClick={() => setSheet(sheet ? null : 'design')} title="Design rules & memory" disabled={!projectDir}>
-            <Palette size={16} />{(design?.exists || memory.length > 0) && <span className="ctx-dot" />}
+          <button
+            className={`icon-btn ${sheet === 'design' ? 'on' : ''} ${designChanged ? 'warn' : ''}`}
+            onClick={() => setSheet(sheet === 'design' ? null : 'design')} disabled={!projectDir}
+            title={designChanged ? 'Design rules changed during this chat. Start a new chat to use them.'
+              : design?.exists ? (settings.useDesign ? 'Design rules: DESIGN.md is sent at the start of each chat' : 'Design rules: DESIGN.md exists but is switched off') : 'Design rules: set up your colors, type, spacing and components'}
+          >
+            <Palette size={16} />{design?.exists && settings.useDesign && <span className="ctx-dot" />}
+          </button>
+          <button
+            className={`icon-btn ${sheet === 'memory' ? 'on' : ''}`}
+            onClick={() => setSheet(sheet === 'memory' ? null : 'memory')} disabled={!projectDir}
+            title={`Project memory: short rules sent with every request${memoryOn ? ` (${memoryOn} on)` : ''}`}
+          >
+            <Brain size={16} />{memoryOn > 0 && <b className="icon-count">{memoryOn}</b>}
           </button>
           <button className="icon-btn" onClick={() => browser.current?.devtools()} title="Page DevTools"><Bug size={16} /></button>
           <button className={`icon-btn ${settings.panelHidden ? '' : 'on'}`} onClick={togglePanel} title={`Toggle sidebar (${MOD}+B)`}><PanelIcon size={16} /></button>
@@ -997,20 +1704,95 @@ export default function App() {
 
       {/* ---------- browser ---------- */}
       <main className="stage">
-        <div className={`frame-wrap ${vpWidth ? 'device' : ''}`}>
-          <div ref={frame} className={`frame mode-${mode}`} style={vpWidth ? { width: vpWidth } : undefined}>
-            <BrowserView
-              ref={browser}
-              initialUrl={settings.projectDir && settings.url ? normalizeUrl(settings.url) : ''}
-              onPicked={onPicked}
-              onNavigate={(s) => { setNav(s); if (document.activeElement?.closest('.urlbar') == null) setUrlInput(s.url === 'about:blank' ? '' : s.url); }}
-              onLoading={(l) => { loadingRef.current = l; setLoading(l); }}
-              onReady={syncPage}
-              onKey={(k) => handleKey(k)}
-              onError={setLoadError}
-              onConsole={onConsole}
-              onPageChange={clearDiagnostics}
+        {/* Tabs on the left, tools for the page being shown on the right. */}
+        <div className="tabbar">
+          <div className="tabstrip">
+            {tabs.map((t) => (
+              <div
+                key={t.id} className={`tab ${t.id === activeTab ? 'on' : ''}`} title={t.url || 'New tab'}
+                onClick={() => switchTab(t.id)}
+                onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}
+              >
+                {t.loading ? <Loader2 size={11} className="spin" /> : <Globe size={11} />}
+                <span>{tabLabel(t)}</span>
+                {annotations.some((a) => a.tabId === t.id) && <i className="tab-pin" title="Has annotations for the next request" />}
+                <button className="tab-x" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} title="Close tab"><X size={11} /></button>
+              </div>
+            ))}
+            <button className="tab-new" onClick={() => newTab()} title={`New tab (${MOD}+T)`}><Plus size={13} /></button>
+          </div>
+        </div>
+        {/* Navigation for the active tab, and tools for the page it shows. */}
+        <div className="navbar">
+          <div className="nav-btns">
+            <button className="icon-btn" disabled={!nav.canBack} onClick={() => browser.current?.back()} title="Back"><ArrowLeft size={16} /></button>
+            <button className="icon-btn" disabled={!nav.canForward} onClick={() => browser.current?.forward()} title="Forward"><ArrowRight size={16} /></button>
+            <button className="icon-btn" onClick={() => browser.current?.reload()} title="Reload">{loading ? <Loader2 size={16} className="spin" /> : <RotateCw size={15} />}</button>
+          </div>
+
+          <form className="urlbar" onSubmit={(e) => { e.preventDefault(); go(urlInput); }}>
+            {projectDir && /^(https?|file):/.test(nav.url) ? (
+              <RoutePicker
+                routes={routes}
+                current={currentRoute}
+                baseUrl={/^file:/.test(nav.url) ? 'file:///' + projectDir.replace(/\\/g, '/').replace(/^\//, '') : (() => { try { return new URL(nav.url).origin; } catch { return ''; } })()}
+                getLinks={() => browser.current?.links() ?? Promise.resolve([])}
+                onGo={go}
+                onEdit={(u) => { setUrlInput(u); setTimeout(() => (document.querySelector('.urlbar input') as HTMLInputElement | null)?.focus(), 30); }}
+              />
+            ) : <Globe size={14} className="url-icon" />}
+            <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} onFocus={(e) => e.target.select()} placeholder="localhost:3000, a URL, or a path to an .html file" spellCheck={false} />
+          </form>
+          <div className="vp-toggles">
+            {QUICK_SIZES.map((q) => {
+              const on = q.w ? device.on && device.w === q.w : !device.on;
+              return <button type="button" key={q.label} className={on && !multi ? 'on' : ''} onClick={() => { setMulti(false); setDevice(q.w ? { on: true, w: q.w, h: q.h, zoom: device.zoom, touch: device.touch } : DEVICE_OFF); }} title={q.label}><q.icon size={14} /></button>;
+            })}
+            <button type="button" className={multi ? 'on' : ''} onClick={() => setMulti(!multi)} disabled={!/^(https?|file):/.test(nav.url)} title="Phone, tablet and desktop side by side"><Columns3 size={14} /></button>
+            <span className="vp-sep" />
+            <button type="button" className={frozen ? 'on' : ''} onClick={() => setFrozen(!frozen)} title="Freeze the page so open menus, tooltips and popovers stay put. Press F while pointing at the page to keep its hover state (F8 while typing)."><Snowflake size={14} /></button>
+            <ConditionsMenu
+              value={cond} set={changeConditions} onStep={stepAnimation}
+              env={env} setEnv={setEnv}
+              layout={settings.layoutOverlay !== false}
+              setLayout={(on) => { saveSettings({ layoutOverlay: on }); browser.current?.send('layout', on); }}
             />
+          </div>
+        </div>
+        <div className={`frame-wrap ${device.on ? 'device' : ''}`}>
+          {device.on && <DeviceBar device={device} set={setDevice} scale={deviceScale} height={deviceH} breakpoints={breakpoints} />}
+          <div className="device-area" ref={area}>
+          <div className="device-box" style={device.on ? { width: device.w * deviceScale, height: deviceH * deviceScale } : undefined}>
+          <div ref={frame} className={`frame mode-${mode}`} style={device.on ? { width: device.w, height: deviceH, transform: `scale(${deviceScale})` } : undefined}>
+            {tabs.map((t) => {
+              const here = () => t.id === activeTabRef.current; // background tabs stay loaded but don't drive the UI
+              return (
+                <BrowserView
+                  key={t.id}
+                  ref={(h) => { handles.current[t.id] = h; if (here()) browser.current = h; }}
+                  hidden={t.id !== activeTab}
+                  initialUrl={t.initialUrl}
+                  onPicked={(el) => { if (here()) onPicked(el); }}
+                  onNavigate={(s) => {
+                    patchTab(t.id, s);
+                    if (here() && document.activeElement?.closest('.urlbar') == null) setUrlInput(s.url === 'about:blank' ? '' : s.url);
+                  }}
+                  onLoading={(l) => patchTab(t.id, { loading: l })}
+                  onReady={() => { if (here()) syncPage(); }}
+                  onKey={(k) => { if (here()) handleKey(k); }}
+                  onError={(msg) => patchTab(t.id, { error: msg })}
+                  onConsole={(c) => { if (here()) onConsole(c); }}
+                  onPageChange={() => { if (here()) { clearDiagnostics(); setFrozenState(false); setA11y([]); } }}
+                  onFrozen={(on) => { if (here()) onFrozen(on); }}
+                  onStep={(s) => { if (here()) onStep(s); }}
+                />
+              );
+            })}
+
+            {overlay && mode !== 'sketch' && <MockupOverlay overlay={overlay} onChange={setOverlay} onDiff={diffMockup} onClose={() => setOverlay(null)} />}
+            {frozen && <div className="frozen-tag"><Snowflake size={12} /> Page frozen · press F to release</div>}
+            {rec && <div className="frozen-tag rec"><CircleDot size={12} /> Recording · {rec.steps.length} step{rec.steps.length === 1 ? '' : 's'} <button onClick={toggleRecording}>Stop</button></div>}
+            {isolated && <div className="frozen-tag iso">Showing one element on its own <button onClick={() => isolate(null)}>Show page</button></div>}
 
             {mode === 'draw' && (
               <DrawSurface shapes={page.shapes} onChange={page.set} tool={tool} color={color} size={size} />
@@ -1037,6 +1819,22 @@ export default function App() {
                     if (e.key === 'Escape') setPopover(null);
                   }}
                 />
+                {popAnn.kind === 'element' && popAnn.element && (
+                  <ElementTools
+                    key={popAnn.id} ann={popAnn} section={toolSection} setSection={setToolSection}
+                    classNames={classNames} generated={generated} isolated={isolated === popAnn.id}
+                    onStates={(s) => setStates(popAnn.id, s)}
+                    onScope={(scope) => patchAnn(popAnn.id, (a) => ({ ...a, scope }))}
+                    onTweak={(prop, value) => tweak(popAnn.id, prop, value)}
+                    onResetTweaks={() => resetTweaks(popAnn.id)}
+                    onText={(t) => editText(popAnn.id, t)}
+                    onClasses={(v) => editClasses(popAnn.id, v)}
+                    onProp={(name, v) => editProp(popAnn.id, name, v)}
+                    onIsolate={(on) => isolate(on ? popAnn.id : null)}
+                    onStory={() => openStory(popAnn.id)}
+                    onOpenFile={openFile}
+                  />
+                )}
                 <div className="note-pop-foot">
                   <button className="btn ghost xs" onClick={() => removeAnn(popAnn.id)}><Trash2 size={12} /> Remove</button>
                   <span className="hint">Enter to save · {MOD}+Enter to send</span>
@@ -1053,7 +1851,7 @@ export default function App() {
               />
             )}
 
-            {mode === 'select' && !popover && <div className="mode-hint">Click any element to annotate it · ↑/↓ pick parent/child · Esc to exit</div>}
+            {mode === 'select' && !popover && <div className="mode-hint">Click any element to annotate it · ↑/↓ pick parent/child · Alt measures from the selected one · F freezes open menus · Esc to exit</div>}
 
             {(!nav.url || nav.url === 'about:blank') && mode !== 'sketch' && (
               <Welcome
@@ -1079,6 +1877,17 @@ export default function App() {
             )}
             {busy && <div className="busy"><Loader2 size={14} className="spin" /> {busy}</div>}
           </div>
+          {device.on && (
+            <>
+              <div className="device-grip x" onPointerDown={startDeviceResize('x')} title="Drag to change the width" />
+              <div className="device-grip y" onPointerDown={startDeviceResize('y')} title="Drag to change the height" />
+              <div className="device-grip xy" onPointerDown={startDeviceResize('xy')} title="Drag to resize" />
+              <span className="device-size">{device.w} × {Math.round(deviceH)}{deviceScale !== 1 ? ` · ${Math.round(deviceScale * 100)}%` : ''}</span>
+            </>
+          )}
+          </div>
+          </div>
+          {multi && <MultiView url={nav.url} onNavigate={go} onPick={(w, h) => { setMulti(false); setDevice({ on: true, w, h, zoom: 'fit', touch: device.touch }); }} onClose={() => setMulti(false)} />}
         </div>
       </main>
 
@@ -1100,15 +1909,18 @@ export default function App() {
         <div className="panel-head">
           <div className="seg agent-seg">
             {(['claude', 'codex'] as AgentId[]).map((a) => (
-              <button key={a} className={settings.agent === a ? 'on' : ''} onClick={() => saveSettings({ agent: a })} disabled={!!runId}>
-                <span className={`status-dot ${agents ? (agents[a]?.ok ? 'ok' : 'bad') : ''}`} />
+              <button
+                key={a} className={`${settings.agent === a ? 'on' : ''} ${agents && !agents[a]?.ok ? 'missing' : ''}`}
+                onClick={() => saveSettings({ agent: a })} disabled={!!runId}
+                title={agents && !agents[a]?.ok ? "Its CLI wasn't found. Install it or set its path in Settings." : agents?.[a]?.version}
+              >
                 {a === 'claude' ? 'Claude Code' : 'Codex'}
               </button>
             ))}
           </div>
           <div className="spacer" />
           {projectDir && <ChatHistory currentId={chatId} disabled={!!runId} onOpen={openChat} onDelete={deleteChat} />}
-          <button className="btn ghost xs" onClick={newChat} disabled={!!runId || !chat.length} title={session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'}><Plus size={13} /><span className="btn-text">New chat</span></button>
+          <button className="btn ghost xs" onClick={newChat} disabled={!!runId || !!job || !chat.length} title={session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'}><Plus size={13} /><span className="btn-text">New chat</span></button>
         </div>
 
         <div className="chat">
@@ -1125,22 +1937,30 @@ export default function App() {
                 <div className="warn-box">{settings.agent === 'claude' ? 'Claude Code' : 'Codex'} CLI wasn't found. Install it or set its path in Settings.</div>
               )}
             </div>
-          ) : chat.map((item) => <ChatItemView key={item.id} item={item} root={root} onReload={() => browser.current?.reload()} onUndo={undoRun} onReview={(runId, path) => setDiffView({ runId, path })} onMemory={onMemoryAction} onRevertFile={revertFile} onOpenFile={openFile} onCommit={commitRun} onCompare={setCompare} gitRepo={!!gitStatus?.repo} busy={!!runId} />)}
-          {runId && <div className="working"><Loader2 size={14} className="spin" /> {settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is working…</div>}
+          ) : chat.map((item) => <ChatItemView key={item.id} item={item} root={root} onReload={() => browser.current?.reload()} onUndo={undoRun} onReview={(runId, path) => setDiffView({ runId, path })} onMemory={onMemoryAction} onRevertFile={revertFile} onOpenFile={openFile} onCommit={commitRun} onCompare={(id, pair) => setCompare({ runId: id, pair, ...(pair && { title: `Other page: /${pair.replace(/^route-/, '').replace(/^home$/, '')}` }) })} onPickVariant={pickVariant} onMeasureBuild={measureBuild} gitRepo={!!gitStatus?.repo} busy={!!runId || !!job} />)}
+          {(runId || job) && (
+            <div className="working">
+              <Loader2 size={14} className="spin" />{' '}
+              {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is ${runMeta?.verify ? 'checking the result' : 'working'}…`}
+            </div>
+          )}
           <div ref={chatEnd} />
         </div>
 
         <div className="composer">
           {projectDir && (
             <ContextBar
-              lead={<GitPanel status={gitStatus} refresh={refreshGit} settings={settings} saveSettings={saveSettings} busy={!!runId} prDefaults={prDefaults} flash={flash} />}
-              designOn={settings.useDesign} designExists={!!design?.exists} designChanged={designChanged}
-              memoryCount={settings.useMemory ? memory.filter((m) => m.enabled).length : 0}
+              lead={<>
+                <GitPanel status={gitStatus} refresh={refreshGit} settings={settings} saveSettings={saveSettings} busy={!!runId} prDefaults={prDefaults} flash={flash} />
+                <PinsChip projectDir={projectDir} url={nav.url} title={nav.title} flash={flash} onCompare={(images, title) => setCompare({ images, labels: ['Pinned', 'Now'], title })} />
+              </>}
               route={currentRoute}
               console={consoleLog} network={netFails}
               includeDiag={includeDiag} setIncludeDiag={setIncludeDiag}
-              onOpenDesign={() => setSheet('design')} onOpenMemory={() => setSheet('memory')}
               onClearDiag={clearDiagnostics} onAskFix={askToFix}
+              designSystem={designSystem}
+              a11y={a11y} includeA11y={includeA11y} setIncludeA11y={setIncludeA11y} onAskA11y={askA11y}
+              onShowNode={(sel) => browser.current?.reveal(sel)}
             />
           )}
           {(annotations.length > 0 || pendingMarks > 0) && (
@@ -1158,7 +1978,7 @@ export default function App() {
                       <textarea
                         data-note={a.id}
                         rows={1}
-                        placeholder={a.kind === 'element' ? 'What should change here?' : a.kind === 'sketch' ? 'What is this sketch? Where should it go?' : a.kind === 'reference' ? 'What should we take from this image?' : 'Explain your drawing…'}
+                        placeholder={a.kind === 'element' ? 'What should change here?' : a.kind === 'flow' ? 'What goes wrong (or should change) when you do this?' : a.kind === 'sketch' ? 'What is this sketch? Where should it go?' : a.kind === 'reference' ? 'What should we take from this image?' : 'Explain your drawing…'}
                         onPaste={onPaste}
                         value={a.note}
                         onFocus={() => setActiveId(a.id)}
@@ -1166,6 +1986,15 @@ export default function App() {
                         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } }}
                       />
                     </div>
+                    {a.kind === 'flow' && (
+                      <button className="icon-btn xs ann-act" title="Copy these steps as a Playwright test" onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(toPlaywright(a)); flash('Playwright test copied.'); }}><ClipboardCopy size={13} /></button>
+                    )}
+                    {a.kind === 'reference' && a.image && (
+                      <button
+                        className={`icon-btn xs ann-act ${overlay?.image === a.image ? 'on' : ''}`} title="Lay this image over the page to compare"
+                        onClick={(e) => { e.stopPropagation(); setOverlay(overlay?.image === a.image ? null : { image: a.image!, name: a.name || 'mockup', opacity: 0.5, x: 0, y: 0, moving: false }); }}
+                      ><Blend size={13} /></button>
+                    )}
                     <button className="icon-btn xs ann-x" onClick={(e) => { e.stopPropagation(); removeAnn(a.id); }} title="Remove"><X size={13} /></button>
                   </div>
                 );
@@ -1198,7 +2027,9 @@ export default function App() {
             />
             <div className="composer-foot">
               <button className="icon-btn attach-btn" onClick={() => fileInput.current?.click()} title="Attach reference images (or paste / drop them)"><Paperclip size={15} /></button>
+              {!runId && <HandoffMenu hasRequest={!!(instruction.trim() || annotations.length)} canIssue={!!gitStatus?.gh.authed && !!gitStatus?.remote} onExport={exportHandoff} onCopy={copyHandoff} onIssue={issueHandoff} onImport={importHandoff} />}
               <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) addReferences(e.target.files); e.target.value = ''; }} />
+              {!runId && <VariantsMenu value={settings.variants || 0} set={(n) => saveSettings({ variants: n })} />}
               {runId
                 ? <span className="steer-hint"><kbd>↵</kbd> after this step <kbd>{MOD}↵</kbd> now</span>
                 : <AgentControls settings={settings} catalog={catalog} onChange={saveSettings} />}
@@ -1244,7 +2075,7 @@ export default function App() {
           chatBusy={!!runId}
         />
       )}
-      {compare && <CompareView runId={compare} onClose={() => setCompare(null)} captureSizes={captureSizes} />}
+      {compare && <CompareView {...compare} onClose={() => setCompare(null)} captureSizes={captureSizes} />}
       {diffView && (
         <DiffViewer
           runId={diffView.runId} initialPath={diffView.path}

@@ -18,6 +18,66 @@ export interface SourceInfo {
   components?: string[];
   framework?: string;
   frame?: { url: string; line: number; column: number }; // compiled-code position, for source maps
+  owner?: string;                 // nearest component that renders the element
+  props?: Record<string, string>; // that component's props, summarized
+}
+
+// The component behind a picked element, and how widely it is used in the project.
+export interface ComponentInfo { name: string; props?: Record<string, string>; uses?: number; fileCount?: number; files?: string[] }
+
+// Pseudo-states that can be forced on a picked element.
+export type ForcedState = 'hover' | 'focus' | 'focus-visible' | 'active' | 'disabled';
+
+// What the page is being shown as: emulated media features and a frozen page.
+export interface PageEnv { colorScheme: 'light' | 'dark' | null; reducedMotion: boolean }
+
+export interface A11yIssue {
+  id: string; impact: string | null; help: string; count: number;
+  nodes: { target: string; html: string; summary: string }[];
+}
+
+export interface DesignSystem {
+  tailwind: { version: string | null; config: string | null; entry?: string | null; configFile?: string | null } | null;
+  libraries: string[];
+  styling: string[];
+  componentsConfig: string | null;
+  tokenFiles: { file: string; count: number }[];
+  tokens: { name: string; value: string }[];
+}
+
+export interface RouteCheckResult {
+  route: string; key: string; pct: number; changed: boolean;
+  current?: boolean;  // the page that was open during the run
+  areas?: string[];   // what changed on it, named by element (on the open page: besides what was asked for)
+  asked?: string[];   // on the open page: the changed areas the user had pointed at
+}
+
+// A CSS rule that styles a picked element, and where it lives.
+export interface CssRuleInfo {
+  selector: string; media?: string; file?: string; line?: number;
+  approx?: boolean;  // the line was found by searching the file, not from a source map
+  utility?: boolean; // generated utility class (Tailwind etc.): edit the class list instead
+  declarations: { name: string; value: string; important: boolean }[];
+  wins: string[]; // tracked properties this rule currently decides
+}
+
+// One step of a recorded interaction.
+export interface FlowStep { type: 'click' | 'fill' | 'check' | 'key' | 'navigate'; selector?: string; tag?: string; text?: string; value?: string; key?: string; url?: string; secret?: boolean }
+
+// Load cost of a page (measured in a hidden window before and after a run).
+export interface PerfMetrics { js: number; css: number; requests: number; nodes: number; lcp: number; cls: number }
+
+// Size of the production build's JS and CSS.
+export interface BuildSize { js: number; css: number; jsGzip: number; cssGzip: number; files: number; at: number }
+
+export interface Pin { id: string; url: string; label: string; pinnedAt: number; checkedAt?: number; pct?: number; changed?: boolean; error?: string; areas?: string[] }
+
+export type NetworkMode = 'normal' | 'slow' | 'hang' | 'error' | 'offline';
+
+// A request someone annotated for a developer to run, saved as one file.
+export interface Handoff {
+  pinpointHandoff: 1; createdAt: number; url: string; title: string; viewport?: { width: number; height: number };
+  instruction: string; annotations: Annotation[];
 }
 
 export interface Rect { x: number; y: number; width: number; height: number }
@@ -34,12 +94,18 @@ export interface ElementInfo {
   path?: string;
   rect: Rect;
   source?: SourceInfo | null;
+  tokens?: Record<string, string>; // css property -> the design token its value comes from
+  component?: ComponentInfo | null;
+  rules?: CssRuleInfo[];
+  leaf?: boolean; // contains only text, so its copy can be edited in place
 }
 
 export interface Annotation {
   id: string;
   n: number;
-  kind: 'element' | 'drawing' | 'sketch' | 'reference';
+  kind: 'element' | 'drawing' | 'sketch' | 'reference' | 'flow';
+  steps?: FlowStep[];   // a recorded interaction
+  startUrl?: string;
   name?: string; // reference image file name
   note: string;
   color: string;
@@ -48,16 +114,33 @@ export interface Annotation {
   region?: Rect;
   hits?: ElementInfo[];
   viewport?: { width: number; height: number };
+  tabId?: string;                   // the browser tab it was made in
+  pageUrl?: string;                 // the page it was made on (a request can span several tabs)
+  tweaks?: Record<string, string>;  // live style edits applied in the page: css property -> value
+  states?: ForcedState[];           // states forced on the element while it was inspected
+  scope?: 'instance' | 'component'; // change just this one, or the component everywhere
+  textEdit?: { from: string; to: string };                    // copy edited in place
+  classEdit?: { from: string; to: string };                   // class list edited in place
+  propEdits?: Record<string, { from: string; to: string }>;   // component props changed live
 }
 
 export type ChatItem =
-  | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later' }
+  | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later'; variants?: number }
   | { kind: 'text'; id: string; text: string; streaming?: boolean }
   | { kind: 'thinking'; id: string; text: string; streaming?: boolean }
   | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string }
   | { kind: 'error'; id: string; text: string }
   | { kind: 'status'; id: string; text: string }
-  | { kind: 'done'; id: string; runId: string; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; undone?: boolean; commit?: GitCommit | null; shots?: boolean }
+  | {
+    kind: 'done'; id: string; runId: string; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; undone?: boolean; commit?: GitCommit | null; shots?: boolean;
+    verify?: boolean;                           // the automatic check of the previous run
+    variant?: { index: number; total: number }; // one of several takes on the same request
+    routeCheck?: RouteCheckResult[];            // other pages, compared before and after
+    perf?: { before: PerfMetrics; after: PerfMetrics }; // the open page's load cost
+    build?: { now: BuildSize; previous: BuildSize | null }; // production build size, measured on request
+    visual?: 'none' | 'changed'; // whether the page on screen looked any different afterwards
+  }
+  | { kind: 'variants'; id: string; options: { runId: string; index: number; files: number }[]; chosen?: string | null }
   | { kind: 'memory'; id: string; text: string; status: 'pending' | 'saved' | 'dismissed' };
 
 export interface ModelOption { id: string; label: string; desc?: string; efforts: string[]; defaultEffort?: string }
@@ -121,6 +204,14 @@ export interface Settings {
   editorCommand: string;
   gitBranchPerChat: boolean;
   gitAutoCommit: boolean;
+  tabs?: string[];
+  activeTab?: number;
+  autoVerify: boolean;
+  variants: number;
+  routeCheck: boolean;
+  a11yCheck: boolean;
+  perfCheck: boolean;
+  layoutOverlay: boolean;
 }
 
 export type AgentEvent =
@@ -136,7 +227,8 @@ export type AgentEvent =
   | { runId: string; type: 'log'; text: string }
   | { runId: string; type: 'error'; text: string }
   | { runId: string; type: 'done'; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; commit?: GitCommit | null }
-  | { runId: string; type: 'git'; branch: string };
+  | { runId: string; type: 'git'; branch: string }
+  | { runId: string; type: 'routes'; results: RouteCheckResult[]; perf?: { before: PerfMetrics; after: PerfMetrics } | null };
 
 export type DevEvent =
   | { type: 'log'; text: string }
@@ -157,12 +249,36 @@ export interface PinpointAPI {
   pickFolder(): Promise<string | null>;
   openPath(p: string): Promise<string>;
   capture(webContentsId: number, rect?: Rect): Promise<string>;
-  runAgent(args: { runId: string; request: unknown; sessionId?: string | null }): Promise<{ requestDir: string }>;
+  runAgent(args: { runId: string; request: unknown; sessionId?: string | null; check?: { routes: { route: string; url: string; current?: boolean }[]; currentFile?: string; perfUrl?: string; targets?: string[] } }): Promise<{ requestDir: string }>;
   cancelAgent(runId: string): Promise<boolean>;
   steerAgent(args: { runId: string; steerId: string; request: unknown; mode: 'queue' | 'now' }): Promise<{ delivered: boolean }>;
   openFile(rel: string, line?: number): Promise<{ via: string }>;
   runDiff(runId: string): Promise<DiffFile[]>;
   revertRun(runId: string, paths?: string[] | null, force?: boolean): Promise<RevertResult>;
+  applyRun(runId: string): Promise<RevertResult>;
+  forceState(webContentsId: number, selector: string, classes: string[]): Promise<number>;
+  emulate(webContentsId: number, env: PageEnv & { focus: boolean; touch?: boolean }): Promise<boolean>;
+  designSystem(): Promise<DesignSystem | null>;
+  componentUsage(name: string): Promise<{ count: number; files: string[]; fileCount?: number }>;
+  a11ySource(): Promise<string>;
+  matchedRules(webContentsId: number, uid: string): Promise<CssRuleInfo[]>;
+  setAnimationRate(webContentsId: number, rate: number): Promise<boolean>;
+  setNetwork(webContentsId: number, mode: NetworkMode): Promise<boolean>;
+  findStory(name: string): Promise<{ file: string | null; storybook: boolean; url: string | null; canStart: boolean }>;
+  startStorybook(name: string): Promise<string | null>;
+  replay(webContentsId: number, steps: FlowStep[]): Promise<{ done: number; total: number }>;
+  tailwindCss(classes: string[]): Promise<string | null>;
+  measureBuild(pageUrl?: string): Promise<{ now: BuildSize; previous: BuildSize | null; restarted?: boolean }>;
+  prewarmRoutes(list: { route: string; url: string; current?: boolean }[]): Promise<boolean>;
+  listPins(): Promise<Pin[]>;
+  addPin(pin: { url: string; label: string }): Promise<Pin[]>;
+  checkPins(): Promise<Pin[]>;
+  pinImages(id: string): Promise<{ before: string | null; after: string | null }>;
+  acceptPin(id: string): Promise<Pin[]>;
+  removePin(id: string): Promise<Pin[]>;
+  saveHandoff(name: string, data: Handoff): Promise<string | null>;
+  openHandoff(): Promise<Handoff | null>;
+  handoffIssue(args: { title: string; body: string; attach?: { name: string; data: Handoff } }): Promise<{ url: string; gist: string | null }>;
   listChats(): Promise<ChatMeta[]>;
   loadChat(id: string): Promise<Chat | null>;
   saveChat(chat: Chat): Promise<boolean>;
@@ -174,6 +290,7 @@ export interface PinpointAPI {
   listRoutes(): Promise<RouteInfo[]>;
   resolveSourceMap(frame: { url: string; line: number; column: number }): Promise<{ file: string; line?: number; column?: number } | null>;
   onNetworkError(cb: (e: NetworkFailure) => void): () => void;
+  onNewTab(cb: (url: string) => void): () => void;
   gitStatus(): Promise<GitStatus>;
   gitInit(): Promise<GitStatus>;
   gitBranch(hint?: string): Promise<{ branch: string }>;

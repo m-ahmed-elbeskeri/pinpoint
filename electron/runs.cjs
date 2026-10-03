@@ -118,6 +118,28 @@ function revert(root, runId, paths, force) {
   return result;
 }
 
+// Puts a reverted run's changes back (used when picking one of several variants).
+function apply(root, runId) {
+  const run = load(root, runId);
+  const dir = runDir(root, runId);
+  const result = { restored: [], conflicts: [], failed: [] };
+  for (const c of run.changes) {
+    const abs = path.join(root, c.path);
+    try {
+      if (c.kind === 'delete') fs.rmSync(abs, { force: true });
+      else if (c.hasAfter) {
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, fs.readFileSync(path.join(dir, `${c.i}.after`)));
+      } else { result.failed.push(c.path); continue; }
+      c.reverted = false;
+      result.restored.push(c.path);
+    } catch { result.failed.push(c.path); }
+  }
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify(run, null, 2));
+  result.allReverted = false;
+  return result;
+}
+
 function readMeta(root, runId) { return load(root, runId); }
 
 function setMeta(root, runId, patch) {
@@ -127,11 +149,14 @@ function setMeta(root, runId, patch) {
 
 // Before/after screenshots live next to the run record.
 function saveShot(root, runId, name, dataUrl) {
+  const [meta, b64] = dataUrl.split(',');
+  saveShotBuffer(root, runId, name, Buffer.from(b64, 'base64'), /jpeg/.test(meta) ? 'jpg' : 'png');
+}
+
+function saveShotBuffer(root, runId, name, buf, ext = 'jpg') {
   const dir = runDir(root, runId);
   fs.mkdirSync(dir, { recursive: true });
-  const [meta, b64] = dataUrl.split(',');
-  const ext = /jpeg/.test(meta) ? 'jpg' : 'png';
-  fs.writeFileSync(path.join(dir, `shot-${name.replace(/[^\w-]/g, '')}.${ext}`), Buffer.from(b64, 'base64'));
+  fs.writeFileSync(path.join(dir, `shot-${name.replace(/[^\w-]/g, '')}.${ext}`), buf);
 }
 
 function shots(root, runId) {
@@ -147,4 +172,4 @@ function shots(root, runId) {
   return out;
 }
 
-module.exports = { save, diff, revert, readMeta, setMeta, saveShot, shots };
+module.exports = { save, diff, revert, apply, readMeta, setMeta, saveShot, saveShotBuffer, shots };

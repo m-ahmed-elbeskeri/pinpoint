@@ -63,4 +63,4 @@ async function resolve({ url, line, column }, projectDir) {
   }
 }
 
-module.exports = { resolve };
+module.exports = { resolve, cleanSource };

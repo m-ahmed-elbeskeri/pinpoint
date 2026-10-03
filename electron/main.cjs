@@ -1,12 +1,12 @@
 // Pinpoint: Electron main process.
 // Owns: the window, settings persistence, page captures, request files on disk,
 // the dev-server child process, and the coding-agent runs (Claude Code / Codex).
-const { app, BrowserWindow, ipcMain, dialog, webContents, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, webContents, shell, session, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const { runAgent, detectAgents, modelCatalog } = require('./agents.cjs');
-const { buildPrompt, buildSteerPrompt } = require('./prompt.cjs');
+const { buildPrompt, buildSteerPrompt, buildVerifyPrompt } = require('./prompt.cjs');
 const snapshot = require('./snapshot.cjs');
 const runs = require('./runs.cjs');
 const project = require('./project.cjs');
@@ -14,6 +14,12 @@ const { listRoutes } = require('./routes.cjs');
 const sourcemap = require('./sourcemap.cjs');
 const gitx = require('./git.cjs');
 const devserver = require('./devserver.cjs');
+const designsystem = require('./designsystem.cjs');
+const routecheck = require('./routecheck.cjs');
+const cssrules = require('./cssrules.cjs');
+const pins = require('./pins.cjs');
+const tailwind = require('./tailwind.cjs');
+const buildsize = require('./buildsize.cjs');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 if (process.env.PINPOINT_USER_DATA) app.setPath('userData', process.env.PINPOINT_USER_DATA);
@@ -44,6 +50,14 @@ const DEFAULT_SETTINGS = {
   editorCommand: '',          // '' = auto-detect cursor / code / windsurf / zed
   gitBranchPerChat: false,    // new chat -> new pinpoint/* branch
   gitAutoCommit: false,       // commit each run's changed files
+  tabs: [],                   // URLs of the open browser tabs, restored with the project
+  activeTab: 0,
+  autoVerify: false,          // after a run, the agent checks the after screenshot and new errors
+  variants: 0,                // 0 = off; 2-8 = try the request that many ways and pick one
+  routeCheck: true,           // screenshot the other pages before/after a run and flag changes
+  a11yCheck: true,            // run axe-core on the page and list the violations
+  perfCheck: true,            // measure the open page's load cost before/after a run
+  layoutOverlay: true,        // box model and flex/grid overlays while picking
 };
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; }
@@ -126,8 +140,9 @@ function createWindow() {
 // Links that try to open new windows inside the guest: load them in place.
 app.on('web-contents-created', (_e, contents) => {
   if (contents.getType() === 'webview') {
+    // Links that open a new window become a new tab in Pinpoint's browser.
     contents.setWindowOpenHandler(({ url }) => {
-      contents.loadURL(url);
+      if (win && !win.isDestroyed() && /^(https?|file):/.test(url)) win.webContents.send('browser:new-tab', url);
       return { action: 'deny' };
     });
   }
@@ -147,8 +162,8 @@ ipcMain.handle('dialog:pickFolder', async () => {
   const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8);
   // A new project gets its own dev server: stop the old one and re-detect the command.
   const switched = path.resolve(dir) !== path.resolve(s.projectDir || '.');
-  if (switched) { killTree(devProc); devProc = null; }
-  saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '' }) });
+  if (switched) { killTree(devProc); devProc = null; killTree(storyProc); storyProc = null; }
+  saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '', tabs: [], activeTab: 0 }) });
   return dir;
 });
 
@@ -203,7 +218,196 @@ ipcMain.handle('capture', async (_e, { webContentsId, rect }) => {
         height: Math.max(1, Math.round(rect.height)),
       })
     : await wc.capturePage();
-  return img.toDataURL();
+  return onWhite(img).toDataURL();
+});
+
+// A page that sets no background of its own is white in a browser, but its
+// screenshot is transparent there (black text on nothing, once flattened).
+// Screenshots are put on white, as the user saw the page.
+function onWhite(img) {
+  const { width, height } = img.getSize();
+  if (!width || !height) return img;
+  const scale = img.getScaleFactors()[0] || 1;
+  const px = img.toBitmap({ scaleFactor: scale }); // BGRA, premultiplied
+  let touched = false;
+  for (let i = 3; i < px.length; i += 4) {
+    const a = px[i];
+    if (a === 255) continue;
+    touched = true;
+    const rest = 255 - a;
+    px[i - 3] = Math.min(255, px[i - 3] + rest);
+    px[i - 2] = Math.min(255, px[i - 2] + rest);
+    px[i - 1] = Math.min(255, px[i - 1] + rest);
+    px[i] = 255;
+  }
+  if (!touched) return img;
+  return nativeImage.createFromBitmap(px, { width: Math.round(width * scale), height: Math.round(height * scale), scaleFactor: scale });
+}
+
+// ---------- IPC: page state (DevTools protocol) ----------
+// Forced :hover/:focus/:active and media emulation go through the guest's
+// debugger, the same channel DevTools uses.
+const cdpRoots = new Map();  // webContents id -> document node id
+const cdpSheets = new Map(); // webContents id -> Map<styleSheetId, header>
+const netModes = new Map();  // webContents id -> 'hang' | 'error' (what to do with the page's API requests)
+async function cdp(wc, method, params = {}) {
+  if (!wc.debugger.isAttached()) {
+    try { wc.debugger.attach('1.3'); }
+    catch (err) { throw new Error(`Couldn't connect to the page (${err.message}). If the page's DevTools are open, close them and try again.`); }
+    const id = wc.id;
+    cdpSheets.set(id, new Map());
+    wc.debugger.on('message', (_e, event, p) => {
+      if (event === 'CSS.styleSheetAdded') cdpSheets.get(id)?.set(p.header.styleSheetId, p.header);
+      else if (event === 'CSS.styleSheetRemoved') cdpSheets.get(id)?.delete(p.styleSheetId);
+      else if (event === 'Fetch.requestPaused') onRequestPaused(wc, p);
+    });
+    wc.debugger.once('detach', () => { cdpRoots.delete(id); cdpSheets.delete(id); netModes.delete(id); });
+  }
+  return wc.debugger.sendCommand(method, params);
+}
+
+// Simulated data states: API calls either never answer (loading) or fail (error).
+function onRequestPaused(wc, p) {
+  const mode = netModes.get(wc.id);
+  const send = (method, params) => wc.debugger.sendCommand(method, params).catch(() => {});
+  if (mode === 'hang') return; // left pending: the page stays in its loading state
+  if (mode === 'error') {
+    return send('Fetch.fulfillRequest', {
+      requestId: p.requestId, responseCode: 500,
+      responseHeaders: [{ name: 'content-type', value: 'application/json' }, { name: 'access-control-allow-origin', value: '*' }],
+      body: Buffer.from('{"error":"Simulated failure (Pinpoint)"}').toString('base64'),
+    });
+  }
+  return send('Fetch.continueRequest', { requestId: p.requestId });
+}
+const guest = (id) => {
+  const wc = webContents.fromId(id);
+  if (!wc) throw new Error('webview not found');
+  return wc;
+};
+
+// Node ids for a selector. The document node is fetched once per page: asking
+// for it again would drop the states already forced.
+async function queryNodes(wc, selector) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!cdpRoots.has(wc.id)) {
+      await cdp(wc, 'DOM.enable');
+      await cdp(wc, 'CSS.enable');
+      cdpRoots.set(wc.id, (await cdp(wc, 'DOM.getDocument', { depth: 0 })).root.nodeId);
+    }
+    try { return (await cdp(wc, 'DOM.querySelectorAll', { nodeId: cdpRoots.get(wc.id), selector })).nodeIds; }
+    catch (err) { cdpRoots.delete(wc.id); if (attempt) throw err; } // the page navigated: fetch the new document
+  }
+  return [];
+}
+
+ipcMain.handle('page:force', async (_e, { webContentsId, selector, classes }) => {
+  const wc = guest(webContentsId);
+  if (!classes.length && !wc.debugger.isAttached()) return 0; // nothing was ever forced
+  const nodeIds = await queryNodes(wc, selector);
+  for (const nodeId of nodeIds) await cdp(wc, 'CSS.forcePseudoState', { nodeId, forcedPseudoClasses: classes });
+  return nodeIds.length;
+});
+
+ipcMain.handle('page:emulate', async (_e, { webContentsId, colorScheme, reducedMotion, focus, touch }) => {
+  const wc = guest(webContentsId);
+  if (!colorScheme && !reducedMotion && !focus && !touch && !wc.debugger.isAttached()) return true;
+  await cdp(wc, 'Emulation.setEmulatedMedia', {
+    features: [
+      { name: 'prefers-color-scheme', value: colorScheme || '' },
+      { name: 'prefers-reduced-motion', value: reducedMotion ? 'reduce' : '' },
+      // A touch device: no hover, coarse pointer (what "@media (hover: hover)" rules test for).
+      { name: 'hover', value: touch ? 'none' : '' },
+      { name: 'pointer', value: touch ? 'coarse' : '' },
+      { name: 'any-hover', value: touch ? 'none' : '' },
+      { name: 'any-pointer', value: touch ? 'coarse' : '' },
+    ],
+  });
+  // Mouse input arrives as touch events (taps, touch scrolling), as on a phone.
+  await cdp(wc, 'Emulation.setTouchEmulationEnabled', { enabled: !!touch, maxTouchPoints: touch ? 5 : 1 });
+  await cdp(wc, 'Emulation.setEmitTouchEventsForMouse', { enabled: !!touch, configuration: 'mobile' });
+  // Keeps :focus styles and focus-driven UI alive while the user clicks around Pinpoint.
+  await cdp(wc, 'Emulation.setFocusEmulationEnabled', { enabled: !!focus });
+  return true;
+});
+
+// The CSS rules that style a picked element, with their files and lines.
+ipcMain.handle('page:rules', async (_e, { webContentsId, uid }) => {
+  const wc = guest(webContentsId);
+  const [nodeId] = await queryNodes(wc, `[data-pinpoint="${String(uid).replace(/[^\w-]/g, '')}"]`);
+  if (!nodeId) return [];
+  return cssrules.matched({ cdp: (m, p) => cdp(wc, m, p), nodeId, sheets: cdpSheets.get(wc.id) || new Map(), projectDir: loadSettings().projectDir });
+});
+
+// Animation speed for the whole page: 1 = normal, 0 = paused.
+ipcMain.handle('page:animation', async (_e, { webContentsId, rate }) => {
+  const wc = guest(webContentsId);
+  if (rate === 1 && !wc.debugger.isAttached()) return true;
+  await cdp(wc, 'Animation.enable');
+  await cdp(wc, 'Animation.setPlaybackRate', { playbackRate: rate });
+  return true;
+});
+
+// Network conditions and simulated data states for the page.
+const THROTTLE = {
+  normal: { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
+  slow: { offline: false, latency: 400, downloadThroughput: 50 * 1024, uploadThroughput: 50 * 1024 },
+  offline: { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 },
+};
+ipcMain.handle('page:network', async (_e, { webContentsId, mode }) => {
+  const wc = guest(webContentsId);
+  if (mode === 'normal' && !wc.debugger.isAttached()) return true;
+  await cdp(wc, 'Network.enable');
+  await cdp(wc, 'Network.emulateNetworkConditions', THROTTLE[mode] || THROTTLE.normal);
+  if (mode === 'hang' || mode === 'error') {
+    netModes.set(wc.id, mode);
+    await cdp(wc, 'Fetch.enable', { patterns: [{ resourceType: 'XHR' }, { resourceType: 'Fetch' }] });
+  } else {
+    netModes.delete(wc.id);
+    await cdp(wc, 'Fetch.disable').catch(() => {});
+  }
+  return true;
+});
+
+// Plays recorded steps back with real mouse and keyboard input, so handlers that
+// only trust genuine events (form submit on Enter, focus management) behave as they did.
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+ipcMain.handle('page:replay', async (_e, { webContentsId, steps }) => {
+  const wc = guest(webContentsId);
+  const find = (sel) => wc.executeJavaScript(`(() => {
+    const el = document.querySelector(${JSON.stringify(sel)});
+    if (!el) return null;
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), checked: !!el.checked, tag: el.tagName };
+  })()`).catch(() => null);
+  const click = (p) => { for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) wc.sendInputEvent({ type, x: p.x, y: p.y, button: 'left', clickCount: 1 }); };
+  const press = (keyCode) => { for (const type of ['keyDown', 'char', 'keyUp']) wc.sendInputEvent({ type, keyCode }); };
+  wc.focus();
+  let done = 0;
+  for (const s of steps) {
+    if (s.type === 'navigate') { await pause(700); done++; continue; } // caused by the step before it
+    if (s.type === 'key') press(s.key);
+    else {
+      const p = s.selector ? await find(s.selector) : null;
+      if (!p) break;
+      if (s.type === 'click') click(p);
+      else if (s.type === 'check') { if (String(p.checked) !== s.value) click(p); }
+      else if (s.type === 'fill' && !s.secret) {
+        if (p.tag === 'SELECT') {
+          await wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(s.selector)}); el.value = ${JSON.stringify(s.value || '')}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()`).catch(() => {});
+        } else {
+          click(p);
+          await pause(80);
+          await wc.executeJavaScript('document.activeElement && document.activeElement.select && document.activeElement.select()').catch(() => {});
+          if (s.value) await wc.insertText(s.value); else press('Backspace');
+        }
+      }
+    }
+    done++;
+    await pause(350);
+  }
+  return { done, total: steps.length };
 });
 
 // ---------- IPC: agent runs ----------
@@ -214,10 +418,12 @@ function writeRequestFiles(projectDir, runId, request) {
   const dir = path.join(projectDir, '.pinpoint', 'requests', runId);
   fs.mkdirSync(dir, { recursive: true });
 
+  // The extension follows the data: agents pick the media type from it.
   const saveImg = (name, dataUrl) => {
     if (!dataUrl) return null;
-    const file = path.join(dir, name);
-    fs.writeFileSync(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    const [meta, b64] = dataUrl.split(',');
+    const file = path.join(dir, /jpeg/.test(meta) ? name.replace(/\.png$/, '.jpg') : name);
+    fs.writeFileSync(file, Buffer.from(b64, 'base64'));
     return file;
   };
 
@@ -230,11 +436,15 @@ function writeRequestFiles(projectDir, runId, request) {
     delete a.image;
   }
   delete request.overview;
+  if (request.verify) {
+    request.verify = { beforeFile: saveImg('before.png', request.verify.before), afterFile: saveImg('after.png', request.verify.after), same: !!request.verify.same };
+    images.push(...[request.verify.beforeFile, request.verify.afterFile].filter(Boolean));
+  }
   fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
   return { dir, overview, images };
 }
 
-ipcMain.handle('agent:run', async (e, { runId, request, sessionId }) => {
+ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   const settings = loadSettings();
   const cwd = settings.projectDir;
   if (!cwd || !fs.existsSync(cwd)) throw new Error('Pick a project folder first.');
@@ -242,11 +452,16 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId }) => {
   const files = writeRequestFiles(cwd, runId, request);
   const design = settings.useDesign ? project.readDesign(cwd) : null;
   const memory = settings.useMemory ? project.readMemory(cwd).filter((m) => m.enabled !== false && m.text?.trim()) : [];
-  const prompt = buildPrompt({ request, files, projectDir: cwd, followUp: !!sessionId, design: design?.exists ? design.content : '', memory });
+  // The detected design system goes in once per session, like DESIGN.md.
+  let designSystem = null;
+  if (!sessionId) { try { designSystem = designsystem.inspect(cwd); } catch { /* optional context */ } }
+  const prompt = request.verify
+    ? buildVerifyPrompt({ request })
+    : buildPrompt({ request, files, projectDir: cwd, followUp: !!sessionId, design: design?.exists ? design.content : '', memory, designSystem });
   const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('agent:event', { runId, ...evt }); };
 
   // Git: a new chat can start on its own branch.
-  if (settings.gitBranchPerChat && !sessionId) {
+  if (settings.gitBranchPerChat && !sessionId && !(request.variant?.index > 1)) {
     try {
       const st = await gitx.status(cwd);
       if (st.repo && st.hasCommits) {
@@ -260,13 +475,32 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId }) => {
 
   const agentName = settings.agent === 'codex' ? 'Codex' : 'Claude Code';
   const snap = snapshot.take(cwd);
+  // Other pages are screenshotted now (in the background) and again afterwards.
+  let routes = null;
+  if (check && !request.variant && !request.verify) {
+    const list = settings.routeCheck !== false ? check.routes || [] : [];
+    try { routes = routecheck.begin(cwd, list, settings.perfCheck !== false ? check.perfUrl : null, check.targets || []); } catch (err) { send({ type: 'log', text: `route check skipped: ${err.message}` }); }
+    routes?.before.catch(() => {});
+    routes?.perfBefore.catch(() => {});
+  }
+  // The "before" screenshots have to be taken before the agent's first edit, or
+  // the comparison would see no change. Usually they are reused from the last
+  // run; otherwise wait for them, up to a limit, then go on without the check.
+  if (routes) {
+    const ready = Promise.all([routes.before, routes.perfBefore]).then(() => true, () => true);
+    const slow = setTimeout(() => send({ type: 'status', text: 'Taking "before" screenshots of your pages…' }), 900);
+    const inTime = await Promise.race([ready, pause(10000).then(() => false)]);
+    clearTimeout(slow);
+    if (!inTime) { send({ type: 'log', text: 'before-screenshots took too long; skipping the visual change check for this run' }); routes = null; }
+  }
   // Attach the real file diff to the final event, whatever tools the agent used.
   const onEvent = async (evt) => {
     if (evt.type !== 'done') return send(evt);
     let changes = snapshot.diff(snap);
     try { changes = runs.save(cwd, runId, snap, changes, { request: { instruction: request.instruction, annotations: request.annotations.map(({ n, kind, note, element }) => ({ n, kind, note, element: element && { tag: element.tag, source: element.source } })) }, agent: agentName, url: request.url }); } catch (err) { send({ type: 'log', text: `could not save run record: ${err.message}` }); }
     let commit = null;
-    if (settings.gitAutoCommit && changes.length && evt.ok) {
+    // Variants are tried and reverted one after another; only the one you pick gets committed.
+    if (settings.gitAutoCommit && changes.length && evt.ok && !request.variant) {
       try {
         const st = await gitx.status(cwd);
         if (st.repo) {
@@ -276,6 +510,16 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId }) => {
       } catch (err) { send({ type: 'log', text: `git commit failed: ${err.message}` }); }
     }
     send({ ...evt, changes, commit, request: { instruction: request.instruction, notes: request.annotations.map((a) => a.note).filter(Boolean) } });
+    // A change confined to the open page's own file can't reach the other pages.
+    if (routes && evt.ok && changes.length) {
+      const shared = changes.some((c) => c.path !== check.currentFile);
+      routecheck.finish(routes, (name, buf) => runs.saveShotBuffer(cwd, runId, name, buf), shared)
+        .catch((err) => { send({ type: 'log', text: `route check failed: ${err.message}` }); return []; })
+        .then(async (results) => {
+          const perf = await routecheck.finishPerf(routes).catch(() => null);
+          if (results.length || perf) send({ type: 'routes', results, perf });
+        });
+    }
   };
   const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, onEvent });
   active.set(runId, handle);
@@ -291,6 +535,14 @@ const projectDir = () => {
 };
 ipcMain.handle('run:diff', (_e, runId) => runs.diff(projectDir(), runId));
 ipcMain.handle('run:revert', (_e, { runId, paths, force }) => runs.revert(projectDir(), runId, paths || null, !!force));
+ipcMain.handle('run:apply', (_e, runId) => runs.apply(projectDir(), runId));
+// "Before" screenshots taken while idle, so the next run doesn't wait for them.
+ipcMain.handle('routes:prewarm', (_e, list) => {
+  const settings = loadSettings();
+  if (settings.routeCheck === false || !settings.projectDir || active.size || !list?.length) return false;
+  try { routecheck.prewarm(settings.projectDir, list); } catch { /* best effort */ }
+  return true;
+});
 
 // A message sent while the agent is working. "queue" lands after the agent's
 // current step; "now" interrupts it first. Returns delivered:false when the run
@@ -321,6 +573,121 @@ ipcMain.handle('design:write', (_e, content) => project.writeDesign(projectDir()
 ipcMain.handle('memory:read', () => project.readMemory(projectDir()));
 ipcMain.handle('memory:write', (_e, items) => project.writeMemory(projectDir(), items));
 ipcMain.handle('routes:list', () => listRoutes(projectDir()));
+ipcMain.handle('design:system', () => designsystem.inspect(projectDir()));
+ipcMain.handle('design:usage', (_e, name) => designsystem.componentUsage(projectDir(), name));
+
+// Storybook: the story file for a component, and its URL when Storybook is running.
+function storybookScript(root) {
+  try {
+    const script = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).scripts?.storybook || '';
+    return script ? { port: +(script.match(/(?:-p|--port)[ =](\d+)/) || [])[1] || 6006 } : null;
+  } catch { return null; }
+}
+async function storyUrl(root, file) {
+  const ports = [...new Set([storybookScript(root)?.port || 6006, 6006, 6007])];
+  for (const port of ports) {
+    try {
+      const res = await fetch(`http://localhost:${port}/index.json`, { signal: AbortSignal.timeout(1200) });
+      if (!res.ok) continue;
+      const entries = Object.values((await res.json()).entries || {});
+      const base = path.basename(file);
+      const hit = entries.find((e) => e.type === 'story' && String(e.importPath || '').endsWith(base));
+      if (hit) return `http://localhost:${port}/iframe.html?id=${hit.id}&viewMode=story`;
+    } catch { /* not running on this port */ }
+  }
+  return null;
+}
+ipcMain.handle('story:find', async (_e, name) => {
+  const root = projectDir();
+  const found = designsystem.findStory(root, name);
+  return { ...found, url: found.file ? await storyUrl(root, found.file) : null, canStart: !!storybookScript(root) };
+});
+
+// Runs the project's own "storybook" script and waits until the story is being served.
+let storyProc = null;
+ipcMain.handle('story:start', async (_e, name) => {
+  const root = projectDir();
+  const found = designsystem.findStory(root, name);
+  if (!found.file) return null;
+  if (!storybookScript(root)) throw new Error('This project has no "storybook" script in package.json.');
+  if (!storyProc || storyProc.exitCode !== null) {
+    storyProc = spawn('npm run storybook -- --ci', { cwd: root, shell: true, detached: process.platform !== 'win32', stdio: 'ignore', env: { ...process.env, BROWSER: 'none' } });
+    storyProc.on('error', () => {});
+  }
+  for (let i = 0; i < 60; i++) {
+    await pause(2000);
+    const url = await storyUrl(root, found.file);
+    if (url) return url;
+    if (storyProc.exitCode !== null) throw new Error('Storybook exited before it was ready. Run `npm run storybook` to see why.');
+  }
+  throw new Error('Storybook took too long to start.');
+});
+
+// ---------- IPC: pinned baselines ----------
+ipcMain.handle('pins:list', () => pins.list(projectDir()));
+ipcMain.handle('pins:add', (_e, pin) => pins.add(projectDir(), pin));
+ipcMain.handle('pins:check', () => pins.check(projectDir()));
+ipcMain.handle('pins:images', (_e, id) => pins.images(projectDir(), id));
+ipcMain.handle('pins:accept', (_e, id) => pins.accept(projectDir(), id));
+ipcMain.handle('pins:remove', (_e, id) => pins.remove(projectDir(), id));
+
+// ---------- IPC: hand-off ----------
+// A request someone annotated (a designer, a PM) saved as one file a developer can open and run.
+ipcMain.handle('handoff:save', async (_e, { name, data }) => {
+  const r = await dialog.showSaveDialog(win, { defaultPath: `${name}.pinpoint.json`, filters: [{ name: 'Pinpoint hand-off', extensions: ['json'] }] });
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, JSON.stringify(data));
+  return r.filePath;
+});
+ipcMain.handle('handoff:open', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Pinpoint hand-off', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const data = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
+  if (data?.pinpointHandoff !== 1) throw new Error("That file isn't a Pinpoint hand-off.");
+  return data;
+});
+ipcMain.handle('handoff:issue', async (_e, args) => {
+  const r = await gitx.createIssue(projectDir(), args);
+  shell.openExternal(r.url);
+  return r;
+});
+
+// CSS for Tailwind classes added in Pinpoint that the dev build hasn't generated yet.
+ipcMain.handle('tailwind:css', async (_e, classes) => {
+  const root = projectDir();
+  const ds = designsystem.inspect(root);
+  if (!ds?.tailwind) return null;
+  const abs = (f) => (f ? path.join(root, f) : '');
+  return tailwind.generate(root, { entry: abs(ds.tailwind.entry), config: abs(ds.tailwind.configFile) }, classes);
+});
+
+// Runs the project's build and reports the size of the JS and CSS it emits.
+// A Next.js build shares the .next folder with the dev server, so the dev server
+// is stopped for the build and started again afterwards (when Pinpoint runs it).
+ipcMain.handle('build:measure', async (e, pageUrl) => {
+  const root = projectDir();
+  if (!buildsize.sharesDevFolder(root)) return buildsize.measure(root);
+  const ours = !!devProc && devProc.exitCode === null;
+  if (!ours) {
+    // Something else is serving the page: a dev server started outside Pinpoint. It can't be stopped from here.
+    let live = false;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/.test(pageUrl || '')) {
+      try { await fetch(pageUrl, { signal: AbortSignal.timeout(1500) }); live = true; } catch { /* nothing is listening */ }
+    }
+    if (live) throw new Error("A Next.js dev server that Pinpoint didn't start is running. Stop it first: a build and the dev server share the .next folder.");
+    return buildsize.measure(root);
+  }
+  const command = loadSettings().devCommand;
+  killTree(devProc);
+  devProc = null;
+  await pause(1500);
+  try { return { ...(await buildsize.measure(root)), restarted: true }; }
+  finally { if (command) startDevServer(e.sender, command); }
+});
+
+// axe-core's source, which the UI runs inside the page to list accessibility violations.
+let axeSource = null;
+ipcMain.handle('a11y:source', () => (axeSource ??= fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')));
 // ---------- IPC: git ----------
 ipcMain.handle('git:status', () => gitx.status(projectDir()));
 ipcMain.handle('git:init', () => gitx.initRepo(projectDir()));
@@ -360,12 +727,12 @@ function killTree(proc) {
   else try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
 }
 
-ipcMain.handle('dev:start', (e, { command }) => {
+function startDevServer(sender, command) {
   const { projectDir } = loadSettings();
   if (!projectDir) throw new Error('Pick a project folder first.');
   if (devProc) killTree(devProc);
   saveSettings({ devCommand: command });
-  const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('dev:event', evt); };
+  const send = (evt) => { if (!sender.isDestroyed()) sender.send('dev:event', evt); };
   devProc = spawn(command, { cwd: projectDir, shell: true, detached: process.platform !== 'win32', env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', BROWSER: 'none' } });
   const proc = devProc;
   const onData = (d) => {
@@ -381,7 +748,8 @@ ipcMain.handle('dev:start', (e, { command }) => {
   proc.on('exit', (code) => { send({ type: 'exit', code }); if (devProc === proc) devProc = null; });
   send({ type: 'started', pid: proc.pid });
   return true;
-});
+}
+ipcMain.handle('dev:start', (e, { command }) => startDevServer(e.sender, command));
 ipcMain.handle('dev:detect', () => devserver.inspect(loadSettings().projectDir));
 ipcMain.handle('dev:stop', () => { killTree(devProc); devProc = null; return true; });
 
@@ -398,6 +766,7 @@ app.whenReady().then(() => {
 function watchNetwork() {
   const ses = session.fromPartition('persist:pinpoint');
   const report = (d, extra) => {
+    if (routecheck.captureIds.has(d.webContentsId)) return; // our own hidden route screenshots
     if (!win || win.isDestroyed() || /favicon\.ico($|\?)/.test(d.url) || /^(devtools|chrome-extension):/.test(d.url)) return;
     win.webContents.send('page:network', { url: d.url, method: d.method, resourceType: d.resourceType, at: Date.now(), ...extra });
   };
@@ -408,6 +777,7 @@ function watchNetwork() {
 app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 app.on('window-all-closed', () => {
   killTree(devProc);
+  killTree(storyProc);
   for (const r of active.values()) r.kill();
   app.quit();
 });

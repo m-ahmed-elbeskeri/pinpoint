@@ -66,4 +66,4 @@ function diff(snap) {
   return changes;
 }
 
-module.exports = { take, diff };
+module.exports = { take, diff, walk };

@@ -109,6 +109,34 @@ async function openPR(cwd, { title, body, draft }) {
   } finally { fs.rmSync(file, { force: true }); }
 }
 
+// Opens a GitHub issue from a hand-off (a request someone annotated for a developer to run).
+// With `attach`, the hand-off file (screenshots included) goes up as a secret
+// gist linked from the issue: issues can't carry files through the CLI.
+async function createIssue(cwd, { title, body, attach }) {
+  const gh = await ghStatus();
+  if (!gh.installed) throw new Error('The GitHub CLI (gh) is not installed.');
+  if (!gh.authed) throw new Error('Sign in to GitHub first: run `gh auth login`.');
+  let gist = null;
+  if (attach) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinpoint-handoff-'));
+    const file = path.join(dir, `${attach.name.replace(/[^\w -]+/g, '').trim() || 'request'}.pinpoint.json`);
+    fs.writeFileSync(file, JSON.stringify(attach.data));
+    try {
+      const out = await run('gh', ['gist', 'create', file, '--desc', `Pinpoint hand-off: ${title}`], cwd, { timeout: 120000 });
+      gist = (out.match(/https:\/\/gist\.github\.com\/\S+/) || [])[0] || null;
+    } catch { /* the issue still goes out, without the file */ } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+  const full = gist
+    ? `${body}\n\n**Hand-off file with screenshots:** ${gist}\nDownload it and open it in Pinpoint (share menu → Open hand-off file).`
+    : body;
+  const file = path.join(os.tmpdir(), `pinpoint-issue-${Date.now()}.md`);
+  fs.writeFileSync(file, full);
+  try {
+    const out = await run('gh', ['issue', 'create', '--title', title, '--body-file', file], cwd, { timeout: 60000 });
+    return { url: (out.match(/https:\/\/\S+/) || [out])[0], gist };
+  } finally { fs.rmSync(file, { force: true }); }
+}
+
 // Commit message for a run, built from what the user asked for.
 function commitMessage(request, changes, agentName) {
   const firstNote = request.annotations.map((a) => a.note?.trim()).find(Boolean);
@@ -130,4 +158,4 @@ function commitMessage(request, changes, agentName) {
   return lines.join('\n');
 }
 
-module.exports = { status, createBranch, commitPaths, commitAll, initRepo, openPR, commitMessage };
+module.exports = { status, createBranch, commitPaths, commitAll, initRepo, openPR, commitMessage, createIssue };

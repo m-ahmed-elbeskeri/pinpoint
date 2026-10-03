@@ -51,7 +51,8 @@ export function DrawSurface({ shapes, onChange, tool, color, size, board }: Prop
 
   const pos = (e: React.PointerEvent): [number, number] => {
     const r = canvas.current!.getBoundingClientRect();
-    return [Math.round(e.clientX - r.left), Math.round(e.clientY - r.top)];
+    const k = r.width / canvas.current!.offsetWidth || 1; // the stage may be zoomed in responsive mode
+    return [Math.round((e.clientX - r.left) / k), Math.round((e.clientY - r.top) / k)];
   };
 
   const commitText = () => {

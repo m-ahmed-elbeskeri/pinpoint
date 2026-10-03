@@ -60,6 +60,45 @@ export function SettingsModal({ settings, agents, onSave, onClose }: Props) {
           </label>
         </section>
 
+        <section>
+          <h4>After each run</h4>
+          <label className="check">
+            <input type="checkbox" checked={!!s.autoVerify} onChange={(e) => set('autoVerify', e.target.checked)} />
+            Have the agent check its result <span className="hint">(it gets the after screenshot and new errors; one short extra turn per run)</span>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.routeCheck !== false} onChange={(e) => set('routeCheck', e.target.checked)} />
+            Check other pages for unintended changes <span className="hint">(screenshots up to 8 routes before and after)</span>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.perfCheck !== false} onChange={(e) => set('perfCheck', e.target.checked)} />
+            Measure the open page's load cost before and after <span className="hint">(JS and CSS size, requests, layout shift)</span>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.a11yCheck !== false} onChange={(e) => set('a11yCheck', e.target.checked)} />
+            List accessibility problems on the open page <span className="hint">(axe-core)</span>
+          </label>
+        </section>
+
+        <section>
+          <h4>Variants</h4>
+          <div className="setting-row">
+            <span>Try each request several ways <span className="hint">(runs one after another, then you pick; costs that many runs)</span></span>
+            <div className="variants-setting">
+              <div className="seg">
+                {[0, 2, 3, 4].map((n) => (
+                  <button key={n} className={(s.variants >= 2 ? s.variants : 0) === n ? 'on' : ''} onClick={() => set('variants', n)}>{n || 'Off'}</button>
+                ))}
+              </div>
+              <input
+                type="number" min={2} max={8} step={1} placeholder="#" title="Any number from 2 to 8"
+                value={s.variants >= 2 ? s.variants : ''}
+                onChange={(e) => { const n = Math.round(Number(e.target.value)); set('variants', !e.target.value || Number.isNaN(n) || n < 2 ? 0 : Math.min(8, n)); }}
+              />
+            </div>
+          </div>
+        </section>
+
         <p className="hint">Model, thinking level and access are chosen right in the composer.</p>
 
         <div className="modal-foot">

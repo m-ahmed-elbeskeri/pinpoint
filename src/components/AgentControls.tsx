@@ -1,5 +1,6 @@
-import { Brain, Cpu, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { Dropdown, type DropdownItem } from './Dropdown';
+import { ModelPicker } from './ModelPicker';
 import type { ModelCatalog, Settings } from '../lib/types';
 
 const EFFORT_INFO: Record<string, { label: string; desc: string }> = {
@@ -31,7 +32,7 @@ interface Props {
   disabled?: boolean;
 }
 
-// Model / thinking level / access pickers for the selected agent.
+// Model + thinking level (one control) and access pickers for the selected agent.
 export function AgentControls({ settings, catalog, onChange, disabled }: Props) {
   const agent = settings.agent;
   const cat = catalog?.[agent];
@@ -54,10 +55,7 @@ export function AgentControls({ settings, catalog, onChange, disabled }: Props) 
   if (model && !selectedModel) modelItems.push({ value: model, label: model, desc: 'Custom model' });
 
   const defaultEffort = cat?.defaultEffort || effectiveModel?.defaultEffort;
-  const effortItems: DropdownItem[] = [
-    { value: '', label: 'Default', desc: defaultEffort ? `Uses ${EFFORT_INFO[defaultEffort]?.label.toLowerCase() || defaultEffort}` : "The CLI's default level" },
-    ...efforts.map((e) => ({ value: e, label: EFFORT_INFO[e]?.label || e, desc: EFFORT_INFO[e]?.desc })),
-  ];
+  const levels = efforts.map((e) => ({ value: e, label: EFFORT_INFO[e]?.label || e, desc: EFFORT_INFO[e]?.desc }));
 
   const accessKey = agent === 'claude' ? 'claudePermission' : 'codexSandbox';
   const access = settings[accessKey];
@@ -72,25 +70,16 @@ export function AgentControls({ settings, catalog, onChange, disabled }: Props) 
 
   return (
     <div className="agent-controls">
-      <Dropdown
-        className="dd-model"
-        icon={<Cpu size={12} />}
-        title="Model"
-        value={model}
-        items={modelItems}
-        onChange={setModel}
-        display={model ? (selectedModel?.label || model) : (models.find((m) => m.id === cat?.defaultModel)?.label || 'Default')}
+      <ModelPicker
+        model={model}
+        models={modelItems}
+        modelLabel={model ? (selectedModel?.label || model) : (models.find((m) => m.id === cat?.defaultModel)?.label || 'Default')}
+        onModel={setModel}
+        level={efforts.includes(effort) ? effort : ''}
+        levels={levels}
+        defaultLevel={defaultEffort && efforts.includes(defaultEffort) ? defaultEffort : undefined}
+        onLevel={(v) => onChange({ [effortKey]: v })}
         disabled={disabled}
-      />
-      <Dropdown
-        className="dd-effort"
-        icon={<Brain size={12} />}
-        title="Thinking level"
-        value={efforts.length ? effort : ''}
-        items={efforts.length ? effortItems : [{ value: '', label: 'Not supported', desc: 'This model has no thinking levels' }]}
-        onChange={(v) => onChange({ [effortKey]: v })}
-        display={!efforts.length ? 'No thinking' : effort ? EFFORT_INFO[effort]?.label || effort : defaultEffort ? EFFORT_INFO[defaultEffort]?.label || defaultEffort : 'Default'}
-        disabled={disabled || !efforts.length}
       />
       <Dropdown
         className="dd-access"

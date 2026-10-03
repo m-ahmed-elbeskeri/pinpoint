@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Columns2, Loader2, MonitorSmartphone, ScanEye, SplitSquareHorizontal, X } from 'lucide-react';
 
-interface Props {
-  runId: string;
+export interface CompareTarget {
+  runId?: string;                             // a run's shots…
+  pair?: string;                              // …optionally another page of that run ("route-pricing")
+  images?: { before: string; after: string }; // or two images given directly
+  labels?: [string, string];
+  title?: string;
+}
+
+interface Props extends CompareTarget {
   onClose(): void;
-  captureSizes(runId: string): Promise<void>;
+  captureSizes?(runId: string): Promise<void>;
 }
 
 type Mode = 'slider' | 'side' | 'changes';
@@ -12,7 +19,7 @@ type Mode = 'slider' | 'side' | 'changes';
 const load = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
 
 // Marks pixels that differ between before and after on top of the after image.
-async function diffOverlay(before: string, after: string): Promise<{ url: string; pct: number }> {
+export async function diffOverlay(before: string, after: string): Promise<{ url: string; pct: number }> {
   const [a, b] = await Promise.all([load(before), load(after)]);
   const w = b.width, h = b.height;
   const ca = document.createElement('canvas'); ca.width = w; ca.height = h;
@@ -31,16 +38,18 @@ async function diffOverlay(before: string, after: string): Promise<{ url: string
   return { url: cb.toDataURL('image/jpeg', .85), pct: (changed / (w * h)) * 100 };
 }
 
-export function CompareView({ runId, onClose, captureSizes }: Props) {
-  const [shots, setShots] = useState<Record<string, string> | null>(null);
+export function CompareView({ runId, pair, images, labels = ['Before', 'After'], title = 'Before & after', onClose, captureSizes }: Props) {
+  const [all, setShots] = useState<Record<string, string> | null>(images ? {} : null);
   const [mode, setMode] = useState<Mode>('slider');
   const [pos, setPos] = useState(50);
   const [diff, setDiff] = useState<{ url: string; pct: number } | null>(null);
   const [capturing, setCapturing] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
 
-  const reload = () => window.pinpoint.runShots(runId).then(setShots).catch(() => setShots({}));
+  const reload = () => (runId ? window.pinpoint.runShots(runId).then(setShots).catch(() => setShots({})) : Promise.resolve());
   useEffect(() => { reload(); }, [runId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Whatever the source, the rest of the view works with shots.before / shots.after.
+  const shots: Record<string, string> | null = images ?? (all && pair ? { before: all[`${pair}-before`], after: all[`${pair}-after`] } : all);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -48,7 +57,7 @@ export function CompareView({ runId, onClose, captureSizes }: Props) {
   }, [onClose]);
   useEffect(() => {
     if (mode === 'changes' && shots?.before && shots?.after && !diff) diffOverlay(shots.before, shots.after).then(setDiff).catch(() => {});
-  }, [mode, shots]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, shots?.before, shots?.after]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drag = (e: React.PointerEvent) => {
     const el = stage.current;
@@ -66,24 +75,26 @@ export function CompareView({ runId, onClose, captureSizes }: Props) {
 
   // Phone, tablet, then desktop (stored as width 0).
   const width = (k: string) => parseInt(k.slice(5)) || Infinity;
-  const sizes = shots ? Object.keys(shots).filter((k) => k.startsWith('size-')).sort((a, b) => width(a) - width(b)) : [];
+  const sizes = shots && !pair && !images ? Object.keys(shots).filter((k) => k.startsWith('size-')).sort((a, b) => width(a) - width(b)) : [];
   const has = shots?.before && shots?.after;
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="compare-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="diff-head">
-          <h3>Before &amp; after</h3>
+          <h3>{title}</h3>
           <div className="seg">
             <button className={mode === 'slider' ? 'on' : ''} onClick={() => setMode('slider')}><SplitSquareHorizontal size={13} /> Slider</button>
             <button className={mode === 'side' ? 'on' : ''} onClick={() => setMode('side')}><Columns2 size={13} /> Side by side</button>
             <button className={mode === 'changes' ? 'on' : ''} onClick={() => setMode('changes')}><ScanEye size={13} /> Changes</button>
           </div>
-          {mode === 'changes' && diff && <span className="hint">{diff.pct < 0.05 ? 'No visible change' : `${diff.pct.toFixed(1)}% of pixels changed`}</span>}
+          {mode === 'changes' && diff && <span className="hint">{diff.pct < 0.05 ? 'No visible difference' : `${diff.pct.toFixed(1)}% of pixels differ`}</span>}
           <div className="spacer" />
-          <button className="btn xs" disabled={capturing} onClick={async () => { setCapturing(true); try { await captureSizes(runId); await reload(); } finally { setCapturing(false); } }} title="Screenshot the page now at phone, tablet and desktop widths">
-            {capturing ? <Loader2 size={12} className="spin" /> : <MonitorSmartphone size={12} />} Check all sizes
-          </button>
+          {runId && !pair && captureSizes && (
+            <button className="btn xs" disabled={capturing} onClick={async () => { setCapturing(true); try { await captureSizes(runId); await reload(); } finally { setCapturing(false); } }} title="Screenshot the page now at phone, tablet and desktop widths">
+              {capturing ? <Loader2 size={12} className="spin" /> : <MonitorSmartphone size={12} />} Check all sizes
+            </button>
+          )}
           <button className="icon-btn" onClick={onClose} title="Close (Esc)"><X size={16} /></button>
         </div>
 
@@ -92,21 +103,21 @@ export function CompareView({ runId, onClose, captureSizes }: Props) {
             : !has ? <div className="diff-empty">No screenshots for this run. They're taken when a run changes a page that's open in Pinpoint.</div>
               : mode === 'slider' ? (
                 <div className="cmp-stage" ref={stage} onPointerDown={drag}>
-                  <img src={shots.after} alt="After" draggable={false} />
-                  <img src={shots.before} alt="Before" draggable={false} className="cmp-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }} />
+                  <img src={shots.after} alt={labels[1]} draggable={false} />
+                  <img src={shots.before} alt={labels[0]} draggable={false} className="cmp-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }} />
                   <div className="cmp-handle" style={{ left: `${pos}%` }}><span /></div>
-                  <span className="cmp-label left">Before</span>
-                  <span className="cmp-label right">After</span>
+                  <span className="cmp-label left">{labels[0]}</span>
+                  <span className="cmp-label right">{labels[1]}</span>
                 </div>
               ) : mode === 'side' ? (
                 <div className="cmp-side">
-                  <figure><figcaption>Before</figcaption><img src={shots.before} alt="Before" /></figure>
-                  <figure><figcaption>After</figcaption><img src={shots.after} alt="After" /></figure>
+                  <figure><figcaption>{labels[0]}</figcaption><img src={shots.before} alt={labels[0]} /></figure>
+                  <figure><figcaption>{labels[1]}</figcaption><img src={shots.after} alt={labels[1]} /></figure>
                 </div>
               ) : (
                 <div className="cmp-stage static">
                   {diff ? <img src={diff.url} alt="Changed areas" /> : <div className="diff-empty"><Loader2 className="spin" size={18} /></div>}
-                  <span className="cmp-label left">Changed areas in red</span>
+                  <span className="cmp-label left">Differences in red</span>
                 </div>
               )}
 

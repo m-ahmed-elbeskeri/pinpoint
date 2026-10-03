@@ -2,6 +2,12 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import type { ElementInfo, Rect } from '../lib/types';
 import { locateSourceScript } from '../lib/inspect';
 import { extractDesignScript } from '../lib/extractDesign';
+import { tokenMatchScript } from '../lib/tokens';
+import { a11yScript } from '../lib/a11y';
+import { breakpointsScript, type Breakpoint } from './DeviceBar';
+import { classNamesScript, setPropScript } from '../lib/pagetools';
+import type { FlowStep } from '../lib/types';
+import type { A11yIssue } from '../lib/types';
 
 // Electron's <webview> element (subset of its API we use).
 interface WebviewEl extends HTMLElement {
@@ -34,12 +40,23 @@ export interface BrowserHandle {
   size(): { width: number; height: number };
   links(): Promise<{ href: string; text: string }[]>;
   extractDesign(): Promise<string | null>;
+  id(): number | null;                                      // webContents id, for page-state calls
+  inspect(uid: string): Promise<ElementInfo | null>;        // re-read an element that's already picked
+  tokens(uid: string): Promise<Record<string, string> | null>;
+  a11y(axeSource: string): Promise<A11yIssue[] | null>;
+  reveal(selector: string): void;                           // scroll an element into view
+  breakpoints(): Promise<Breakpoint[]>;                     // widths the page's CSS switches at
+  classNames(): Promise<string[]>;                          // class names the page's CSS defines
+  hasHmr(): Promise<boolean>;                               // the page updates itself when files change
+  setProp(uid: string, owner: string, name: string, value: unknown): Promise<boolean>; // live React prop change
+
   url(): string;
   title(): string;
 }
 
 interface Props {
   initialUrl: string;
+  hidden?: boolean; // a background tab: kept alive, not shown
   onPicked(el: PickedElement): void;
   onNavigate(state: { url: string; title: string; canBack: boolean; canForward: boolean }): void;
   onLoading(loading: boolean): void;
@@ -48,6 +65,8 @@ interface Props {
   onError(msg: string | null): void;
   onConsole(entry: { level: 'error' | 'warning'; message: string; source?: string; line?: number }): void;
   onPageChange(): void; // a full (non in-page) navigation or reload started a new document
+  onFrozen(on: boolean): void; // the page was frozen or unfrozen with F / F8 from inside it
+  onStep(step: FlowStep): void; // something the user did while recording
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -55,7 +74,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView(props, ref) {
   const wv = useRef<WebviewEl>(null);
   const ready = useRef(false);
-  const pending = useRef(new Map<string, (hits: ElementInfo[]) => void>());
+  const pending = useRef(new Map<string, (data: any) => void>());
   const cb = useRef(props);
   cb.current = props;
   const [src] = useState(props.initialUrl || 'about:blank');
@@ -84,8 +103,8 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
       catch { return null; }
     },
     size() {
-      const r = wv.current?.getBoundingClientRect();
-      return { width: Math.round(r?.width || 0), height: Math.round(r?.height || 0) };
+      // Layout size, not the on-screen box: responsive mode may scale the stage.
+      return { width: wv.current?.offsetWidth || 0, height: wv.current?.offsetHeight || 0 };
     },
     async links() {
       const code = `[...document.querySelectorAll('a[href]')].filter(a => a.origin === location.origin && !a.href.startsWith('javascript:')).map(a => ({ href: a.href.split('#')[0], text: (a.innerText || a.getAttribute('aria-label') || '').trim().slice(0, 60) })).filter((l, i, arr) => arr.findIndex(x => x.href === l.href) === i).slice(0, 80)`;
@@ -93,6 +112,37 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     },
     async extractDesign() {
       try { return await wv.current!.executeJavaScript(extractDesignScript); } catch { return null; }
+    },
+    id() { try { return ready.current ? wv.current!.getWebContentsId() : null; } catch { return null; } },
+    inspect(uid) {
+      return new Promise((resolve) => {
+        const reqId = Math.random().toString(36).slice(2);
+        pending.current.set(reqId, resolve);
+        wv.current?.send('inspect', { reqId, uid });
+        setTimeout(() => { if (pending.current.delete(reqId)) resolve(null); }, 1500);
+      });
+    },
+    async tokens(uid) {
+      try { return await wv.current!.executeJavaScript(tokenMatchScript(uid)); } catch { return null; }
+    },
+    reveal(selector) {
+      wv.current?.executeJavaScript(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ behavior: 'smooth', block: 'center' })`).catch(() => {});
+    },
+    async hasHmr() {
+      const code = `!!(document.querySelector('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="/_next/static/chunks/"],script[src*="livereload"],script[src*="browser-sync"]') || window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__NUXT__ || window.__sveltekit_dev || Object.keys(window).some((k) => /^(webpackHotUpdate|webpackChunk|__webpack_hmr|__turbopack|__NEXT_HMR|__next_f$|__remixContext|__reactRouterContext)/.test(k)))`;
+      try { return !!(await wv.current!.executeJavaScript(code)); } catch { return false; }
+    },
+    async classNames() {
+      try { return await wv.current!.executeJavaScript(classNamesScript); } catch { return []; }
+    },
+    async setProp(uid, owner, name, value) {
+      try { return await wv.current!.executeJavaScript(setPropScript(uid, owner, name, value)); } catch { return false; }
+    },
+    async breakpoints() {
+      try { return await wv.current!.executeJavaScript(breakpointsScript); } catch { return []; }
+    },
+    async a11y(axeSource) {
+      try { return await wv.current!.executeJavaScript(a11yScript(axeSource)); } catch { return null; }
     },
     url() { return ready.current ? wv.current?.getURL() || '' : ''; },
     title() { return ready.current ? wv.current?.getTitle() || '' : ''; },
@@ -106,7 +156,7 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     };
     const handlers: Record<string, (e: any) => void> = {
       'dom-ready': () => { ready.current = true; nav(); cb.current.onReady(); },
-      'did-navigate': (e) => { nav(); if (e) cb.current.onPageChange(); },
+      'did-navigate': (e) => { nav(); if (e) { cb.current.onPageChange(); cb.current.onStep({ type: 'navigate', url: e.url }); } },
       'console-message': (e) => {
         // Electron ≥ 35 reports level as a string; older versions used 0-3.
         const level = typeof e.level === 'number' ? ['verbose', 'info', 'warning', 'error'][e.level] : e.level;
@@ -126,9 +176,11 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         if (e.channel === 'picked') cb.current.onPicked(data);
         else if (e.channel === 'key') cb.current.onKey(data);
         else if (e.channel === 'ready') cb.current.onReady();
-        else if (e.channel === 'hits') {
+        else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
+        else if (e.channel === 'step') cb.current.onStep(data);
+        else if (e.channel === 'hits' || e.channel === 'reply') {
           const res = pending.current.get(data.reqId);
-          if (res) { pending.current.delete(data.reqId); res(data.hits); }
+          if (res) { pending.current.delete(data.reqId); res(e.channel === 'hits' ? data.hits : data.data); }
         }
       },
     };
@@ -136,7 +188,9 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     return () => { for (const [k, fn] of Object.entries(handlers)) el.removeEventListener(k, fn); };
   }, []);
 
-  return <webview ref={wv as any} src={src} partition="persist:pinpoint" className="webview" />;
+  // visibility, not display: a webview that is display:none loses its page.
+  // allowpopups lets window.open / target=_blank reach the main process, which turns them into tabs (no window is ever created).
+  return <webview ref={wv as any} src={src} partition="persist:pinpoint" className={`webview ${props.hidden ? 'bg-tab' : ''}`} {...({ allowpopups: 'true' } as object)} />;
 });
 
 export { sleep };
