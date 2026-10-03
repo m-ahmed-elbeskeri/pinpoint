@@ -4,6 +4,7 @@
 const { app, BrowserWindow, ipcMain, dialog, webContents, shell, session, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { runAgent, detectAgents, modelCatalog } = require('./agents.cjs');
 const { buildPrompt, buildSteerPrompt, buildVerifyPrompt } = require('./prompt.cjs');
@@ -417,6 +418,14 @@ ipcMain.handle('page:replay', async (_e, { webContentsId, steps }) => {
 
 // ---------- IPC: agent runs ----------
 const active = new Map(); // runId -> { kill }
+// Runs of different chats can overlap in one project. Each run's result is the difference
+// between the files before and after it, which would also pick up what another run wrote
+// meanwhile. So a run that finishes tells the ones still going which files it changed and
+// what they looked like; a file still in exactly that state isn't theirs.
+const othersWrote = new Map(); // runId -> Map<path, signature of the file as the other run left it>
+const fileSig = (root, rel) => {
+  try { return crypto.createHash('sha1').update(fs.readFileSync(path.join(root, rel))).digest('hex'); } catch { return 'gone'; }
+};
 
 function writeRequestFiles(projectDir, runId, request) {
   project.ensureDir(projectDir);
@@ -466,7 +475,8 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('agent:event', { runId, ...evt }); };
 
   // Git: a new chat can start on its own branch.
-  if (settings.gitBranchPerChat && !sessionId && !(request.variant?.index > 1)) {
+  if (active.size && !request.verify) send({ type: 'status', text: 'Another chat is also editing this project. Changes made at the same time can show up in both results.' });
+  if (settings.gitBranchPerChat && !sessionId && !(request.variant?.index > 1) && !active.size) {
     try {
       const st = await gitx.status(cwd);
       if (st.repo && st.hasCommits) {
@@ -480,6 +490,7 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
 
   const agentName = settings.agent === 'codex' ? 'Codex' : 'Claude Code';
   const snap = snapshot.take(cwd);
+  othersWrote.set(runId, new Map());
   // Other pages are screenshotted now (in the background) and again afterwards.
   let routes = null;
   if (check && !request.variant && !request.verify) {
@@ -502,6 +513,10 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   const onEvent = async (evt) => {
     if (evt.type !== 'done') return send(evt);
     let changes = snapshot.diff(snap);
+    const theirs = othersWrote.get(runId);
+    othersWrote.delete(runId);
+    if (theirs?.size) changes = changes.filter((c) => theirs.get(c.path) !== fileSig(cwd, c.path));
+    for (const seen of othersWrote.values()) for (const c of changes) seen.set(c.path, fileSig(cwd, c.path));
     try { changes = runs.save(cwd, runId, snap, changes, { request: { instruction: request.instruction, annotations: request.annotations.map(({ n, kind, note, element }) => ({ n, kind, note, element: element && { tag: element.tag, source: element.source } })) }, agent: agentName, url: request.url }); } catch (err) { send({ type: 'log', text: `could not save run record: ${err.message}` }); }
     let commit = null;
     // Variants are tried and reverted one after another; only the one you pick gets committed.
@@ -528,7 +543,7 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   };
   const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, onEvent });
   active.set(runId, handle);
-  handle.done.finally(() => active.delete(runId));
+  handle.done.finally(() => { active.delete(runId); othersWrote.delete(runId); });
   return { requestDir: files.dir };
 });
 
@@ -545,7 +560,7 @@ ipcMain.handle('run:apply', (_e, runId) => runs.apply(projectDir(), runId));
 ipcMain.handle('routes:prewarm', (_e, { list, partition }) => {
   const settings = loadSettings();
   if (settings.routeCheck === false || !settings.projectDir || active.size || !list?.length) return false;
-  try { routecheck.prewarm(settings.projectDir, list, partition || undefined); } catch { /* best effort */ }
+  routecheck.prewarm(settings.projectDir, list, partition || undefined).catch(() => { /* best effort */ });
   return true;
 });
 

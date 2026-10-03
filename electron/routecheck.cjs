@@ -38,6 +38,18 @@ function fingerprint(root) {
   return h.digest('hex');
 }
 
+// The same value, computed without blocking the app: this one runs while the user
+// is browsing, and a large project takes long enough to stat that clicks would stall.
+async function fingerprintAsync(root) {
+  const h = crypto.createHash('sha1');
+  const files = (await snapshot.walkAsync(root)).sort();
+  for (let i = 0; i < files.length; i += 64) {
+    const stats = await Promise.all(files.slice(i, i + 64).map((rel) => fs.promises.stat(path.join(root, rel)).catch(() => null)));
+    stats.forEach((st, j) => { if (st) h.update(`${files[i + j]}:${st.mtimeMs}:${st.size}\n`); });
+  }
+  return h.digest('hex');
+}
+
 // Loads a URL in a hidden window, lets it settle, and hands the page to `use`.
 const DEFAULT_PARTITION = 'persist:pinpoint';
 
@@ -127,7 +139,7 @@ const shoot = (url, partition) => visit(url, async (wc) => {
   return { jpg: first.toJPEG(82), noisy };
 }, partition);
 
-async function shootAll(routes, partition) {
+async function shootAll(routes, partition, workers = 3) {
   const shots = new Map();
   const queue = [...routes];
   const worker = async () => {
@@ -136,7 +148,7 @@ async function shootAll(routes, partition) {
       if (shot) shots.set(keyFor(r.route), shot);
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all(Array.from({ length: workers }, worker));
   return shots;
 }
 
@@ -208,15 +220,19 @@ const usable = (b, root, origin, fp, list, partition = DEFAULT_PARTITION) => !!b
 
 // Take the "before" screenshots now, while nothing is running, so the next run
 // doesn't have to wait for them. Does nothing when they are already current.
-function prewarm(root, routes, partition = DEFAULT_PARTITION) {
+let prewarming = false; // a prewarm is working out whether it has anything to do
+async function prewarm(root, routes, partition = DEFAULT_PARTITION) {
   const list = routes.slice(0, MAX_ROUTES);
-  if (!list.length) return;
+  if (!list.length || prewarming) return;
   const origin = originOf(list[0].url);
-  const fp = fingerprint(root);
+  prewarming = true;
+  let fp;
+  try { fp = await fingerprintAsync(root); } finally { prewarming = false; }
   if (usable(baseline, root, origin, fp, list, partition) || usable(warming, root, origin, fp, list, partition)) return;
-  const promise = shootAll(list, partition).then((shots) => {
+  // One page at a time: this is background work, and the person is using the app (and the dev server) meanwhile.
+  const promise = shootAll(list, partition, 1).then(async (shots) => {
     // Only keep it if nothing was edited while the pages were loading.
-    if (fingerprint(root) === fp) baseline = { root, origin, partition, fingerprint: fp, shots };
+    if (await fingerprintAsync(root) === fp) baseline = { root, origin, partition, fingerprint: fp, shots };
     return shots;
   });
   const mine = { root, origin, partition, fingerprint: fp, promise };

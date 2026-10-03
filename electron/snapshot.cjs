@@ -29,6 +29,23 @@ function walk(root) {
   return out;
 }
 
+// The same list as walk(), read without blocking the app while it works.
+async function walkAsync(root) {
+  const out = [];
+  const stack = [''];
+  while (stack.length && out.length < MAX_FILES) {
+    const rel = stack.pop();
+    let entries;
+    try { entries = await fs.promises.readdir(path.join(root, rel), { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) stack.push(r); }
+      else if (e.isFile()) out.push(r);
+    }
+  }
+  return out;
+}
+
 function take(root) {
   const files = new Map();
   let budget = MAX_CONTENT_TOTAL;
@@ -66,4 +83,4 @@ function diff(snap) {
   return changes;
 }
 
-module.exports = { take, diff, walk };
+module.exports = { take, diff, walk, walkAsync };

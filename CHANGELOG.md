@@ -4,6 +4,24 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-03
+
+### Added
+
+- **Several chats at once.** Starting a new chat or opening another one no longer waits for the agent to finish, and no longer stops it. A chat that is still working keeps working out of sight; it is listed above the conversation with a spinner, turns green when it is done, and opens exactly as it is when you click it. Each chat keeps its own agent session, and each result lists only the files that chat changed.
+
+### Faster
+
+- **Typing, dragging and streaming** no longer re-render the whole conversation. With a long chat open, a keystroke in the composer takes under a millisecond instead of about six, and dragging the panel divider runs about three times as many frames.
+- **Picking an element** opens its note on the click; the element's screenshot is attached a moment later instead of being waited for.
+- **Browsing your app** is no longer interrupted by Pinpoint's own checks. The accessibility audit and the background screenshots for the unintended-change check now wait until a page has been open a few seconds, load one page at a time, and no longer pause the app while they look through the project's files.
+- **The page overlay** (hover box, markers, layout guides) only redraws when something moved, and the floating toolbars no longer blur the page behind them.
+- **The conversation** follows new output only while you are at the bottom; scrolling up to read stays where you put it.
+
+### Fixed
+
+- **Component workspace** finds components in Vite projects that use a `base` path or keep the file outside the dev server's folder. On other dev servers (Next.js, webpack, Nuxt) it now says which one it found and what to do instead.
+
 ### Changed
 
 - **License.** Now the GNU Affero General Public License v3.0 or later (0.4.0 was GPL v3). The same terms as before, and they also apply when a modified Pinpoint is offered to people as a service over a network.
@@ -114,7 +132,8 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.1.0...v0.2.0

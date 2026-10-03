@@ -8,6 +8,7 @@ export interface WorkspaceSpec {
   name: string;
   isDefault: boolean;
   cells: { label: string; props: Record<string, unknown> }[];
+  abs?: string;            // the same file as an absolute path, for dev servers whose root is elsewhere
   left?: number;           // page pixels covered by Pinpoint's own panel on the left
 }
 
@@ -19,18 +20,33 @@ const RENDER = String.raw`async function render(spec) {
 
   // The component's module, as the dev server serves it. Projects whose dev
   // server root is a subfolder serve it under a shorter path.
+  // Vite adds its client script to every page it serves; where that script lives
+  // is the base path everything else is served under.
+  const client = [...document.scripts].map((s) => s.getAttribute('src') || '').find((s) => s.indexOf('@vite/client') >= 0)
+    || ((await fetch('/@vite/client').then((r) => r.ok && /javascript/.test(r.headers.get('content-type') || '')).catch(() => false)) ? '/@vite/client' : '');
+  if (!client) {
+    const next = w.__NEXT_DATA__ || w.next || document.querySelector('script[src*="/_next/"]');
+    const what = next ? 'This page is served by Next.js.'
+      : document.querySelector('script[src*="/_nuxt/"]') ? 'This page is served by Nuxt.'
+        : w.webpackHotUpdate || Object.keys(w).some((k) => k.indexOf('webpackChunk') === 0) ? 'This page is served by webpack.'
+          : "This page isn't served by a Vite dev server.";
+    return { ok: false, error: what + ' The component workspace only works with Vite dev servers so far. To work on one component here, pick it on the page and press Isolate in its note.' };
+  }
+  const base = new URL(client, location.href).pathname.replace(/@vite\/client.*$/, '');
   const parts = spec.file.split('/');
+  const candidates = parts.map((_, i) => base + parts.slice(i).join('/'));
+  // Files outside the server's root (a monorepo package, a linked folder) are served by absolute path.
+  if (spec.abs) candidates.push(base + '@fs/' + spec.abs.replace(/^\//, ''));
   let url = '';
   let source = '';
-  for (let i = 0; i < parts.length && !url; i++) {
-    const candidate = '/' + parts.slice(i).join('/');
+  for (const candidate of candidates) {
     try {
       const res = await fetch(candidate);
       const text = res.ok ? await res.text() : '';
-      if (text && !/^\s*<!doctype/i.test(text) && /import|export/.test(text)) { url = candidate; source = text; }
-    } catch (e) { /* try a shorter path */ }
+      if (text && !/^\s*<!doctype/i.test(text) && /import|export/.test(text)) { url = candidate; source = text; break; }
+    } catch (e) { /* try the next place */ }
   }
-  if (!url) return { ok: false, error: "The dev server doesn't serve this file as a module. The workspace needs a Vite dev server." };
+  if (!url) return { ok: false, error: "The dev server didn't serve " + spec.file + '. If it is outside the folder the dev server runs in, add that folder to server.fs.allow in the Vite config.' };
 
   // React must be the very copy the app uses (same URL, same version tag), or hooks break.
   // A dev server that has only just started may still be optimising dependencies and

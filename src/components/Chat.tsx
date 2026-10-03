@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
@@ -496,3 +496,14 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
     }
   }
 }
+
+export type ChatActions = Omit<ItemProps, 'item' | 'root' | 'busy' | 'gitRepo'>;
+
+// A message is rendered again only when it changes itself, so a long conversation
+// costs nothing while you type, drag a divider, or the agent streams its next line.
+const ChatRow = memo(ChatItemView);
+export const ChatList = memo(function ChatList({ items, actions, root, busy, gitRepo }: {
+  items: ChatItem[]; actions: ChatActions; root: string; busy: boolean; gitRepo: boolean;
+}) {
+  return <>{items.map((item) => <ChatRow key={item.id} item={item} root={root} busy={busy} gitRepo={gitRepo} {...actions} />)}</>;
+});

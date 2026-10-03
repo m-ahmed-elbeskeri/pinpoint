@@ -49,6 +49,7 @@ let hoverEl = null;
 let hoverStack = []; // children we climbed out of with ArrowUp, for ArrowDown
 let markers = [];    // [{uid, n, color, active}]
 let hidden = false;
+let pickHold = 0; // when an element was picked and its screenshot is still being taken
 let uidSeq = 0;
 let ui = null;
 let frozen = false;        // page events are held back so menus, tooltips and popovers stay open
@@ -175,12 +176,21 @@ function renderLayout(u, el, r) {
   return note;
 }
 
+let drawnEl = null, drawnKey = '', drawnAge = 0;
 function renderHover() {
   const u = ensureUI();
   if (hidden || mode !== 'select' || !hoverEl || !hoverEl.isConnected) {
+    if (u.hover.hidden && !drawnEl) return;
+    drawnEl = null;
     u.hover.hidden = true; u.label.hidden = true; u.layout.replaceChildren(); return;
   }
   const r = hoverEl.getBoundingClientRect();
+  // Most frames nothing has moved: the same element, in the same place. Drawing it again
+  // every frame costs the page its smoothness, so only a change (or every 20th frame, for
+  // children that moved inside it) redraws.
+  const key = `${r.left},${r.top},${r.width},${r.height},${layoutOn},${altDown},${markers.length}`;
+  if (hoverEl === drawnEl && key === drawnKey && !u.hover.hidden && ++drawnAge < 20) return;
+  drawnEl = hoverEl; drawnKey = key; drawnAge = 0;
   u.hover.hidden = false; place(u.hover, r);
   // Not for the page itself or near-full-screen wrappers: tinting everything says nothing.
   const huge = hoverEl === document.body || hoverEl === document.documentElement || r.width * r.height > innerWidth * innerHeight * 0.6;
@@ -197,6 +207,7 @@ function renderHover() {
   u.label.style.top = (above ? r.top - 24 : Math.min(r.bottom + 4, innerHeight - 24)) + 'px';
 }
 
+const markEls = new Map();
 function renderMarkers() {
   const u = ensureUI();
   u.marks.style.display = hidden ? 'none' : '';
@@ -212,13 +223,21 @@ function renderMarkers() {
   markers.forEach((m, i) => {
     const box = u.marks.children[i * 2];
     const badge = u.marks.children[i * 2 + 1];
-    const el = document.querySelector(`[data-pinpoint="${m.uid}"]`);
+    // The marked element is looked up once and kept until it leaves the page.
+    let el = markEls.get(m.uid);
+    if (!el || !el.isConnected || el.getAttribute('data-pinpoint') !== m.uid) {
+      el = document.querySelector(`[data-pinpoint="${m.uid}"]`);
+      if (el) markEls.set(m.uid, el); else markEls.delete(m.uid);
+    }
+    const r = el ? el.getBoundingClientRect() : null;
+    const key = r ? `${r.left},${r.top},${r.width},${r.height},${m.color},${!!m.active},${m.n}` : 'gone';
+    if (box.__key === key) return;
+    box.__key = key;
     box.style.setProperty('--c', m.color || ACCENT);
     badge.style.setProperty('--c', m.color || ACCENT);
     box.classList.toggle('active', !!m.active);
     badge.textContent = m.n;
-    if (!el) { box.hidden = true; badge.hidden = true; return; }
-    const r = el.getBoundingClientRect();
+    if (!r) { box.hidden = true; badge.hidden = true; return; }
     box.hidden = false; badge.hidden = false;
     place(box, r);
     badge.style.left = Math.max(2, r.left - 10) + 'px';
@@ -364,7 +383,7 @@ function onClick(e) {
   const el = hoverEl || targetAt(e.clientX, e.clientY);
   if (!el) return;
   const payload = info(el);
-  hidden = true; renderHover(); renderMarkers();
+  hidden = true; pickHold = Date.now(); renderHover(); renderMarkers();
   // Two frames so the capture the host takes next doesn't include our overlay.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     ipcRenderer.sendToHost('picked', { ...payload, dpr: devicePixelRatio, viewport: { width: innerWidth, height: innerHeight }, shift: e.shiftKey });
@@ -578,8 +597,10 @@ ipcRenderer.on('mode', (_e, m) => {
   renderHover();
   renderMarkers();
 });
-ipcRenderer.on('markers', (_e, list) => { markers = list || []; hidden = false; ensureUI(); renderMarkers(); });
-ipcRenderer.on('hide', (_e, h) => { hidden = !!h; renderMarkers(); renderHover(); });
+// After a pick the overlay stays out of the way until the host has taken its screenshot
+// (it says so with 'hide' false); the new marker arriving meanwhile must not bring it back early.
+ipcRenderer.on('markers', (_e, list) => { markers = list || []; if (!pickHold || Date.now() - pickHold > 1500) hidden = false; ensureUI(); renderMarkers(); });
+ipcRenderer.on('hide', (_e, h) => { pickHold = 0; hidden = !!h; renderMarkers(); renderHover(); });
 // Hide just the hover box (markers stay); used before overview captures.
 ipcRenderer.on('clean', () => { hoverEl = null; renderHover(); ipcRenderer.sendToHost('cleaned'); });
 ipcRenderer.on('tweak', (_e, { uid, prop, value }) => {

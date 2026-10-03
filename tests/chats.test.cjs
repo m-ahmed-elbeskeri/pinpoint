@@ -1,0 +1,131 @@
+// Several chats in one project: one keeps working while another is on screen,
+// with a stand-in agent CLI (speaks Claude Code's stream-json, edits files, costs nothing).
+const OUT = process.env.PP_OUT || __dirname;
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const http = require('node:http');
+const repo = process.cwd();
+const NL = String.fromCharCode(10);
+const out = [];
+const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'chats.out'), out.join(NL) + NL); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-chats-'));
+fs.writeFileSync(path.join(proj, 'index.html'), '<!doctype html><html lang="en"><head><title>Home</title></head><body><h1>Home</h1></body></html>');
+
+// The stand-in answers "slow" requests after a few seconds and everything else at once.
+// Each request writes a file named after its first word, so the tests can tell who did what.
+const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-agent-'));
+fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
+  "const fs = require('fs'), path = require('path');",
+  "if (process.argv.includes('--version')) { console.log('9.9.9 (stand-in)'); process.exit(0); }",
+  "const emit = (o) => process.stdout.write(JSON.stringify(o) + String.fromCharCode(10));",
+  "let buf = '';",
+  "process.stdin.on('data', (d) => {",
+  "  buf += d;",
+  "  let i;",
+  "  while ((i = buf.indexOf(String.fromCharCode(10))) >= 0) {",
+  "    const line = buf.slice(0, i); buf = buf.slice(i + 1);",
+  "    let m; try { m = JSON.parse(line); } catch { continue; }",
+  "    if (m.type !== 'user') continue;",
+  "    const text = m.message.content.filter((c) => c.type === 'text').map((c) => c.text).join(' ');",
+  "    const word = (text.match(/(slow|quick)-(\\w+)/) || [])[0] || 'other';",
+  "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in' });",
+  "    emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'Starting on ' + word + '.' }] } });",
+  "    setTimeout(() => {",
+  "      fs.writeFileSync(path.join(process.cwd(), word + '.txt'), 'done');",
+  "      emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'Wrote ' + word + '.txt.' }] } });",
+  "      emit({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 400, num_turns: 1 });",
+  "    }, /slow-/.test(word) ? 7000 : 300);",
+  "  }",
+  "});",
+].join(NL));
+const fakeBin = path.join(agentDir, 'fake-claude.cmd');
+fs.writeFileSync(fakeBin, '@node "%~dp0fake-claude.js" %*' + String.fromCharCode(13, 10));
+
+const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.setHeader('cache-control', 'no-store'); res.end(fs.readFileSync(path.join(proj, 'index.html'))); });
+server.listen(0, '127.0.0.1', () => {
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-ud-'));
+  fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: proj, url: base + '/', claudePath: fakeBin, agent: 'claude', autoVerify: false, variants: 0, a11yCheck: false, routeCheck: false, perfCheck: false }));
+  process.env.PINPOINT_USER_DATA = ud;
+  const { app, BrowserWindow } = require('electron');
+  require(path.join(repo, 'electron', 'main.cjs'));
+
+  app.whenReady().then(async () => {
+    await sleep(5000);
+    const win = BrowserWindow.getAllWindows()[0];
+    win.show(); win.focus();
+    const host = win.webContents;
+    const ui = (code) => host.executeJavaScript(code);
+    const until = async (code, ms) => { for (let t = 0; t < ms; t += 300) { const v = await ui(code); if (v) return v; await sleep(300); } return null; };
+    const send = async (text) => {
+      await ui(`(() => { const t = document.querySelector('.composer-box textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ${JSON.stringify(text)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await sleep(200);
+      await ui(`document.querySelector('.send-btn.primary').click(); 0`);
+    };
+    const newChat = () => ui(`[...document.querySelectorAll('.panel-head .btn')].find((b) => /New chat/.test(b.textContent)).click(); 0`);
+    const userText = () => ui(`[...document.querySelectorAll('.chat .msg.user')].map((m) => m.textContent).join(' | ')`);
+    const chips = () => ui(`[...document.querySelectorAll('.other-chats button')].map((b) => b.className + ':' + b.textContent).join(' | ')`);
+    const errors = [];
+    host.on('console-message', (e) => { if ((e.level === 'error' || e.level === 3) && !/Security Warning/.test(e.message)) errors.push(e.message.slice(0, 200)); });
+
+    try {
+      log('stand-in agent detected', await until(`document.querySelector('.agent-seg button.on') && !document.querySelector('.agent-seg button.on.missing') ? 1 : 0`, 8000) === 1);
+
+      // ---- a slow request, then a new chat beside it
+      await send('slow-alpha please');
+      log('the first chat is working', await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000) === 1);
+      await sleep(600);
+      log('New chat can be pressed while it works', (await ui(`[...document.querySelectorAll('.panel-head .btn')].find((b) => /New chat/.test(b.textContent)).disabled`)) === false);
+      await newChat();
+      await sleep(400);
+      log('the new chat starts empty and idle', (await ui(`document.querySelectorAll('.chat .msg').length + (document.querySelector('.chat .working') ? 100 : 0)`)) === 0);
+      log('the first chat is listed as still working', /running:slow-alpha/.test(await chips()), await chips());
+
+      // ---- the second chat runs to the end while the first is still going
+      await send('quick-beta please');
+      log('the second chat finishes on its own', await until(`document.querySelectorAll('.chat .done-card').length === 1 ? 1 : 0`, 6000) === 1, await userText());
+      log('only its own messages are in it', (await userText()).includes('quick-beta') && !(await userText()).includes('slow-alpha'), await userText());
+      log('its file was written', fs.existsSync(path.join(proj, 'quick-beta.txt')));
+      log('the first chat was still working then', !fs.existsSync(path.join(proj, 'slow-alpha.txt')) && /running:slow-alpha/.test(await chips()), await chips());
+
+      // ---- the first one finishes out of sight
+      log('the first chat is marked finished when its agent is done', !!(await until(`document.querySelector('.other-chats button.finished') ? 1 : 0`, 15000)), await chips());
+      log('its file was written too', fs.existsSync(path.join(proj, 'slow-alpha.txt')));
+      const saved = () => fs.readdirSync(path.join(proj, '.pinpoint', 'chats')).map((f) => JSON.parse(fs.readFileSync(path.join(proj, '.pinpoint', 'chats', f), 'utf8')));
+      await sleep(900);
+      const alpha = saved().find((c) => /slow-alpha/.test(c.title));
+      log('and saved with its result', !!alpha && alpha.items.some((i) => i.kind === 'done') && alpha.items.some((i) => i.kind === 'text' && /Wrote slow-alpha/.test(i.text)), alpha ? alpha.items.map((i) => i.kind).join() : 'not saved');
+
+      // ---- going back to it
+      await ui(`document.querySelector('.other-chats button').click(); 0`);
+      await sleep(700);
+      log('opening it shows its whole conversation', (await userText()).includes('slow-alpha') && (await ui(`document.querySelectorAll('.chat .done-card').length`)) === 1 && /Wrote slow-alpha/.test(await ui(`document.querySelector('.chat').innerText`)), await userText());
+      log('its result lists only the file it wrote itself', /Changed 1 file/.test(await ui(`document.querySelector('.chat .done-card').innerText`)) && !/quick-beta/.test(await ui(`document.querySelector('.chat .done-card').innerText`)), await ui(`document.querySelector('.chat .done-card').innerText.slice(0, 80)`));
+      log('the reminder goes away once it has been looked at', (await chips()) === '', await chips());
+
+      // ---- leaving a working chat and coming back before it is done
+      await send('slow-gamma please');
+      await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000);
+      await sleep(500);
+      await ui(`document.querySelector('.dd .icon-btn[title="Chat history"]').click(); 0`);
+      await sleep(500);
+      log('the history lists both chats', (await ui(`document.querySelectorAll('.history-item').length`)) === 2);
+      await ui(`[...document.querySelectorAll('.history-item')].find((i) => /quick-beta/.test(i.textContent)).click(); 0`);
+      await sleep(700);
+      log('switching to the other chat leaves the first working', (await userText()).includes('quick-beta') && /running/.test(await chips()) && !(await ui(`!!document.querySelector('.chat .working')`)), await chips());
+      await ui(`document.querySelector('.other-chats button.running').click(); 0`);
+      await sleep(600);
+      log('coming back shows it still working, with what it has said so far', (await ui(`!!document.querySelector('.chat .working')`)) && /Starting on slow-gamma/.test(await ui(`document.querySelector('.chat').innerText`)));
+      log('and it finishes on screen', await until(`document.querySelectorAll('.chat .done-card').length === 2 ? 1 : 0`, 15000) === 1, await ui(`document.querySelectorAll('.chat .done-card').length`));
+      log('each chat kept its own agent session', (() => { const s = saved(); return s.length === 2 && new Set(s.map((c) => c.session && c.session.id)).size === 2; })(), saved().map((c) => c.session && c.session.id).join());
+      log('no errors in the app console', errors.length === 0, errors.join(' | '));
+      try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch { /* window covered */ }
+    } catch (e) { log('exception', false, e.stack); }
+    server.close();
+    fs.appendFileSync(path.join(OUT, 'chats.out'), '[done]' + String.fromCharCode(10));
+    app.exit(0);
+  });
+});

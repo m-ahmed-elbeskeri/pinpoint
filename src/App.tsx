@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Bug, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
+  ArrowLeft, ArrowRight, Bug, Check, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
   PenTool, Plus, RotateCw, Send, Settings as SettingsIcon, Smartphone, Square, SquarePen, Tablet,
   TerminalSquare, Trash2, X, PanelLeft, PanelRight, Paperclip, Palette, ImagePlus, Zap, CornerDownRight,
   AppWindow, Blend, Boxes, Brain, CircleDot, ClipboardCopy, Columns3, Download, Snowflake, SquareStack,
@@ -8,7 +8,7 @@ import {
 import { BrowserView, sleep, type BrowserHandle, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
 import { DrawToolbar, TOOL_KEYS } from './components/DrawToolbar';
-import { ChatItemView, invalidateDiff, shortPath } from './components/Chat';
+import { ChatList, invalidateDiff, shortPath, type ChatActions } from './components/Chat';
 import { SettingsModal } from './components/SettingsModal';
 import { Drawer } from './components/Drawer';
 import { AgentControls } from './components/AgentControls';
@@ -29,6 +29,7 @@ import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverl
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
+  OtherChat,
   A11yIssue, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog, NetworkFailure,
   GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
 } from './lib/types';
@@ -127,6 +128,41 @@ function mergeRequests(reqs: AgentRequest[]): AgentRequest {
     annotations: reqs.flatMap((r) => r.annotations.map((a) => ({ ...a, n: ++n }))),
     overview: last.overview ?? reqs.find((r) => r.overview)?.overview,
   };
+}
+
+type Delta = { kind: 'text' | 'thinking'; text: string };
+// Streamed tokens are appended to the draft block of the same kind, or start one.
+function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
+  if (!buf.length) return items;
+  const next = [...items];
+  for (const d of buf) {
+    const last = next[next.length - 1];
+    if (last && last.kind === d.kind && last.streaming) next[next.length - 1] = { ...last, text: last.text + d.text };
+    else next.push({ kind: d.kind, id: uid(), text: d.text, streaming: true });
+  }
+  return next;
+}
+// A complete block replaces the streamed draft of the same kind (or is added).
+function finalizeItems(c: ChatItem[], kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []): ChatItem[] {
+  let i = -1;
+  for (let j = c.length - 1; j >= 0; j--) { const it = c[j]; if (it.kind === kind && it.streaming) { i = j; break; } }
+  const done: ChatItem[] = text ? [{ kind, id: i >= 0 ? c[i].id : uid(), text }] : [];
+  if (i >= 0) return [...c.slice(0, i), ...done, ...c.slice(i + 1), ...extra];
+  return [...c, ...done, ...extra];
+}
+// The agent proposes memories with a trailing "REMEMBER: …" line.
+function splitMemory(text: string): { text: string; extra: ChatItem[] } {
+  const m = text.match(/^\s*`?REMEMBER:\s*(.+?)`?\s*$/m);
+  return m ? { text: text.replace(m[0], '').trim(), extra: [{ kind: 'memory', id: uid(), text: m[1].trim(), status: 'pending' }] } : { text, extra: [] };
+}
+function chatTitle(items: ChatItem[]) {
+  const first = items.find((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }> | undefined;
+  return (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || `${first?.annotations.length || 0} annotation(s)`).slice(0, 80);
+}
+// A chat that isn't on screen but is still alive: its agent is working, and its messages keep arriving.
+interface ParkedChat {
+  id: string; createdAt: number; items: ChatItem[]; session: { id: string; agent: AgentId } | null;
+  designAtStart: string | null; runId: string | null; agent: AgentId;
 }
 
 // A saved chat whose last request never finished (app closed mid-run) gets an
@@ -312,6 +348,7 @@ export default function App() {
   const [session, setSession] = useState<{ id: string; agent: AgentId } | null>(null);
   const [device, setDevice] = useState<Device>(DEVICE_OFF);
   const [avail, setAvail] = useState({ w: 0, h: 0 }); // room for the page inside the stage
+  const dragging = useRef(false);                     // a panel divider is being dragged
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
   const area = useRef<HTMLDivElement>(null);
   const deviceRef = useRef(device);
@@ -460,22 +497,113 @@ export default function App() {
   useEffect(() => {
     if (!projectDir || !chatId || !chat.length) return;
     const t = setTimeout(() => {
-      const first = chat.find((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }> | undefined;
-      const title = (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || `${first?.annotations.length || 0} annotation(s)`).slice(0, 80);
+      const title = chatTitle(chat);
       api.saveChat({ id: chatId, title, createdAt: chatCreated || Date.now(), updatedAt: Date.now(), agent: settingsRef.current?.agent || 'claude', session, designAtStart, items: chat }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
   }, [chat, session, chatId, projectDir, designAtStart]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---------- several chats at once ----------
+  // Leaving a chat doesn't stop it. A chat whose agent is still working is parked here:
+  // its messages keep being collected, and it is put back on screen as it is when reopened.
+  const parked = useRef(new Map<string, ParkedChat>());
+  const [others, setOthers] = useState<OtherChat[]>([]); // chats working, or finished and not looked at yet
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+  const syncOthers = (finished?: ParkedChat, seen?: string) => setOthers((o) => [
+    ...[...parked.current.values()].map((p) => ({ id: p.id, title: chatTitle(p.items), running: true })),
+    ...o.filter((x) => !x.running && !parked.current.has(x.id) && x.id !== seen && x.id !== finished?.id),
+    ...(finished ? [{ id: finished.id, title: chatTitle(finished.items), running: false }] : []),
+  ]);
+  const saveParked = (p: ParkedChat) => api.saveChat({
+    id: p.id, title: chatTitle(p.items), createdAt: p.createdAt, updatedAt: Date.now(), agent: p.agent, session: p.session, designAtStart: p.designAtStart, items: p.items,
+  }).catch(() => {});
+
+  // Puts the chat on screen away. False when it can't be left right now.
+  const leaveChat = () => {
+    if (job || variantJob.current) { flash('Variants are being made in this chat. Wait for them before switching.'); return false; }
+    if (queuedRef.current.length) { flash('A message is waiting to be sent in this chat. Switch once it has gone out.'); return false; }
+    if (deltaRaf.current) { cancelAnimationFrame(deltaRaf.current); deltaRaf.current = 0; }
+    const items = mergeDeltas(chatRef.current, deltaBuf.current);
+    deltaBuf.current = [];
+    if (chatId && items.length) {
+      const p: ParkedChat = { id: chatId, createdAt: chatCreated || Date.now(), items, session: sessionRef.current, designAtStart, runId: runRef.current, agent: settingsRef.current?.agent || 'claude' };
+      saveParked(p);
+      if (p.runId) parked.current.set(p.id, p);
+    }
+    setRunId(null);
+    runRef.current = null;
+    verifyPending.current = null;
+    return true;
+  };
+  const showChat = (c: { id: string; createdAt: number; items: ChatItem[]; session: ParkedChat['session']; designAtStart?: string | null }, running: string | null) => {
+    setChatId(c.id); setChatCreated(c.createdAt); setChat(c.items); setSession(c.session); setDesignAtStart(c.designAtStart ?? null);
+    setRunId(running);
+    runRef.current = running;
+    stick.current = true;
+  };
   const openChat = async (id: string) => {
-    const c = await api.loadChat(id);
-    if (!c) return;
-    setChatId(c.id); setChatCreated(c.createdAt); setChat(healChat(c.items)); setSession(c.session); setDesignAtStart(c.designAtStart ?? null);
+    if (id === chatId || !leaveChat()) return;
+    const p = parked.current.get(id);
+    if (p) {
+      parked.current.delete(id);
+      showChat(p, p.runId);
+    } else {
+      const c = await api.loadChat(id);
+      if (c) showChat({ ...c, items: healChat(c.items) }, null);
+      else { setChatId(null); setChat([]); setSession(null); setDesignAtStart(null); }
+    }
+    syncOthers(undefined, id);
   };
   const deleteChat = async (id: string) => {
+    const p = parked.current.get(id);
+    if (p) { if (p.runId) api.cancelAgent(p.runId).catch(() => {}); parked.current.delete(id); }
     await api.deleteChat(id);
-    if (id === chatId) { setChatId(null); setChat([]); setSession(null); setDesignAtStart(null); }
+    if (id === chatId) {
+      if (runRef.current) api.cancelAgent(runRef.current).catch(() => {});
+      setRunId(null); runRef.current = null;
+      setChatId(null); setChat([]); setSession(null); setDesignAtStart(null);
+    }
+    syncOthers(undefined, id);
   };
+
+  // What an agent event does to a chat that isn't on screen.
+  const parkedEvent = (p: ParkedChat, e: AgentEvent) => {
+    const add = (item: ChatItem) => { p.items = [...p.items, item]; };
+    switch (e.type) {
+      case 'text_delta': p.items = mergeDeltas(p.items, [{ kind: 'text', text: e.text }]); break;
+      case 'thinking_delta': p.items = mergeDeltas(p.items, [{ kind: 'thinking', text: e.text }]); break;
+      case 'status': add({ kind: 'status', id: uid(), text: e.text }); break;
+      case 'session': p.session = { id: e.sessionId, agent: p.agent }; break;
+      case 'git': refreshGit(); break;
+      case 'text': { const m = splitMemory(e.text); p.items = finalizeItems(p.items, 'text', m.text, m.extra); break; }
+      case 'thinking': p.items = finalizeItems(p.items, 'thinking', e.text); break;
+      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running' }); break;
+      case 'tool_result':
+        p.items = p.items.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output } : it));
+        break;
+      case 'error': add({ kind: 'error', id: uid(), text: e.text }); break;
+      case 'done':
+        p.items = [
+          ...p.items.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'ok' as const }
+            : (it.kind === 'text' || it.kind === 'thinking') && it.streaming ? { ...it, streaming: false } : it)),
+          { kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [], commit: e.commit || null },
+        ];
+        p.runId = null;
+        parked.current.delete(p.id);
+        saveParked(p);
+        syncOthers(p);
+        flash(`${e.ok ? 'Finished' : 'Stopped'} in another chat: ${chatTitle(p.items)}`);
+        refreshGit();
+        if (e.changes?.length) {
+          refreshRoutes();
+          if (/^file:/.test(navRef.current.url)) browser.current?.reload();
+        }
+        return;
+    }
+  };
+  const parkedEventRef = useRef(parkedEvent);
+  parkedEventRef.current = parkedEvent;
 
   // Failed network requests from the page.
   useEffect(() => api.onNetworkError((n) => {
@@ -530,16 +658,20 @@ export default function App() {
   useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => {
-      runA11y();
       browser.current?.breakpoints().then(setBreakpoints);
       browser.current?.classNames().then(setClassNames);
-      // Baseline screenshots for the unintended-change check, taken now so a run doesn't wait for them.
-      const warm = otherRoutes(navRef.current.url);
-      if (warm?.routes.length && !runRef.current) api.prewarmRoutes(warm.routes, warm.partition).catch(() => {});
       // Client-rendered content arrives after load, so stress tests are applied again once it has.
       if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
     }, 1500);
-    return () => clearTimeout(t);
+    // The heavier checks wait until the page has been open a moment, so clicking through
+    // pages isn't slowed by an audit and background screenshots of each one.
+    const audit = setTimeout(runA11y, 2500);
+    const warmup = setTimeout(() => {
+      // Baseline screenshots for the unintended-change check, taken now so a run doesn't wait for them.
+      const warm = otherRoutes(navRef.current.url);
+      if (warm?.routes.length && !runRef.current) api.prewarmRoutes(warm.routes, warm.partition).catch(() => {});
+    }, 5000);
+    return () => { clearTimeout(t); clearTimeout(audit); clearTimeout(warmup); };
   }, [nav.url, loading, settings?.a11yCheck, runA11y]);
 
   // ---------- test conditions ----------
@@ -640,7 +772,13 @@ export default function App() {
   useEffect(() => {
     const el = area.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setAvail({ w: Math.floor(e.contentRect.width), h: Math.floor(e.contentRect.height) }));
+    const ro = new ResizeObserver(([e]) => {
+      // While a divider is dragged the room changes every frame; it is read once when the drag ends
+      // (unless a device size is on, where the page is rescaled to fit as you drag).
+      if (dragging.current && !deviceRef.current.on) return;
+      const w = Math.floor(e.contentRect.width), h = Math.floor(e.contentRect.height);
+      setAvail((a) => (a.w === w && a.h === h ? a : { w, h }));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [!!settings]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -885,14 +1023,19 @@ export default function App() {
     const vp = el.viewport;
     const pad = 20;
     const crop = clampRect({ x: el.rect.x - pad, y: el.rect.y - pad, width: el.rect.width + pad * 2, height: el.rect.height + pad * 2 }, vp);
-    let image: string | undefined;
-    try { if (crop.width > 2 && crop.height > 2) image = await browser.current!.capture(crop); } catch { /* page may have navigated */ }
     const { dpr: _d, viewport: _v, shift: _s, ...element } = el;
-    const ann: Annotation = { id: uid(), n, kind: 'element', note: '', color: colorFor(n), image, element, viewport: vp, tabId: activeTabRef.current, pageUrl: navRef.current.url };
+    const ann: Annotation = { id: uid(), n, kind: 'element', note: '', color: colorFor(n), element, viewport: vp, tabId: activeTabRef.current, pageUrl: navRef.current.url };
+    // The note opens on the click; the screenshot of the element is attached as soon as it is taken.
     setAnnotations((prev) => [...prev, ann]);
     setActiveId(ann.id);
     setToolSection(null);
     setPopover({ id: ann.id, rect: el.rect });
+    try {
+      if (crop.width > 2 && crop.height > 2) {
+        const image = await browser.current!.capture(crop);
+        setAnnotations((prev) => prev.map((a) => (a.id === ann.id ? { ...a, image } : a)));
+      }
+    } catch { /* page may have navigated */ } finally { browser.current?.send('hide', false); }
 
     // Where it comes from, which design tokens it uses, and how widely its component is used.
     const source = await enrichSource(await browser.current!.locateSource(el.uid));
@@ -1487,7 +1630,12 @@ export default function App() {
       } else flash(r.failed.length ? `Reverted ${r.restored.length}; couldn't restore ${r.failed.join(', ')}` : `Reverted ${r.restored.length} file(s)`);
     } catch (e) { flash(errText(e)); }
   };
-  const newChat = () => { if (!runId) { setChat([]); setSession(null); setChatId(null); setDesignAtStart(null); } };
+  // A chat that is still working keeps working; the new one starts beside it.
+  const newChat = () => {
+    if (!leaveChat()) return;
+    setChat([]); setSession(null); setChatId(null); setDesignAtStart(null);
+    syncOthers();
+  };
 
   const onMemoryAction = (id: string, action: 'save' | 'dismiss') => {
     const item = chat.find((c) => c.id === id && c.kind === 'memory') as Extract<ChatItem, { kind: 'memory' }> | undefined;
@@ -1514,6 +1662,21 @@ export default function App() {
     setTimeout(() => composerRef.current?.focus(), 50);
   };
 
+  // Terminal output can arrive hundreds of lines a second: collect it and update a few times a second.
+  const logBuf = useRef({ dev: '', agent: '' });
+  const logTimer = useRef(0);
+  const addLog = (which: 'dev' | 'agent', text: string) => {
+    logBuf.current[which] += text;
+    if (logTimer.current) return;
+    logTimer.current = window.setTimeout(() => {
+      logTimer.current = 0;
+      const { dev, agent } = logBuf.current;
+      logBuf.current = { dev: '', agent: '' };
+      if (dev) setDevLog((l) => (l + dev).slice(-200_000));
+      if (agent) setAgentLog((l) => (l + agent).slice(-200_000));
+    }, 120);
+  };
+
   // ---------- agent events ----------
   // Token deltas arrive fast; batch them into one state update per frame.
   const deltaBuf = useRef<{ kind: 'text' | 'thinking'; text: string }[]>([]);
@@ -1523,26 +1686,12 @@ export default function App() {
     const buf = deltaBuf.current;
     deltaBuf.current = [];
     if (!buf.length) return;
-    setChat((c) => {
-      const next = [...c];
-      for (const d of buf) {
-        const last = next[next.length - 1];
-        if (last && last.kind === d.kind && last.streaming) next[next.length - 1] = { ...last, text: last.text + d.text };
-        else next.push({ kind: d.kind, id: uid(), text: d.text, streaming: true });
-      }
-      return next;
-    });
+    setChat((c) => mergeDeltas(c, buf));
   }, []);
   // A complete block replaces the streamed draft of the same kind (or is added).
   const finalizeBlock = (kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []) => {
     if (deltaRaf.current) { cancelAnimationFrame(deltaRaf.current); flushDeltas(); }
-    setChat((c) => {
-      let i = -1;
-      for (let j = c.length - 1; j >= 0; j--) { const it = c[j]; if (it.kind === kind && it.streaming) { i = j; break; } }
-      const done: ChatItem[] = text ? [{ kind, id: i >= 0 ? c[i].id : uid(), text }] : [];
-      if (i >= 0) return [...c.slice(0, i), ...done, ...c.slice(i + 1), ...extra];
-      return [...c, ...done, ...extra];
-    });
+    setChat((c) => finalizeItems(c, kind, text, extra));
   };
 
   useEffect(() => api.onAgentEvent((e: AgentEvent) => {
@@ -1559,7 +1708,12 @@ export default function App() {
       }));
       return;
     }
-    if (e.runId !== runRef.current) return;
+    if (e.runId !== runRef.current) {
+      // A chat that isn't on screen: its messages are collected for when it is opened again.
+      const p = [...parked.current.values()].find((x) => x.runId === e.runId);
+      if (p) parkedEventRef.current(p, e);
+      return;
+    }
     const push = (item: ChatItem) => setChat((c) => {
       const last = c[c.length - 1];
       if (item.kind === 'error' && last?.kind === 'error' && last.text === item.text) return c; // same error twice
@@ -1575,10 +1729,8 @@ export default function App() {
       case 'session': setSession({ id: e.sessionId, agent: (settingsRef.current?.agent || 'claude') }); break;
       case 'git': refreshGitRef.current(); break;
       case 'text': {
-        // The agent proposes memories with a trailing "REMEMBER: …" line.
-        const m = e.text.match(/^\s*`?REMEMBER:\s*(.+?)`?\s*$/m);
-        const text = m ? e.text.replace(m[0], '').trim() : e.text;
-        finalizeBlock('text', text, m ? [{ kind: 'memory', id: uid(), text: m[1].trim(), status: 'pending' }] : []);
+        const m = splitMemory(e.text);
+        finalizeBlock('text', m.text, m.extra);
         break;
       }
       case 'thinking': finalizeBlock('thinking', e.text); break;
@@ -1586,7 +1738,7 @@ export default function App() {
       case 'tool_result':
         setChat((c) => c.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output } : it)));
         break;
-      case 'log': setAgentLog((l) => (l + e.text + '\n').slice(-200_000)); break;
+      case 'log': addLog('agent', e.text + '\n'); break;
       case 'error': push({ kind: 'error', id: uid(), text: e.text }); break;
       case 'done':
         if (deltaRaf.current) { cancelAnimationFrame(deltaRaf.current); flushDeltas(); }
@@ -1619,11 +1771,55 @@ export default function App() {
   const refreshGitRef = useRef(refreshGit);
   refreshGitRef.current = refreshGit;
 
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat]);
+  // The conversation follows new output only while the reader is at the bottom;
+  // scrolling up to read leaves it where it is. A message you send jumps back down.
+  const stick = useRef(true);
+  const chatLen = useRef(0);
+  const onChatScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }, []);
+  useLayoutEffect(() => {
+    const box = chatEnd.current?.parentElement;
+    if (!box) return;
+    const grew = chat.length > chatLen.current;
+    chatLen.current = chat.length;
+    if (grew && chat[chat.length - 1]?.kind === 'user') stick.current = true;
+    if (stick.current) box.scrollTop = box.scrollHeight;
+  }, [chat, runId, job]);
+
+  // The conversation's buttons, as one object that never changes identity, so
+  // finished messages aren't rendered again when anything else on screen changes.
+  const chatHandlers = {
+    onReload: () => browser.current?.reload(),
+    onUndo: undoRun,
+    onReview: (id: string, path?: string) => setDiffView({ runId: id, path }),
+    onMemory: onMemoryAction,
+    onRevertFile: revertFile,
+    onOpenFile: openFile,
+    onCommit: commitRun,
+    onCompare: (id: string, pair?: string) => setCompare({ runId: id, pair, ...(pair && { title: `Other page: /${pair.replace(/^route-/, '').replace(/^home$/, '')}` }) }),
+    onPickVariant: pickVariant,
+    onMeasureBuild: measureBuild,
+  };
+  const chatHandlersRef = useRef(chatHandlers);
+  chatHandlersRef.current = chatHandlers;
+  const chatActions = useMemo<ChatActions>(() => ({
+    onReload: () => chatHandlersRef.current.onReload(),
+    onUndo: (...a) => chatHandlersRef.current.onUndo(...a),
+    onReview: (...a) => chatHandlersRef.current.onReview(...a),
+    onMemory: (...a) => chatHandlersRef.current.onMemory(...a),
+    onRevertFile: (...a) => chatHandlersRef.current.onRevertFile(...a),
+    onOpenFile: (...a) => chatHandlersRef.current.onOpenFile(...a),
+    onCommit: (...a) => chatHandlersRef.current.onCommit(...a),
+    onCompare: (...a) => chatHandlersRef.current.onCompare(...a),
+    onPickVariant: (...a) => chatHandlersRef.current.onPickVariant(...a),
+    onMeasureBuild: (...a) => chatHandlersRef.current.onMeasureBuild(...a),
+  }), []);
 
   // ---------- dev server ----------
   useEffect(() => api.onDevEvent((e) => {
-    if (e.type === 'log') setDevLog((l) => (l + e.text).slice(-200_000));
+    if (e.type === 'log') addLog('dev', e.text);
     else if (e.type === 'started') { setDevRunning(true); setDevLog(''); }
     else if (e.type === 'exit') { setDevRunning(false); setDevLog((l) => l + `\n[process exited with code ${e.code}]\n`); }
     else if (e.type === 'url') {
@@ -1680,20 +1876,35 @@ export default function App() {
     // Capture the pointer so moves over the <webview> (a separate process) still reach us.
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     setResizing(which);
-    let last = 0;
+    dragging.current = true;
+    // The grid is resized directly, once per frame, and the new size goes into state
+    // when the drag ends: re-rendering the whole window on every pointer move is what made this stutter.
+    const grid = (e.currentTarget as HTMLElement).closest('.app') as HTMLElement | null;
+    const left = settingsRef.current?.panelSide === 'left';
+    let last = 0, frame = 0;
+    const paint = () => {
+      frame = 0;
+      if (!grid || !last) return;
+      if (which === 'panel') grid.style.gridTemplateColumns = left ? `${last}px 1fr` : `1fr ${last}px`;
+      else grid.style.gridTemplateRows = `52px 1fr ${last}px`;
+    };
     const move = (ev: PointerEvent) => {
       if (which === 'panel') {
-        const w = settingsRef.current?.panelSide === 'left' ? ev.clientX : window.innerWidth - ev.clientX;
+        const w = left ? ev.clientX : window.innerWidth - ev.clientX;
         last = Math.round(Math.min(Math.max(300, w), Math.min(820, window.innerWidth - 480)));
-        setPanelWidth(last);
       } else {
         last = Math.round(Math.min(Math.max(120, window.innerHeight - ev.clientY), window.innerHeight * 0.65));
-        setDrawerHeight(last);
       }
+      if (!frame) frame = requestAnimationFrame(paint);
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      if (frame) cancelAnimationFrame(frame);
+      dragging.current = false;
+      if (last) { if (which === 'panel') setPanelWidth(last); else setDrawerHeight(last); }
+      const a = area.current;
+      if (a) setAvail({ w: Math.floor(a.clientWidth), h: Math.floor(a.clientHeight) });
       setResizing(null);
       if (last) saveSettings(which === 'panel' ? { panelWidth: last } : { drawerHeight: last });
     };
@@ -2043,7 +2254,7 @@ export default function App() {
           </div>
           {wsOpen && (
             <ComponentsPanel
-              render={(spec) => browser.current?.workspace({ ...spec, left: Math.round(270 / deviceScale) }) ?? Promise.resolve(null)}
+              render={(spec) => browser.current?.workspace({ ...spec, abs: `${projectDir}/${spec.file}`.split('\\').join('/'), left: Math.round(270 / deviceScale) }) ?? Promise.resolve(null)}
               close={() => browser.current?.closeWorkspace()}
               onClose={() => setWsOpen(false)}
             />
@@ -2080,11 +2291,21 @@ export default function App() {
             ))}
           </div>
           <div className="spacer" />
-          {projectDir && <ChatHistory currentId={chatId} disabled={!!runId} onOpen={openChat} onDelete={deleteChat} />}
-          <button className="btn ghost xs" onClick={newChat} disabled={!!runId || !!job || !chat.length} title={session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'}><Plus size={13} /><span className="btn-text">New chat</span></button>
+          {projectDir && <ChatHistory currentId={chatId} disabled={!!job} others={others} onOpen={openChat} onDelete={deleteChat} />}
+          <button className="btn ghost xs" onClick={newChat} disabled={!!job || !chat.length} title={runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'}><Plus size={13} /><span className="btn-text">New chat</span></button>
         </div>
+        {others.length > 0 && (
+          <div className="other-chats">
+            {others.map((o) => (
+              <button key={o.id} className={o.running ? 'running' : 'finished'} onClick={() => openChat(o.id)} title={o.running ? 'Still working. Click to look.' : 'Finished. Click to see the result.'}>
+                {o.running ? <Loader2 size={11} className="spin" /> : <Check size={11} />}
+                <span>{o.title || 'Untitled'}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-        <div className="chat">
+        <div className="chat" onScroll={onChatScroll}>
           {chat.length === 0 ? (
             <div className="chat-empty">
               <h3>How it works</h3>
@@ -2098,7 +2319,7 @@ export default function App() {
                 <div className="warn-box">{settings.agent === 'claude' ? 'Claude Code' : 'Codex'} CLI wasn't found. Install it or set its path in Settings.</div>
               )}
             </div>
-          ) : chat.map((item) => <ChatItemView key={item.id} item={item} root={root} onReload={() => browser.current?.reload()} onUndo={undoRun} onReview={(runId, path) => setDiffView({ runId, path })} onMemory={onMemoryAction} onRevertFile={revertFile} onOpenFile={openFile} onCommit={commitRun} onCompare={(id, pair) => setCompare({ runId: id, pair, ...(pair && { title: `Other page: /${pair.replace(/^route-/, '').replace(/^home$/, '')}` }) })} onPickVariant={pickVariant} onMeasureBuild={measureBuild} gitRepo={!!gitStatus?.repo} busy={!!runId || !!job} />)}
+          ) : <ChatList items={chat} actions={chatActions} root={root} gitRepo={!!gitStatus?.repo} busy={!!runId || !!job} />}
           {(runId || job) && (
             <div className="working">
               <Loader2 size={14} className="spin" />{' '}

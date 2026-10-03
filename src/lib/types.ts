@@ -168,6 +168,9 @@ export interface GitStatus {
   gh: { installed: boolean; authed: boolean; user: string | null };
 }
 
+// A chat of this project that isn't the one on screen but is working, or finished unseen.
+export interface OtherChat { id: string; title: string; running: boolean }
+
 export interface FileChange { path: string; kind: 'add' | 'modify' | 'delete'; reverted?: boolean; add?: number; del?: number }
 
 export interface DiffFile {

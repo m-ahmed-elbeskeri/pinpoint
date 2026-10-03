@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { History, MessageSquare, Trash2 } from 'lucide-react';
-import type { ChatMeta } from '../lib/types';
+import { Check, History, Loader2, MessageSquare, Trash2 } from 'lucide-react';
+import type { ChatMeta, OtherChat } from '../lib/types';
 
 interface Props {
   currentId: string | null;
   disabled: boolean;
+  others: OtherChat[];   // chats that are working, or finished since you last looked
   onOpen(id: string): void;
   onDelete(id: string): void;
 }
@@ -19,7 +20,7 @@ function ago(t: number) {
 }
 
 // Past conversations for this project (saved under .pinpoint/chats).
-export function ChatHistory({ currentId, disabled, onOpen, onDelete }: Props) {
+export function ChatHistory({ currentId, disabled, others, onOpen, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const [chats, setChats] = useState<ChatMeta[]>([]);
   const ref = useRef<HTMLDivElement>(null);
@@ -36,6 +37,7 @@ export function ChatHistory({ currentId, disabled, onOpen, onDelete }: Props) {
     <div className="dd" ref={ref}>
       <button className={`icon-btn ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} disabled={disabled} title="Chat history">
         <History size={15} />
+        {others.some((o) => o.running) && <span className="history-count">{others.filter((o) => o.running).length}</span>}
       </button>
       {open && (
         <div className="dd-menu down right history-menu">
@@ -43,7 +45,9 @@ export function ChatHistory({ currentId, disabled, onOpen, onDelete }: Props) {
           {chats.length === 0 && <div className="route-empty">No saved chats yet</div>}
           {chats.map((c) => (
             <div key={c.id} className={`dd-item history-item ${c.id === currentId ? 'sel' : ''}`} onClick={() => { onOpen(c.id); setOpen(false); }}>
-              <MessageSquare size={14} className="dd-item-icon" />
+              {others.find((o) => o.id === c.id)?.running ? <Loader2 size={14} className="dd-item-icon spin" />
+                : others.some((o) => o.id === c.id) ? <Check size={14} className="dd-item-icon" />
+                  : <MessageSquare size={14} className="dd-item-icon" />}
               <span className="dd-item-text">
                 <span>{c.title || 'Untitled'}</span>
                 <small>{ago(c.updatedAt)} · {c.count} item{c.count === 1 ? '' : 's'}{c.agent ? ` · ${c.agent === 'codex' ? 'Codex' : 'Claude Code'}` : ''}</small>
