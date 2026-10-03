@@ -11,7 +11,7 @@ and Claude Code or Codex rewrites your code while you watch.
 
 [![CI](https://github.com/m-ahmed-elbeskeri/pinpoint/actions/workflows/ci.yml/badge.svg)](https://github.com/m-ahmed-elbeskeri/pinpoint/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/m-ahmed-elbeskeri/pinpoint?color=ffd60a&labelColor=111113)](https://github.com/m-ahmed-elbeskeri/pinpoint/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-ffd60a?labelColor=111113)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-ffd60a?labelColor=111113)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-ffd60a?labelColor=111113)
 
 [**Download**](https://github.com/m-ahmed-elbeskeri/pinpoint/releases/latest) · [How it works](#how-it-works) · [Build from source](#build-from-source) · [Contributing](CONTRIBUTING.md)
@@ -300,4 +300,6 @@ Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.
 
 ## License
 
-[MIT](LICENSE)
+Copyright (c) 2026 m-ahmed-elbeskeri and Pinpoint contributors.
+
+Pinpoint is free software under the [GNU General Public License v3.0](LICENSE) or later: you can use, change and share it freely, and anything you distribute that is built from it has to be shared under the same terms, source included. Versions up to 0.3.0 were released under the MIT license.

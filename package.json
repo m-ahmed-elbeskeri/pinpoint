@@ -1,7 +1,7 @@
 {
   "name": "pinpoint",
   "productName": "Pinpoint",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Point at it. Draw on it. Ship it. A desktop visual editor that lets Claude Code or Codex change your web app from clicks, drawings and sketches.",
   "keywords": [
     "electron",
@@ -22,7 +22,7 @@
     "type": "git",
     "url": "git+https://github.com/m-ahmed-elbeskeri/pinpoint.git"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "author": {
     "name": "m-ahmed-elbeskeri",
     "url": "https://github.com/m-ahmed-elbeskeri"

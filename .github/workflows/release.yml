@@ -54,6 +54,8 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.AppImage
+            release/*.blockmap
+            release/latest*.yml
 
   publish:
     name: Publish release

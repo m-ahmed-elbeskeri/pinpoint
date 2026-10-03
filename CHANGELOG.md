@@ -4,6 +4,12 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-03
+
+### Changed
+
+- **License.** Pinpoint is now licensed under the GNU General Public License v3.0 or later (it was MIT up to 0.3.0). It stays free to use, change and share; versions and derivatives that are distributed have to be released under the same terms.
+
 ### Fixed
 
 - Screenshots of pages that set no background colour came out transparent (dark text on nothing). They are now on white, as the page looks.
@@ -104,7 +110,8 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/releases/tag/v0.1.0
