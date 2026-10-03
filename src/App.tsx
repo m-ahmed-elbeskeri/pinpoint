@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, Bug, Check, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
+  ArrowDown, ArrowLeft, ArrowRight, Bug, Check, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
   PenTool, Plus, RotateCw, Send, Settings as SettingsIcon, Smartphone, Square, SquarePen, Tablet,
   TerminalSquare, Trash2, X, PanelLeft, PanelRight, Paperclip, Palette, ImagePlus, Zap, CornerDownRight,
   AppWindow, Blend, Boxes, Brain, CircleDot, ClipboardCopy, Columns3, Download, Snowflake, SquareStack,
@@ -1775,17 +1775,36 @@ export default function App() {
   // scrolling up to read leaves it where it is. A message you send jumps back down.
   const stick = useRef(true);
   const chatLen = useRef(0);
+  // away: scrolled up from the end. fresh: something new arrived down there meanwhile.
+  const [away, setAway] = useState<{ fresh: boolean } | null>(null);
+  const awayRef = useRef(away);
+  awayRef.current = away;
   const onChatScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    // Only being right at the end counts as following along: any scroll up, however small, is left alone.
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
+    if (stick.current ? awayRef.current : !awayRef.current) setAway(stick.current ? null : { fresh: false });
   }, []);
+  // Scrolling up lets go at once, before the next line of output can pull the view back down.
+  const onChatWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (e.deltaY < 0 && el.scrollHeight > el.clientHeight) { stick.current = false; if (!awayRef.current) setAway({ fresh: false }); }
+  }, []);
+  const toLatest = () => {
+    const box = chatEnd.current?.parentElement;
+    if (!box) return;
+    stick.current = true;
+    setAway(null);
+    box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+  };
   useLayoutEffect(() => {
     const box = chatEnd.current?.parentElement;
     if (!box) return;
     const grew = chat.length > chatLen.current;
     chatLen.current = chat.length;
-    if (grew && chat[chat.length - 1]?.kind === 'user') stick.current = true;
+    if (grew && chat[chat.length - 1]?.kind === 'user') { stick.current = true; if (awayRef.current) setAway(null); }
     if (stick.current) box.scrollTop = box.scrollHeight;
+    else if (awayRef.current && !awayRef.current.fresh) setAway({ fresh: true });
   }, [chat, runId, job]);
 
   // The conversation's buttons, as one object that never changes identity, so
@@ -2305,7 +2324,7 @@ export default function App() {
           </div>
         )}
 
-        <div className="chat" onScroll={onChatScroll}>
+        <div className="chat" onScroll={onChatScroll} onWheel={onChatWheel}>
           {chat.length === 0 ? (
             <div className="chat-empty">
               <h3>How it works</h3>
@@ -2324,6 +2343,13 @@ export default function App() {
             <div className="working">
               <Loader2 size={14} className="spin" />{' '}
               {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is ${runMeta?.verify ? 'checking the result' : 'working'}…`}
+            </div>
+          )}
+          {away && chat.length > 0 && (
+            <div className="to-latest">
+              <button className={away.fresh ? 'fresh' : ''} onClick={toLatest} title="Go to the latest message">
+                <ArrowDown size={13} /> {away.fresh ? 'New messages' : 'Latest'}
+              </button>
             </div>
           )}
           <div ref={chatEnd} />

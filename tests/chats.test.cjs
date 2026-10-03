@@ -121,6 +121,24 @@ server.listen(0, '127.0.0.1', () => {
       log('coming back shows it still working, with what it has said so far', (await ui(`!!document.querySelector('.chat .working')`)) && /Starting on slow-gamma/.test(await ui(`document.querySelector('.chat').innerText`)));
       log('and it finishes on screen', await until(`document.querySelectorAll('.chat .done-card').length === 2 ? 1 : 0`, 15000) === 1, await ui(`document.querySelectorAll('.chat .done-card').length`));
       log('each chat kept its own agent session', (() => { const s = saved(); return s.length === 2 && new Set(s.map((c) => c.session && c.session.id)).size === 2; })(), saved().map((c) => c.session && c.session.id).join());
+
+      // ---- reading earlier messages while the agent keeps writing
+      await ui(`(() => { const c = document.querySelector('.chat'); c.style.flex = 'none'; c.style.height = '160px'; })()`);
+      await send('slow-delta please');
+      await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000);
+      await sleep(400);
+      const atEnd = await ui(`(() => { const c = document.querySelector('.chat'); return c.scrollHeight - c.scrollTop - c.clientHeight; })()`);
+      log('sending a message goes to the end of the chat', atEnd < 12 && !(await ui(`!!document.querySelector('.to-latest')`)), atEnd);
+      await ui(`(() => { const c = document.querySelector('.chat'); c.dispatchEvent(new WheelEvent('wheel', { deltaY: -200, bubbles: true })); c.scrollTop = 40; })()`);
+      await sleep(400);
+      log('scrolling up shows a way back to the latest message', (await ui(`document.querySelector('.to-latest button')?.textContent.trim()`)) === 'Latest');
+      await until(`document.querySelectorAll('.chat .done-card').length === 3 ? 1 : 0`, 15000);
+      await sleep(400);
+      log('new output does not pull the view back down', (await ui(`document.querySelector('.chat').scrollTop`)) === 40, await ui(`document.querySelector('.chat').scrollTop`));
+      log('and the button says there is something new', (await ui(`document.querySelector('.to-latest button')?.textContent.trim()`)) === 'New messages' && (await ui(`document.querySelector('.to-latest button').classList.contains('fresh')`)));
+      await ui(`document.querySelector('.to-latest button').click(); 0`);
+      const back = await until(`(() => { const c = document.querySelector('.chat'); return c.scrollHeight - c.scrollTop - c.clientHeight < 12 && !document.querySelector('.to-latest') ? 1 : 0; })()`, 4000);
+      log('pressing it goes to the end and the button leaves', back === 1);
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch { /* window covered */ }
     } catch (e) { log('exception', false, e.stack); }

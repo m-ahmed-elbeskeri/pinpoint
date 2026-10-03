@@ -640,3 +640,13 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   position: absolute; top: -3px; right: -3px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 999px;
   background: var(--accent); color: var(--on-accent); font-size: 9.5px; font-weight: 700; line-height: 14px; text-align: center;
 }
+
+/* ---------- back to the latest message ---------- */
+.to-latest { position: sticky; bottom: 4px; height: 0; display: flex; justify-content: center; align-items: flex-end; z-index: 3; flex-shrink: 0; pointer-events: none; }
+.to-latest button {
+  pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  background: var(--bg-4); border: 1px solid var(--line-2); color: var(--text); font-size: 11.5px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45); animation: pop .12s ease-out;
+}
+.to-latest button:hover { border-color: var(--muted); }
+.to-latest button.fresh { background: var(--accent); color: var(--on-accent); border-color: transparent; }

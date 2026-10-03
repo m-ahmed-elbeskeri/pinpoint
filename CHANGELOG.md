@@ -6,6 +6,7 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ### Changed
 
+- **Reading back in a chat.** Scrolling up, even a little, stops the chat from following new output. A **Latest** button appears at the bottom and turns into **New messages** when something has arrived; pressing it takes you back to the end.
 - **Record** sits with Browse, Select, Draw and Sketch in the top bar instead of among the icons on the right.
 
 ## [0.4.1] - 2026-10-03
