@@ -12,7 +12,7 @@ const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${nam
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-chats-'));
-fs.writeFileSync(path.join(proj, 'index.html'), '<!doctype html><html lang="en"><head><title>Home</title></head><body><h1>Home</h1></body></html>');
+fs.writeFileSync(path.join(proj, 'index.html'), '<!doctype html><html lang="en"><head><title>Home</title></head><body><h1>Home</h1><div style="height:3000px"></div><button id="deep" style="padding:20px">Deep button</button><div style="height:1500px"></div></body></html>');
 
 // The stand-in answers "slow" requests after a few seconds and everything else at once.
 // Each request writes a file named after its first word, so the tests can tell who did what.
@@ -50,7 +50,7 @@ server.listen(0, '127.0.0.1', () => {
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-ud-'));
   fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: proj, url: base + '/', claudePath: fakeBin, agent: 'claude', autoVerify: false, variants: 0, a11yCheck: false, routeCheck: false, perfCheck: false }));
   process.env.PINPOINT_USER_DATA = ud;
-  const { app, BrowserWindow } = require('electron');
+  const { app, BrowserWindow, webContents } = require('electron');
   require(path.join(repo, 'electron', 'main.cjs'));
 
   app.whenReady().then(async () => {
@@ -139,6 +139,53 @@ server.listen(0, '127.0.0.1', () => {
       await ui(`document.querySelector('.to-latest button').click(); 0`);
       const back = await until(`(() => { const c = document.querySelector('.chat'); return c.scrollHeight - c.scrollTop - c.clientHeight < 12 && !document.querySelector('.to-latest') ? 1 : 0; })()`, 4000);
       log('pressing it goes to the end and the button leaves', back === 1);
+
+      // ---- before/after screenshots show the annotated element, wherever the page was left
+      const guest = webContents.getAllWebContents().find((w) => w.getType() === 'webview');
+      const pg = (code) => guest.executeJavaScript(code);
+      await sleep(6000); // the last run's own "after" screenshot (and its one reload of a page without hot reload) is over
+      const cardsBefore = await ui(`document.querySelectorAll('.chat .done-card').length`);
+      await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true })); 0`);
+      await pg(`document.querySelector('#deep').scrollIntoView({ block: 'center', behavior: 'instant' }); 0`);
+      await sleep(400);
+      let picked = false;
+      for (let attempt = 0; attempt < 3 && !picked; attempt++) {
+        guest.focus();
+        const p = await pg(`(() => { const r = document.querySelector('#deep').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+        for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) guest.sendInputEvent({ type, x: p.x, y: p.y, button: 'left', clickCount: 1 });
+        await sleep(1500);
+        picked = await ui(`!!document.querySelector('.note-pop')`);
+      }
+      log('an element far down the page is picked', picked);
+      await pg(`window.scrollTo({ top: 0, behavior: 'instant' }); 0`);
+      await sleep(300);
+      await send('slow-frame please');
+      const inView = `(() => { const r = document.querySelector('#deep').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()`;
+      const trail = [];
+      let framed = false;
+      for (let i = 0; i < 20 && !framed; i++) { await sleep(150); framed = await pg(inView); trail.push(await pg(`Math.round(scrollY)`)); }
+      await sleep(1200);
+      log('sending brings it back into view for the "before" screenshot', framed && (await pg(inView)) === true, 'scroll positions: ' + trail.join(','));
+      await pg(`window.scrollTo({ top: 0, behavior: 'instant' }); 0`);
+      await until(`document.querySelectorAll('.chat .done-card').length > ${cardsBefore} ? 1 : 0`, 15000);
+      let again = false;
+      for (let i = 0; i < 30 && !again; i++) { await sleep(400); again = await pg(inView); }
+      log('the "after" screenshot is taken at the same place', again, await pg(`scrollY`));
+
+      // ---- a steering message that is waiting can be pushed in at once
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true })); 0`);
+      await send('slow-steer please');
+      await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000);
+      await sleep(500);
+      await send('quick-also this');
+      const waiting = await until(`document.querySelector('.msg.user.steer .steer-now') ? document.querySelector('.msg.user.steer:last-of-type .steer-tag, .msg.user.steer .steer-tag').textContent : ''`, 5000);
+      log('a message sent while the agent works waits behind its current step, with a Send now button', /Steered after the current step/.test(waiting || '') && /Send now/.test(waiting || ''), waiting);
+      await ui(`document.querySelector('.msg.user.steer .steer-now').click(); 0`);
+      const forced = await until(`!document.querySelector('.steer-now') && /Interrupted and sent/.test([...document.querySelectorAll('.msg.user.steer .steer-tag')].pop().textContent) ? 1 : 0`, 5000);
+      log('pressing it interrupts the agent and marks the message as sent', forced === 1, await ui(`[...document.querySelectorAll('.msg.user.steer .steer-tag')].pop().textContent`));
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 20000);
+      log('finished runs offer no Send now button', (await ui(`document.querySelectorAll('.steer-now').length`)) === 0);
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch { /* window covered */ }
     } catch (e) { log('exception', false, e.stack); }

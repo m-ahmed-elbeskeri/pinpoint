@@ -28,6 +28,38 @@ export interface PickedElement extends ElementInfo {
   shift: boolean;
 }
 
+export interface FrameTarget { uid: string; selector: string }
+
+// Runs in the page. Scrolls so the given elements are on screen (centred when they fit),
+// through any scrolling containers they sit in. With none of them found, goes to `fallbackY`.
+function framePage(targets: FrameTarget[], fallbackY: number | null) {
+  const els = targets.map((t) => {
+    const marked = document.querySelector(`[data-pinpoint="${t.uid}"]`);
+    if (marked) return marked;
+    try { return document.querySelector(t.selector); } catch { return null; }
+  }).filter((el): el is Element => !!el);
+  const box = () => {
+    let top = Infinity, bottom = -Infinity;
+    for (const el of els) { const r = el.getBoundingClientRect(); top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom); }
+    return { top, bottom };
+  };
+  if (!els.length) {
+    if (fallbackY != null) window.scrollTo({ top: fallbackY, behavior: 'instant' as ScrollBehavior });
+    return { found: false, y: Math.round(window.scrollY) };
+  }
+  let b = box();
+  if (b.top < 0 || b.bottom > innerHeight) {
+    els[0].scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
+    b = box();
+    // Several elements: centre the group when it fits, else start just above the first.
+    if (els.length > 1 && (b.top < 0 || b.bottom > innerHeight)) {
+      const h = b.bottom - b.top;
+      window.scrollBy({ top: h <= innerHeight ? b.top - (innerHeight - h) / 2 : b.top - 40, behavior: 'instant' as ScrollBehavior });
+    }
+  }
+  return { found: true, y: Math.round(window.scrollY) };
+}
+
 export interface BrowserHandle {
   load(url: string): void;
   back(): void;
@@ -49,6 +81,7 @@ export interface BrowserHandle {
   breakpoints(): Promise<Breakpoint[]>;                     // widths the page's CSS switches at
   classNames(): Promise<string[]>;                          // class names the page's CSS defines
   hasHmr(): Promise<boolean>;                               // the page updates itself when files change
+  frame(targets: FrameTarget[], fallbackY?: number): Promise<{ found: boolean; y: number }>; // bring these elements into view (or go back to a scroll position)
   workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>; // render a component alone, over the page
   closeWorkspace(): void;
   setStorage(entries: [string, string][]): Promise<boolean>; // true when a value changed
@@ -140,6 +173,9 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     closeWorkspace() { wv.current?.executeJavaScript(closeWorkspaceScript).catch(() => {}); },
     async setStorage(entries) {
       try { return !!(await wv.current!.executeJavaScript(storageScript(entries))); } catch { return false; }
+    },
+    async frame(targets, fallbackY) {
+      try { return await wv.current!.executeJavaScript(`(${framePage.toString()})(${JSON.stringify(targets)}, ${fallbackY == null ? 'null' : fallbackY})`); } catch { return { found: false, y: 0 }; }
     },
     async hasHmr() {
       const code = `!!(document.querySelector('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="/_next/static/chunks/"],script[src*="livereload"],script[src*="browser-sync"]') || window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__NUXT__ || window.__sveltekit_dev || Object.keys(window).some((k) => /^(webpackHotUpdate|webpackChunk|__webpack_hmr|__turbopack|__NEXT_HMR|__next_f$|__remixContext|__reactRouterContext)/.test(k)))`;

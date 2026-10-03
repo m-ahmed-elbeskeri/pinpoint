@@ -61,6 +61,11 @@
 
 /* ---------- steering ---------- */
 .msg.user.steer { border-style: dashed; border-color: rgba(255, 214, 10, .45); }
+.steer-now {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 7px; border-radius: 999px;
+  background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; letter-spacing: 0;
+}
+.steer-now:hover { filter: brightness(1.08); }
 .steer-tag { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--accent-2); }
 .run-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .stop-btn { color: #ff8aa0; }
@@ -369,17 +374,45 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 /* ---------- test conditions ---------- */
 .cond-wrap { position: relative; display: flex; }
 .cond-pop {
-  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; width: 300px; padding: 10px 12px 12px; display: grid; gap: 6px;
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; width: 340px; max-height: calc(100vh - 150px); overflow: hidden auto; padding: 0 0 8px;
   background: #17181e; border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.55); animation: pop .12s ease-out;
-  -webkit-app-region: no-drag; user-select: none;
+  -webkit-app-region: no-drag; user-select: none; scrollbar-width: thin;
 }
-.cond-pop h5 { margin: 4px 0 0; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-.cond-pop h5 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
-.cond-row { display: flex; flex-wrap: wrap; gap: 4px; }
-.vp-toggles .cond-pop button { width: auto; height: 22px; display: inline-flex; align-items: center; }
-.vp-toggles .cond-pop .chip { border-radius: 999px; color: var(--text-2); background: var(--bg-3); }
-.vp-toggles .cond-pop .chip.on { color: var(--accent-2); background: var(--accent-soft); }
-.vp-toggles .cond-pop .cond-reset { justify-self: start; margin-top: 4px; padding: 0 8px; }
+/* Buttons in the toolbar are small squares; in here they are whatever each control needs. */
+.vp-toggles .cond-pop button { width: auto; height: auto; border-radius: 0; display: flex; place-items: initial; color: inherit; }
+.vp-toggles .cond-pop button:hover { background: none; }
+.cond-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px 10px; background: #17181e; border-bottom: 1px solid var(--line); }
+.cond-head b { display: block; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.cond-head small { display: block; margin-top: 1px; font-size: 11px; color: var(--muted); }
+.vp-toggles .cond-pop .cond-reset { padding: 4px 10px; border-radius: 7px; border: 1px solid var(--line-2); font-size: 11.5px; font-weight: 600; color: var(--text); }
+.vp-toggles .cond-pop .cond-reset:hover:not(:disabled) { background: var(--bg-4); }
+.vp-toggles .cond-pop .cond-reset:disabled { opacity: .35; cursor: default; }
+.cond-pop section { padding: 10px 8px 2px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.cond-pop section + section { border-top: 1px solid var(--line); margin-top: 6px; }
+.cond-pop h5 { margin: 0 6px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.cond-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px; border-radius: 8px; text-align: left; }
+.cond-label { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.cond-label b { font-size: 12px; font-weight: 500; color: var(--text); }
+.cond-label small { font-size: 10.5px; line-height: 1.35; color: var(--muted); }
+.vp-toggles .cond-pop .cond-toggle { width: 100%; border-radius: 8px; cursor: pointer; }
+.vp-toggles .cond-pop .cond-toggle:hover { background: var(--bg-3); }
+.cond-knob { position: relative; flex-shrink: 0; width: 28px; height: 16px; border-radius: 999px; background: var(--bg-4); box-shadow: inset 0 0 0 1px var(--line-2); transition: background .12s; }
+.cond-knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-2); transition: transform .12s, background .12s; }
+.cond-toggle.on .cond-knob { background: var(--accent); box-shadow: none; }
+.cond-toggle.on .cond-knob::after { transform: translateX(12px); background: var(--on-accent); }
+.cond-toggle.on .cond-label b { color: var(--accent-2); }
+.cond-seg { display: flex; flex-shrink: 0; padding: 2px; gap: 2px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.cond-pop section > .cond-seg, .cond-anim { margin: 0 6px; }
+.cond-pop section > .cond-seg button, .cond-anim .cond-seg { flex: 1; }
+.cond-anim .cond-seg button { flex: 1; }
+.vp-toggles .cond-pop .cond-seg button { align-items: center; justify-content: center; gap: 4px; padding: 4px 9px; border-radius: 6px; font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+.vp-toggles .cond-pop .cond-seg button:hover { color: var(--text); background: var(--bg-3); }
+.vp-toggles .cond-pop .cond-seg button.on { color: var(--on-accent); background: var(--accent); font-weight: 600; }
+.cond-note { margin: 6px 6px 4px; font-size: 10.5px; line-height: 1.4; color: var(--muted); }
+.cond-anim { display: flex; align-items: center; gap: 6px; padding-bottom: 6px; }
+.vp-toggles .cond-pop .cond-step { align-items: center; gap: 4px; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--line-2); font-size: 11.5px; color: var(--text); white-space: nowrap; }
+.vp-toggles .cond-pop .cond-step:hover:not(:disabled) { background: var(--bg-4); }
+.vp-toggles .cond-pop .cond-step:disabled { opacity: .35; cursor: default; }
 
 /* ---------- recording / isolate tags ---------- */
 .mode-seg button:disabled { opacity: .4; cursor: default; }
@@ -650,3 +683,34 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 }
 .to-latest button:hover { border-color: var(--muted); }
 .to-latest button.fresh { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+/* ---------- terminal ---------- */
+.term-wrap { flex: 1; min-height: 0; }
+.term { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #131419; }
+.term-bar { display: flex; align-items: center; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
+.term-tab {
+  display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px 0 10px; border-radius: 7px 7px 0 0; cursor: pointer;
+  color: var(--muted); font-size: 11.5px; white-space: nowrap; border: 1px solid transparent; border-bottom: 0;
+}
+.term-tab:hover { color: var(--text-2); }
+.term-tab.on { color: var(--text); background: var(--bg-3); border-color: var(--line); }
+.term-tab.ended span { text-decoration: line-through; opacity: .7; }
+.term-tab button { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; color: inherit; opacity: .55; }
+.term-tab button:hover { opacity: 1; background: var(--bg-4); }
+.term-new { position: relative; display: flex; align-items: center; margin-left: 4px; flex-shrink: 0; }
+.term-plus { display: grid; place-items: center; height: 22px; min-width: 20px; padding: 0 3px; border-radius: 5px; color: var(--muted); }
+.term-plus:hover:not(:disabled) { color: var(--text); background: var(--bg-3); }
+.term-plus:disabled { opacity: .4; }
+.term-menu {
+  position: fixed; z-index: 60; min-width: 260px; max-width: 420px; padding: 6px; border-radius: 10px;
+  background: var(--bg-3); border: 1px solid var(--line-2); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); display: flex; flex-direction: column; gap: 2px;
+}
+.term-menu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 8px; border-radius: 6px; text-align: left; color: var(--text); }
+.term-menu button:hover { background: var(--bg-4); }
+.term-menu button b { font-size: 12px; font-weight: 600; }
+.term-menu button small { font: 10.5px var(--mono); color: var(--muted); max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-body { flex: 1; min-height: 0; position: relative; padding: 6px 0 4px 10px; }
+.term-screen { width: 100%; height: 100%; }
+.term-screen .xterm { height: 100%; }
+.term-screen .xterm-viewport { background: transparent !important; }
+.term-msg { padding: 8px 4px; color: var(--muted); font: 11.5px/1.5 var(--mono); }

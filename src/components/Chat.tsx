@@ -309,6 +309,8 @@ function Thinking({ text, streaming }: { text: string; streaming?: boolean }) {
 
 interface ItemProps {
   item: ChatItem;
+  live?: boolean;                 // part of the run that is going on right now
+  onForceSteer(id: string): void; // push a waiting message in now
   root: string;
   busy: boolean;
   onReload(): void;
@@ -332,13 +334,22 @@ const STEER_TAG = {
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
 
-export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, gitRepo }: ItemProps) {
+export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, gitRepo }: ItemProps) {
   switch (item.kind) {
     case 'user': {
       const tag = item.steer ? STEER_TAG[item.steer] : null;
       return (
         <div className={`msg user ${item.steer ? 'steer' : ''}`}>
-          {tag && <div className="steer-tag"><tag.icon size={11} /> {tag.text}</div>}
+          {tag && (
+            <div className="steer-tag">
+              <tag.icon size={11} /> {tag.text}
+              {live && item.steer !== 'now' && (
+                <button className="steer-now" onClick={() => onForceSteer(item.id)} title={item.steer === 'later' ? 'Stop the agent and send this now' : "Interrupt the agent's current step so it reads this now"}>
+                  <Zap size={10} /> Send now
+                </button>
+              )}
+            </div>
+          )}
           {item.background && <div className="steer-tag"><Layers size={11} /> Running in the background</div>}
           {item.variants && <div className="steer-tag"><Layers size={11} /> {item.variants} variants</div>}
           {item.annotations.length > 0 && (
@@ -497,7 +508,7 @@ export function ChatItemView({ item, root, busy, onReload, onUndo, onReview, onM
   }
 }
 
-export type ChatActions = Omit<ItemProps, 'item' | 'root' | 'busy' | 'gitRepo'>;
+export type ChatActions = Omit<ItemProps, 'item' | 'live' | 'root' | 'busy' | 'gitRepo'>;
 
 // A message is rendered again only when it changes itself, so a long conversation
 // costs nothing while you type, drag a divider, or the agent streams its next line.
@@ -505,5 +516,8 @@ const ChatRow = memo(ChatItemView);
 export const ChatList = memo(function ChatList({ items, actions, root, busy, gitRepo }: {
   items: ChatItem[]; actions: ChatActions; root: string; busy: boolean; gitRepo: boolean;
 }) {
-  return <>{items.map((item) => <ChatRow key={item.id} item={item} root={root} busy={busy} gitRepo={gitRepo} {...actions} />)}</>;
+  // Messages after the last finished run belong to the one going on now.
+  let lastDone = -1;
+  if (busy) items.forEach((it, i) => { if (it.kind === 'done') lastDone = i; });
+  return <>{items.map((item, i) => <ChatRow key={item.id} item={item} live={busy && i > lastDone && item.kind === 'user'} root={root} busy={busy} gitRepo={gitRepo} {...actions} />)}</>;
 });

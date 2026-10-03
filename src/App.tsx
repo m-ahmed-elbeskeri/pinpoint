@@ -5,14 +5,13 @@ import {
   TerminalSquare, Trash2, X, PanelLeft, PanelRight, Paperclip, Palette, ImagePlus, Zap, CornerDownRight,
   AppWindow, Blend, Boxes, Brain, CircleDot, ClipboardCopy, Columns3, Download, Snowflake, SquareStack,
 } from 'lucide-react';
-import { BrowserView, sleep, type BrowserHandle, type PickedElement } from './components/BrowserView';
+import { BrowserView, sleep, type BrowserHandle, type FrameTarget, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
 import { DrawToolbar, TOOL_KEYS } from './components/DrawToolbar';
 import { ChatList, invalidateDiff, shortPath, type ChatActions } from './components/Chat';
 import { SettingsModal } from './components/SettingsModal';
-import { Drawer } from './components/Drawer';
+import { Drawer, type DrawerTab } from './components/Drawer';
 import { AgentControls } from './components/AgentControls';
-import { Logo } from './components/Logo';
 import { Welcome } from './components/Welcome';
 import { ContextSheet, type ContextTab } from './components/ContextSheet';
 import { ContextBar } from './components/ContextBar';
@@ -116,7 +115,8 @@ interface AgentRequest {
 }
 
 // What kind of run an id is: a normal request, one of several variants, or the automatic check.
-interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number }
+// frame: what the "before" screenshot was aimed at, so the "after" one shows the same place.
+interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number } }
 
 // Several queued messages become one follow-up, renumbering their annotations.
 function mergeRequests(reqs: AgentRequest[]): AgentRequest {
@@ -359,7 +359,7 @@ export default function App() {
   const [panelWidth, setPanelWidth] = useState<number | null>(null);
   const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
   const [resizing, setResizing] = useState<'panel' | 'drawer' | 'device' | null>(null);
-  const [drawerTab, setDrawerTab] = useState<'dev' | 'agent'>('dev');
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>('term');
   const [devLog, setDevLog] = useState('');
   const [agentLog, setAgentLog] = useState('');
   const [devRunning, setDevRunning] = useState(false);
@@ -1331,6 +1331,15 @@ export default function App() {
 
       const b = browser.current!;
       const hasPage = !!navRef.current.url && navRef.current.url !== 'about:blank';
+      // The screenshots show where the change is asked for: the annotated elements are brought
+      // into view first, wherever the page has been scrolled to since they were picked.
+      const targets: FrameTarget[] = anns.flatMap((a) => (a.kind === 'element' && a.element && (!a.pageUrl || a.pageUrl === navRef.current.url) ? [{ uid: a.element.uid, selector: a.element.selector }] : []));
+      let frame: RunMeta['frame'];
+      if (hasPage) {
+        const at = await b.frame(targets);
+        frame = { targets, y: at.y };
+        if (targets.length) await sleep(140); // the overlay's markers follow the scroll on the next frames
+      }
       let overview: string | undefined;
       if (hasPage && (anns.some((a) => a.kind === 'element') || (anns.length === 0 && !runRef.current))) {
         b.send('clean');
@@ -1406,14 +1415,24 @@ export default function App() {
       setChat((c) => [...c, { kind: 'user', id: uid(), text: request.instruction, annotations: thumbs, agent: settings.agent, ...(total && { variants: total }) }]);
       if (total) {
         variantJob.current = { base: request, total, index: 1, done: [] };
-        await startRun({ ...request, variant: { index: 1, total } }, before, { variant: { index: 1, total } });
-      } else await startRun(request, before);
+        await startRun({ ...request, variant: { index: 1, total } }, before, { variant: { index: 1, total }, frame });
+      } else await startRun(request, before, { frame });
     } catch (e) {
       setChat((c) => [...c, { kind: 'error', id: uid(), text: errText(e) }]);
     } finally { setBusy(null); }
   };
 
   const cancel = () => { if (runId) api.cancelAgent(runId); };
+
+  // A steering message that is waiting (behind the agent's current step, or for the run to end) goes in now.
+  const forceSteer = async (itemId: string) => {
+    const running = runRef.current;
+    const item = chatRef.current.find((it) => it.id === itemId);
+    if (!running || !item || item.kind !== 'user') return;
+    if (item.steer === 'later') api.cancelAgent(running); // this run can't take messages: stopping it sends what is queued
+    else if (!(await api.nudgeAgent(running).catch(() => false))) { flash("The agent couldn't be interrupted just now."); return; }
+    setChat((c) => c.map((it) => (it.id === itemId && it.kind === 'user' ? { ...it, steer: 'now' as const } : it)));
+  };
 
   // Marks reverted files on the run's card after an undo or a per-file revert.
   const applyRevert = (id: string, r: RevertResult) => {
@@ -1450,6 +1469,10 @@ export default function App() {
     for (let i = 0; i < 40 && loadingRef.current; i++) await sleep(200);
     await sleep(400);
     if (navRef.current.url !== url) return; // user moved to another page meanwhile
+    // The same place as the "before" screenshot, even if the page was scrolled or reloaded since.
+    const frame = runMetaRef.current[id]?.frame;
+    const aim = async () => { if (frame) { await browser.current?.frame(frame.targets, frame.y); await sleep(150); } };
+    await aim();
     let shot = await cleanCapture();
     if (!shot) return;
     // Did anything on screen actually change? Said plainly on the run's card when it didn't.
@@ -1466,6 +1489,7 @@ export default function App() {
       await sleep(500);
       for (let i = 0; i < 40 && loadingRef.current; i++) await sleep(200);
       await sleep(700);
+      if (navRef.current.url === url) await aim();
       const again = navRef.current.url === url ? await cleanCapture() : null;
       if (again) { shot = again; visual = await judge(again); }
     }
@@ -1500,7 +1524,7 @@ export default function App() {
     // The session already has the request and its screenshots; without one, send it all again.
     const slim = !!sessionRef.current;
     const variant = { index: j.index, total: j.total };
-    startRun({ ...j.base, ...(slim && { instruction: '', annotations: [], overview: undefined }), diagnostics: undefined, note: undefined, variant }, before, { variant });
+    startRun({ ...j.base, ...(slim && { instruction: '', annotations: [], overview: undefined }), diagnostics: undefined, note: undefined, variant }, before, { variant, frame: runMetaRef.current[e.runId]?.frame });
   };
 
   // Everything that follows a finished run: screenshots, the next variant, the automatic check.
@@ -1820,6 +1844,7 @@ export default function App() {
     onCompare: (id: string, pair?: string) => setCompare({ runId: id, pair, ...(pair && { title: `Other page: /${pair.replace(/^route-/, '').replace(/^home$/, '')}` }) }),
     onPickVariant: pickVariant,
     onMeasureBuild: measureBuild,
+    onForceSteer: forceSteer,
   };
   const chatHandlersRef = useRef(chatHandlers);
   chatHandlersRef.current = chatHandlers;
@@ -1834,6 +1859,7 @@ export default function App() {
     onCompare: (...a) => chatHandlersRef.current.onCompare(...a),
     onPickVariant: (...a) => chatHandlersRef.current.onPickVariant(...a),
     onMeasureBuild: (...a) => chatHandlersRef.current.onMeasureBuild(...a),
+    onForceSteer: (...a) => chatHandlersRef.current.onForceSteer(...a),
   }), []);
 
   // ---------- dev server ----------
@@ -2025,8 +2051,6 @@ export default function App() {
     <div className={`app ${resizing ? 'resizing' : ''}`} style={gridStyle}>
       {/* ---------- top bar ---------- */}
       <header className="topbar">
-        <div className="brand" title="Pinpoint"><Logo size={24} /></div>
-
         <button className="project-btn" onClick={pickProject} title={settings.projectDir || 'Choose the project folder the agent edits'}>
           <FolderOpen size={14} />
           <span>{settings.projectDir ? settings.projectDir.split(/[\\/]/).pop() : 'Open project'}</span>
@@ -2053,7 +2077,7 @@ export default function App() {
               <Download size={13} /> {update.status === 'ready' ? 'Restart to update' : update.status === 'available' ? `Get ${update.version}` : `Updating${update.percent ? ` ${update.percent}%` : '…'}`}
             </button>
           )}
-          <button className={`icon-btn ${drawerOpen ? 'on' : ''}`} onClick={() => setDrawerOpen(!drawerOpen)} title="Dev server & logs">
+          <button className={`icon-btn ${drawerOpen ? 'on' : ''}`} onClick={() => setDrawerOpen(!drawerOpen)} title="Terminal, dev server and logs">
             <TerminalSquare size={16} />{devRunning && <span className="live-dot abs" />}
           </button>
           <button
@@ -2467,6 +2491,7 @@ export default function App() {
         <div className={`resizer row ${resizing === 'drawer' ? 'on' : ''}`} onPointerDown={startResize('drawer')} />
         <Drawer
           tab={drawerTab} setTab={setDrawerTab} devLog={devLog} agentLog={agentLog}
+          cwd={projectDir} shell={settings.terminalShell} onShell={(terminalShell) => { if (terminalShell !== settingsRef.current?.terminalShell) saveSettings({ terminalShell }); }}
           devRunning={devRunning} devCommand={devCommand} devCandidates={devInfo?.candidates}
           onStartDev={startDev} onStopDev={() => api.stopDev()} onClose={() => setDrawerOpen(false)}
         />

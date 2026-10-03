@@ -4,7 +4,19 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-03
+
+### Added
+
+- **A real terminal.** The drawer has a Terminal tab that runs a shell in your project folder: type commands, see colours, resize it. The arrow next to **+** lists the shells installed on your computer (PowerShell, Command Prompt, Git Bash and WSL on Windows; zsh, bash, fish and others on macOS and Linux) and remembers the one you pick. Several terminals can be open at once, and they keep running while the drawer is closed.
+
+- **Send now on a waiting message.** A message you send while the agent works waits behind its current step. It now carries a **Send now** button that interrupts the step so the agent reads it at once (or, for a run that can't take messages, stops the run and sends it).
+
 ### Changed
+
+- **Test conditions menu redesigned.** Each option is a labelled row saying what it does, with switches for on/off settings and segmented controls for choices, a line showing what is changed from normal, and one Reset button.
+- **The logo is gone from the top bar**, leaving more room for the project and mode buttons.
+- **Before and after screenshots show the place you annotated.** When you send, the page is scrolled so the elements you picked are in view before the "before" screenshot is taken, wherever you had scrolled to since. The "after" screenshot is taken at the same place, even if you scrolled away while the agent worked.
 
 - **Reading back in a chat.** Scrolling up, even a little, stops the chat from following new output. A **Latest** button appears at the bottom and turns into **New messages** when something has arrived; pressing it takes you back to the end.
 - **Record** sits with Browse, Select, Draw and Sketch in the top bar instead of among the icons on the right.
@@ -137,7 +149,8 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.2.0...v0.3.0

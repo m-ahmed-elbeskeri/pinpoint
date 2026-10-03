@@ -140,10 +140,10 @@ server.listen(0, '127.0.0.1', () => {
       await shot('responsive');
       await ui(`document.querySelector('.vp-toggles .cond-wrap > button').click(); 0`);
       await shot('conditions');
-      await ui(`[...document.querySelectorAll('.cond-pop .chip')].find((c) => c.textContent === 'Long text').click(); 0`);
+      await ui(`[...document.querySelectorAll('.cond-pop .cond-toggle')].find((c) => c.querySelector('b').textContent === 'Long text').click(); 0`);
       await sleep(500);
       log('stress test from the menu', /Summer sale Summer sale/.test(await pg(`h.textContent`)));
-      await ui(`[...document.querySelectorAll('.cond-pop .chip')].find((c) => c.textContent === 'Long text').click(); document.querySelector('.vp-toggles .cond-wrap > button').click(); 0`);
+      await ui(`[...document.querySelectorAll('.cond-pop .cond-toggle')].find((c) => c.querySelector('b').textContent === 'Long text').click(); document.querySelector('.vp-toggles .cond-wrap > button').click(); 0`);
       await ui(`[...document.querySelectorAll('.vp-toggles > button')].find((b) => b.title.startsWith('Phone, tablet')).click(); 0`);
       await sleep(3500);
       log('multi debug', true, JSON.stringify(await ui(`[!!document.querySelector('.multi'), [...document.querySelectorAll('.vp-toggles > button')].find((b) => b.title.startsWith('Phone, tablet')).outerHTML.slice(0, 200), window.__clicks.slice(-6)]`)));

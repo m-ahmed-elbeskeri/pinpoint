@@ -20,15 +20,15 @@ export const NO_CONDITIONS: Conditions = { stress: [], network: 'normal', anim: 
 
 export const STRESS: { id: string; label: string; hint: string }[] = [
   { id: 'long', label: 'Long text', hint: 'Every piece of text three times as long' },
-  { id: 'pseudo', label: 'Pseudo-localized', hint: 'Accented and longer, like a translation' },
+  { id: 'pseudo', label: 'Translated-length text', hint: 'Accented and longer, like a translation' },
   { id: 'rtl', label: 'Right-to-left', hint: 'dir="rtl" on the page' },
   { id: 'empty', label: 'Empty lists', hint: 'Lists, tables and repeated items emptied' },
 ];
 export const NETWORK: { id: NetworkMode; label: string; hint: string }[] = [
-  { id: 'normal', label: 'Normal', hint: 'No simulation' },
-  { id: 'slow', label: 'Slow', hint: 'Slow 3G: 400 ms latency, 50 kB/s' },
-  { id: 'hang', label: 'Loading', hint: 'API requests never answer: the page stays in its loading state' },
-  { id: 'error', label: 'Errors', hint: 'API requests fail with 500: the page shows its error state' },
+  { id: 'normal', label: 'Normal', hint: 'Your real network and API' },
+  { id: 'slow', label: 'Slow', hint: 'Slow 3G: 400 ms delay, 50 kB a second' },
+  { id: 'hang', label: 'Stuck', hint: 'API requests never answer: the page stays in its loading state' },
+  { id: 'error', label: 'Failing', hint: 'API requests fail with 500: the page shows its error state' },
   { id: 'offline', label: 'Offline', hint: 'No network at all' },
 ];
 const SPEEDS = [{ rate: 1, label: '100%' }, { rate: 0.25, label: '25%' }, { rate: 0.1, label: '10%' }];
@@ -48,42 +48,87 @@ interface ConditionsProps {
   layout: boolean; setLayout(on: boolean): void;
 }
 
+// One row of the menu: what it is, a line saying what it does, and its control.
+function CondRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="cond-item">
+      <div className="cond-label"><b>{label}</b>{hint && <small>{hint}</small>}</div>
+      {children}
+    </div>
+  );
+}
+// An on/off switch. The whole row is the click target.
+function CondSwitch({ label, hint, on, set }: { label: string; hint: string; on: boolean; set(on: boolean): void }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} className={`cond-item cond-toggle ${on ? 'on' : ''}`} onClick={() => set(!on)}>
+      <span className="cond-label"><b>{label}</b><small>{hint}</small></span>
+      <i className="cond-knob" />
+    </button>
+  );
+}
+// One choice out of a few.
+function CondSeg<T>({ options, value, set }: { options: { id: T; label: React.ReactNode; hint?: string }[]; value: T; set(v: T): void }) {
+  return (
+    <div className="cond-seg" role="radiogroup">
+      {options.map((o) => (
+        <button key={String(o.id)} type="button" role="radio" aria-checked={value === o.id} className={value === o.id ? 'on' : ''} onClick={() => set(o.id)} title={o.hint}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLayout }: ConditionsProps) {
   const [open, setOpen] = useState(false);
   const ref = useClickAway(open, () => setOpen(false));
   const count = describeConditions(value).length + (env.colorScheme ? 1 : 0) + (env.reducedMotion ? 1 : 0);
   const toggle = (id: string) => set({ ...value, stress: value.stress.includes(id) ? value.stress.filter((s) => s !== id) : [...value.stress, id] });
+  const reset = () => { set(NO_CONDITIONS); setEnv({ colorScheme: null, reducedMotion: false }); };
+  const net = NETWORK.find((n) => n.id === value.network)!;
 
   return (
     <div className="cond-wrap" ref={ref}>
-      <button type="button" className={count ? 'on' : ''} onClick={() => setOpen(!open)} title="How the page is shown: color scheme, motion, content stress tests, data states, animation speed">
+      <button type="button" className={count ? 'on' : ''} onClick={() => setOpen(!open)} title="Test conditions: theme, motion, awkward content, slow or failing data, animation speed">
         <FlaskConical size={14} />{count > 0 && <i className="cond-count">{count}</i>}
       </button>
       {open && (
         <div className="cond-pop">
-          <h5>Display</h5>
-          <div className="cond-row">
-            {([[null, 'System'], ['dark', 'Dark'], ['light', 'Light']] as const).map(([v, label]) => (
-              <button key={label} type="button" className={`chip ${env.colorScheme === v ? 'on' : ''}`} onClick={() => setEnv({ ...env, colorScheme: v })} title="Emulates prefers-color-scheme">{label}</button>
-            ))}
-            <button type="button" className={`chip ${env.reducedMotion ? 'on' : ''}`} onClick={() => setEnv({ ...env, reducedMotion: !env.reducedMotion })} title="Emulates prefers-reduced-motion">Reduced motion</button>
-            <button type="button" className={`chip ${layout ? 'on' : ''}`} onClick={() => setLayout(!layout)} title="While selecting: margin (orange), padding (green), flex and grid children. Hold Alt to measure from the selected element.">Layout overlay</button>
+          <div className="cond-head">
+            <div><b>Test conditions</b><small>{count ? `${count} changed from normal` : 'The page as it normally is'}</small></div>
+            <button type="button" className="cond-reset" disabled={!count} onClick={reset}>Reset</button>
           </div>
-          <h5>Content</h5>
-          <div className="cond-row">
-            {STRESS.map((s) => <button key={s.id} type="button" className={`chip ${value.stress.includes(s.id) ? 'on' : ''}`} onClick={() => toggle(s.id)} title={s.hint}>{s.label}</button>)}
-          </div>
-          <h5>Data <span className="hint">reloads the page</span></h5>
-          <div className="cond-row">
-            {NETWORK.map((n) => <button key={n.id} type="button" className={`chip ${value.network === n.id ? 'on' : ''}`} onClick={() => set({ ...value, network: n.id })} title={n.hint}>{n.label}</button>)}
-          </div>
-          <h5>Animations</h5>
-          <div className="cond-row">
-            {SPEEDS.map((s) => <button key={s.rate} type="button" className={`chip ${value.anim === s.rate ? 'on' : ''}`} onClick={() => set({ ...value, anim: s.rate })}>{s.label}</button>)}
-            <button type="button" className={`chip ${value.anim === 0 ? 'on' : ''}`} onClick={() => set({ ...value, anim: 0 })} title="Pause every animation and transition"><Pause size={11} /> Pause</button>
-            <button type="button" className="chip" disabled={value.anim !== 0} onClick={onStep} title="While paused: advance by about a tenth of a second"><StepForward size={11} /> Step</button>
-          </div>
-          {count > 0 && <button type="button" className="btn xs ghost cond-reset" onClick={() => { set(NO_CONDITIONS); setEnv({ colorScheme: null, reducedMotion: false }); }}>Back to normal</button>}
+
+          <section>
+            <h5>Appearance</h5>
+            <CondRow label="Theme" hint="Light or dark, as the system reports it">
+              <CondSeg options={[{ id: null, label: 'System' }, { id: 'dark' as const, label: 'Dark' }, { id: 'light' as const, label: 'Light' }]} value={env.colorScheme} set={(colorScheme) => setEnv({ ...env, colorScheme })} />
+            </CondRow>
+            <CondSwitch label="Reduced motion" hint="As for someone who has turned animations off" on={env.reducedMotion} set={(reducedMotion) => setEnv({ ...env, reducedMotion })} />
+            <CondSwitch label="Layout guides" hint="Margins, padding, flex and grid while selecting. Alt measures." on={layout} set={setLayout} />
+          </section>
+
+          <section>
+            <h5>Awkward content</h5>
+            {STRESS.map((s) => <CondSwitch key={s.id} label={s.label} hint={s.hint} on={value.stress.includes(s.id)} set={() => toggle(s.id)} />)}
+          </section>
+
+          <section>
+            <h5>Data</h5>
+            <CondSeg options={NETWORK} value={value.network} set={(network) => set({ ...value, network })} />
+            <p className="cond-note">{net.hint}.{value.network !== 'normal' ? ' The page reloads to show it.' : ''}</p>
+          </section>
+
+          <section>
+            <h5>Animation speed</h5>
+            <div className="cond-anim">
+              <CondSeg
+                options={[...SPEEDS.map((sp) => ({ id: sp.rate, label: sp.label })), { id: 0, label: <><Pause size={11} /> Paused</>, hint: 'Hold every animation and transition where it is' }]}
+                value={value.anim} set={(anim) => set({ ...value, anim })}
+              />
+              <button type="button" className="cond-step" disabled={value.anim !== 0} onClick={onStep} title={value.anim === 0 ? 'Move every animation on by about a tenth of a second' : 'Pause first, then step through frame by frame'}>
+                <StepForward size={12} /> Step
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>

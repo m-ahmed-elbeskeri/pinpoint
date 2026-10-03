@@ -166,6 +166,7 @@ The tablet and phone buttons next to the address bar open a device toolbar like 
 | **Routes** | Pinpoint finds your pages (Next.js, Astro, Nuxt, SvelteKit, Remix, React Router, plain HTML) and tells the agent which file renders the current one. |
 | **Models and access** | One control for the model and its thinking level (click or drag the slider), and how much the agent may do: **Plan only**, **Edit files** or **Full access**. |
 | **Chat history** | Conversations are saved per project and reopen where you left off. |
+| **Terminal** | A real shell in the project folder, in the bottom drawer. Pick any shell installed on your computer; open several; they keep running while the drawer is closed. |
 | **Several chats at once** | Start or open another chat while one is still working. It keeps going out of sight and shows above the conversation until you look at its result. |
 | **Git** | Branch per chat, commit per run, and pull requests through the GitHub CLI (`gh`). |
 | **Dev server** | Start your dev server from the built-in terminal. Pinpoint opens the URL it prints. |

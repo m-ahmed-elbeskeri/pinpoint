@@ -168,6 +168,10 @@ export interface GitStatus {
   gh: { installed: boolean; authed: boolean; user: string | null };
 }
 
+// A shell installed on this computer, and a terminal running one.
+export interface TermShell { id: string; name: string; path: string; args: string[] }
+export interface TermSession { id: string; shell: string; name: string; exited: boolean; cols: number; rows: number }
+
 // A chat of this project that isn't the one on screen but is working, or finished unseen.
 export interface OtherChat { id: string; title: string; running: boolean }
 
@@ -215,6 +219,7 @@ export interface Settings {
   recentProjects: string[];
   panelSide: 'left' | 'right';
   panelWidth: number;
+  terminalShell?: string;        // the shell new terminals start in
   panelHidden: boolean;
   drawerHeight: number;
   useDesign: boolean;
@@ -308,6 +313,16 @@ export interface PinpointAPI {
   onBgEvent(cb: (e: { id: string; type: 'step' | 'done'; text?: string; ok?: boolean; files?: FileChange[]; summary?: string; shot?: boolean }) => void): () => void;
   updateState(): Promise<UpdateState>;
   updateInstall(): Promise<boolean>;
+  nudgeAgent(runId: string): Promise<boolean>;
+  termShells(): Promise<TermShell[]>;
+  termList(): Promise<TermSession[]>;
+  termOpen(opts: { shell?: string; cwd?: string; cols: number; rows: number }): Promise<TermSession>;
+  termAttach(id: string): Promise<(TermSession & { buffer: string }) | null>;
+  termWrite(id: string, data: string): void;
+  termResize(id: string, cols: number, rows: number): void;
+  termClose(id: string): void;
+  onTermData(cb: (e: { id: string; data: string }) => void): () => void;
+  onTermExit(cb: (e: { id: string; code: number }) => void): () => void;
   onUpdateState(cb: (s: UpdateState) => void): () => void;
   listPins(): Promise<Pin[]>;
   addPin(pin: { url: string; label: string }): Promise<Pin[]>;

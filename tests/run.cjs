@@ -32,6 +32,7 @@ const SUITES = [
   { name: 'tabs', runner: 'electron', window: true, about: 'browser tabs' },
   { name: 'flows', runner: 'electron', window: true, about: 'agent runs end to end (stand-in agent)' },
   { name: 'chats', runner: 'electron', window: true, about: 'several chats working at once' },
+  { name: 'terminal', runner: 'electron', window: true, about: 'the terminal in the drawer' },
   { name: 'background', runner: 'electron', window: true, about: 'background runs in git worktrees' },
   { name: 'vite', runner: 'electron', window: true, needs: 'viteapp', about: 'instant edits, drag, workspace, profiles on a Vite project' },
   { name: 'engines', runner: 'electron', optIn: 'engines', about: 'WebKit and Firefox rendering' },

@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Play, Square, X } from 'lucide-react';
 import type { DevCandidate } from '../lib/types';
 
+// The terminal (and the library that draws it) is loaded the first time its tab is opened.
+const TerminalPane = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPane })));
+
+export type DrawerTab = 'term' | 'dev' | 'agent';
 interface Props {
-  tab: 'dev' | 'agent';
-  setTab(t: 'dev' | 'agent'): void;
+  tab: DrawerTab;
+  setTab(t: DrawerTab): void;
+  cwd: string;
+  shell?: string;
+  onShell(shell: string): void;
   devLog: string;
   agentLog: string;
   devRunning: boolean;
@@ -15,10 +22,12 @@ interface Props {
   onClose(): void;
 }
 
-// Bottom drawer: the dev-server terminal and raw agent logs.
+// Bottom drawer: a terminal, the dev server's output and raw agent logs.
 export function Drawer(p: Props) {
   const [cmd, setCmd] = useState(p.devCommand);
   const pre = useRef<HTMLPreElement>(null);
+  const seen = useRef(false); // the terminal tab has been opened at least once
+  if (p.tab === 'term') seen.current = true;
   const text = p.tab === 'dev' ? p.devLog : p.agentLog;
 
   useEffect(() => { setCmd(p.devCommand); }, [p.devCommand]);
@@ -28,6 +37,7 @@ export function Drawer(p: Props) {
     <div className="drawer">
       <div className="drawer-head">
         <div className="tabs">
+          <button className={p.tab === 'term' ? 'on' : ''} onClick={() => p.setTab('term')}>Terminal</button>
           <button className={p.tab === 'dev' ? 'on' : ''} onClick={() => p.setTab('dev')}>
             Dev server {p.devRunning && <span className="live-dot" />}
           </button>
@@ -45,9 +55,14 @@ export function Drawer(p: Props) {
               : <button type="submit" className="btn xs primary"><Play size={11} /> Run</button>}
           </form>
         )}
+        {p.tab !== 'dev' && <div className="spacer" />}
         <button className="icon-btn" onClick={p.onClose}><X size={15} /></button>
       </div>
-      <pre ref={pre} className="drawer-log">{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>
+      {/* Kept mounted while the drawer is open, so switching tabs doesn't redraw the terminal. */}
+      <div className="term-wrap" style={{ display: p.tab === 'term' ? 'flex' : 'none' }}>
+        {(p.tab === 'term' || seen.current) && <Suspense fallback={null}><TerminalPane cwd={p.cwd} preferred={p.shell} onPrefer={p.onShell} /></Suspense>}
+      </div>
+      <pre ref={pre} className="drawer-log" style={{ display: p.tab === 'term' ? 'none' : undefined }}>{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>
     </div>
   );
 }

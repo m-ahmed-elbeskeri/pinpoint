@@ -417,6 +417,16 @@ ipcMain.handle('page:replay', async (_e, { webContentsId, steps }) => {
 });
 
 // ---------- IPC: agent runs ----------
+const terminal = require('./terminal.cjs');
+// The terminal in the drawer: real shells in the project folder.
+ipcMain.handle('term:shells', () => terminal.shells());
+ipcMain.handle('term:list', () => terminal.list());
+ipcMain.handle('term:open', (e, opts) => terminal.open(e.sender, { ...opts, cwd: opts?.cwd || loadSettings().projectDir }));
+ipcMain.handle('term:attach', (e, id) => terminal.attach(e.sender, id));
+ipcMain.on('term:write', (_e, { id, data }) => terminal.write(id, data));
+ipcMain.on('term:resize', (_e, { id, cols, rows }) => terminal.resize(id, cols, rows));
+ipcMain.on('term:close', (_e, id) => terminal.close(id));
+
 const active = new Map(); // runId -> { kill }
 // Runs of different chats can overlap in one project. Each run's result is the difference
 // between the files before and after it, which would also pick up what another run wrote
@@ -576,6 +586,14 @@ ipcMain.handle('agent:steer', (_e, { runId, steerId, request, mode }) => {
   const text = buildSteerPrompt({ request, files, mode });
   const delivered = mode === 'now' ? handle.interrupt(text, files.images) : handle.steer(text, files.images);
   return { delivered };
+});
+
+// A message that was queued behind the agent's current step is pushed in now:
+// the step is interrupted, and the agent goes on with what it was sent.
+ipcMain.handle('agent:nudge', (_e, runId) => {
+  const handle = active.get(runId);
+  if (!handle || !handle.steerable) return false;
+  return !!handle.interrupt('Stop the step you were on. Act now on the message I sent you a moment ago, the one that was waiting behind that step.', []);
 });
 
 ipcMain.handle('agent:cancel', (_e, runId) => {
@@ -962,6 +980,7 @@ app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWind
 app.on('window-all-closed', () => {
   killTree(devProc);
   killTree(storyProc);
+  terminal.closeAll();
   for (const r of active.values()) r.kill();
   for (const b of bgRuns.values()) { b.handle?.kill(); background.remove(b.run).catch(() => {}); }
   app.quit();
