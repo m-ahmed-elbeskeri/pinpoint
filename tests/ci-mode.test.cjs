@@ -1,5 +1,3 @@
-const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os'), http = require('node:http');
 const { execFile } = require('node:child_process');
 const repo = process.cwd();

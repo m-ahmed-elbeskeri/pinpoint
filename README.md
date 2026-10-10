@@ -268,6 +268,7 @@ npm run dev          # Vite + Electron, with hot reload for the UI
 |---|---|
 | `npm run dev` | Run in development |
 | `npm start` | Production build, run locally |
+| `npm run lint` | Lint (oxlint) |
 | `npm run typecheck` | TypeScript check |
 | `npm test` | Unit checks plus end-to-end runs of the real app (`-- --quick` skips the ones that open a window) |
 | `npm run test:fixtures` | One-time setup of the real projects some test suites use |

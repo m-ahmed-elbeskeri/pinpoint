@@ -1,5 +1,3 @@
-const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const fs = require('fs'), os = require('os'), path = require('path');
 const repo = process.cwd();
 const inst = require(path.join(repo, 'electron', 'instant.cjs'));

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Columns2, Loader2, MonitorSmartphone, ScanEye, SplitSquareHorizontal, X } from './icons';
+import { diffOverlay } from '../lib/pixeldiff';
 
 export interface CompareTarget {
   runId?: string;
@@ -15,45 +16,6 @@ interface Props extends CompareTarget {
 }
 
 type Mode = 'slider' | 'side' | 'changes';
-
-const load = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
-
-export async function diffOverlay(before: string, after: string): Promise<{ url: string; pct: number }> {
-  const [a, b] = await Promise.all([load(before), load(after)]);
-  const w = b.width, h = b.height;
-  const ca = document.createElement('canvas'); ca.width = w; ca.height = h;
-  const cb = document.createElement('canvas'); cb.width = w; cb.height = h;
-  const xa = ca.getContext('2d', { willReadFrequently: true })!, xb = cb.getContext('2d', { willReadFrequently: true })!;
-  xa.drawImage(a, 0, 0, w, h); xb.drawImage(b, 0, 0, w, h);
-  const da = xa.getImageData(0, 0, w, h).data, db = xb.getImageData(0, 0, w, h);
-  const px = db.data;
-  let changed = 0;
-  for (let i = 0; i < px.length; i += 4) {
-    const d = Math.abs(px[i] - da[i]) + Math.abs(px[i + 1] - da[i + 1]) + Math.abs(px[i + 2] - da[i + 2]);
-    if (d > 60) { changed++; px[i] = 255; px[i + 1] = Math.round(px[i + 1] * .25 + 50); px[i + 2] = 40; }
-    else { const g = (px[i] + px[i + 1] + px[i + 2]) / 3; px[i] = px[i + 1] = px[i + 2] = g * .45 + 120; }
-  }
-  xb.putImageData(db, 0, 0);
-  return { url: cb.toDataURL('image/jpeg', .85), pct: (changed / (w * h)) * 100 };
-}
-
-export async function looksSame(before: string, after: string): Promise<boolean> {
-  const [a, b] = await Promise.all([load(before), load(after)]);
-  const w = b.width, h = b.height;
-  const limit = w * h * 0.0001;
-  const pixels = (img: HTMLImageElement) => {
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const x = c.getContext('2d', { willReadFrequently: true })!;
-    x.drawImage(img, 0, 0, w, h);
-    return x.getImageData(0, 0, w, h).data;
-  };
-  const da = pixels(a), db = pixels(b);
-  let changed = 0;
-  for (let i = 0; i < db.length; i += 4) {
-    if (Math.abs(db[i] - da[i]) + Math.abs(db[i + 1] - da[i + 1]) + Math.abs(db[i + 2] - da[i + 2]) > 60 && ++changed >= limit) return false;
-  }
-  return true;
-}
 
 export function CompareView({ runId, pair, images, labels = ['Before', 'After'], title = 'Before & after', onClose, captureSizes }: Props) {
   const [all, setShots] = useState<Record<string, string> | null>(images ? {} : null);

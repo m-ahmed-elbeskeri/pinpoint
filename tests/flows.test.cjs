@@ -1,5 +1,4 @@
 const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -8,7 +7,7 @@ const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'flows.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started, poll } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-e2e-'));
 const page = (title) => `<!doctype html><html lang="en"><head><title>${title}</title><link rel="stylesheet" href="/style.css"></head><body><h1>${title}</h1><p>Some text on the ${title} page.</p><a href="/about.html">About</a></body></html>`;
@@ -70,13 +69,13 @@ server.listen(0, '127.0.0.1', () => {
   require(path.join(repo, 'electron', 'main.cjs'));
 
   app.whenReady().then(async () => {
-    await sleep(5000);
+    await started(require('electron'));
     const appWin = BrowserWindow.getAllWindows()[0];
     appWin.show(); appWin.focus();
     const host = appWin.webContents;
     const guest = webContents.getAllWebContents().find((w) => w.getType() === 'webview');
     const ui = (code) => host.executeJavaScript(code);
-    const until = async (code, ms) => { for (let t = 0; t < ms; t += 400) { const v = await ui(code); if (v) return v; await sleep(400); } return null; };
+    const until = poll(ui, 400);
     const prompts = () => (fs.existsSync(promptLog) ? fs.readFileSync(promptLog, 'utf8').trim().split(NL).map((l) => JSON.parse(l)) : []);
     const send = async (text) => {
       await ui(`(() => { const t = document.querySelector('.composer-box textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ${JSON.stringify(text)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
@@ -152,7 +151,7 @@ server.listen(0, '127.0.0.1', () => {
       await until(`[...document.querySelectorAll('.done-card .done-head')].filter((h) => /Checked the result/.test(h.textContent)).length >= 3 ? 1 : 0`, 40000);
       await shot('1c-no-visual');
       const checks = prompts().filter((p) => /Automatic check/.test(p.text));
-      log('the result check is told when nothing visibly changed (and only then)', checks.length === 3 && /pixel-for-pixel identical/.test(checks[2].text) && !/pixel-for-pixel identical/.test(checks[1].text));
+      log('the result check is told when nothing visibly changed (and only then)', checks.length === 3 && /pixel-for-pixel identical/.test(checks[2].text) && !/pixel-for-pixel identical/.test(checks[1].text), `${checks.length} checks, told identical: ${checks.map((c) => /pixel-for-pixel identical/.test(c.text)).join(',')}`);
 
       await ui(`document.querySelector('.variants-btn').click(); 0`);
       await sleep(300);

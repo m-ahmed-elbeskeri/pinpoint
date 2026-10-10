@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const project = require('./project.cjs');
-const { shoot, compare, nameAreas } = require('./routecheck.cjs');
+const { shoot, compareAsync, nameAreas } = require('./routecheck.cjs');
 
 const dir = (root) => path.join(root, '.pinpoint', 'pins');
 const indexFile = (root) => path.join(dir(root), 'pins.json');
@@ -39,7 +39,7 @@ async function check(root) {
     if (!shot || !base) { p.error = shot ? 'Baseline missing' : "Page didn't load"; p.changed = false; continue; }
     delete p.error;
     fs.writeFileSync(img(root, p.id, 'now'), shot.jpg);
-    const diff = compare({ jpg: base, noisy: p.noisy }, shot);
+    const diff = await compareAsync({ jpg: base, noisy: p.noisy }, shot);
     p.pct = diff.pct;
     p.changed = diff.changed;
     p.areas = diff.changed ? (await nameAreas(p.url, diff.areas)).areas : undefined;

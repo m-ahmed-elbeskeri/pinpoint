@@ -34,6 +34,7 @@
     "build": "vite build",
     "start": "vite build && electron .",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint src electron scripts tests vite.config.ts",
     "test": "node tests/run.cjs",
     "test:fixtures": "node tests/setup-fixtures.cjs",
     "icons": "electron scripts/make-icons.cjs",
@@ -44,27 +45,28 @@
     "dist:dir": "vite build && electron-builder --dir"
   },
   "dependencies": {
-    "@babel/parser": "^7.29.9",
+    "@babel/parser": "^8.0.7",
     "@phosphor-icons/react": "^2.1.10",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "axe-core": "^4.13.0",
+    "axe-core": "^4.14.0",
     "diff": "^9.0.0",
     "electron-updater": "^6.8.9",
     "node-pty": "^1.1.0",
-    "source-map-js": "^1.2.1"
+    "source-map-js": "^1.2.2"
   },
   "devDependencies": {
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "electron": "^44.4.5",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.6.0",
     "electron-builder": "^26.15.3",
+    "oxlint": "^1.87.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.3"
   },
   "build": {
     "appId": "dev.pinpoint.app",

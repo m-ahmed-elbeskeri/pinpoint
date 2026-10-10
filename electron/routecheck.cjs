@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const snapshot = require('./snapshot.cjs');
+const { cellDiff, cellDiffAsync } = require('./celldiff.cjs');
 
 const SIZE = { width: 1280, height: 1400 };
 const LOAD_TIMEOUT_MS = 20000;
@@ -11,7 +12,6 @@ const NOISE_GAP_MS = 500;
 const CHANGED_PCT = 0.5;
 const MIN_CHANGED_PX = 30;
 const MAX_ROUTES = 9;
-const CELL = 24;
 
 const STILL_CSS = '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}';
 
@@ -62,40 +62,17 @@ async function visit(url, use, partition = DEFAULT_PARTITION) {
   }
 }
 
-function cellDiff(pa, pb, width, height, ignore) {
-  const cols = Math.ceil(width / CELL), rows = Math.ceil(height / CELL);
-  const hits = new Uint16Array(cols * rows);
-  const minX = new Int32Array(cols * rows).fill(width), minY = new Int32Array(cols * rows).fill(height);
-  const maxX = new Int32Array(cols * rows), maxY = new Int32Array(cols * rows);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      if (Math.abs(pa[i] - pb[i]) + Math.abs(pa[i + 1] - pb[i + 1]) + Math.abs(pa[i + 2] - pb[i + 2]) <= 60) continue;
-      const c = Math.floor(y / CELL) * cols + Math.floor(x / CELL);
-      hits[c]++;
-      if (x < minX[c]) minX[c] = x;
-      if (x > maxX[c]) maxX[c] = x;
-      if (y < minY[c]) minY[c] = y;
-      if (y > maxY[c]) maxY[c] = y;
-    }
-  }
-  const cells = [];
-  let px = 0;
-  for (let c = 0; c < hits.length; c++) {
-    if (hits[c] < 3 || ignore?.has(c)) continue;
-    px += hits[c];
-    cells.push({ i: c, x: minX[c], y: minY[c], w: maxX[c] - minX[c] + 1, h: maxY[c] - minY[c] + 1, px: hits[c] });
-  }
-  return { cells, px, total: cols * rows };
-}
+const SIZE_DIFFERS = { pct: 100, changed: true, areas: { cells: [], whole: true } };
 
-function compare(a, b) {
+function bitmaps(a, b) {
   const ia = nativeImage.createFromBuffer(a.jpg), ib = nativeImage.createFromBuffer(b.jpg);
   const { width, height } = ia.getSize();
   const sb = ib.getSize();
-  if (width !== sb.width || height !== sb.height) return { pct: 100, changed: true, areas: { cells: [], whole: true } };
-  const ignore = new Set([...(a.noisy || []), ...(b.noisy || [])]);
-  const d = cellDiff(ia.toBitmap(), ib.toBitmap(), width, height, ignore);
+  if (width !== sb.width || height !== sb.height) return null;
+  return { pa: ia.toBitmap(), pb: ib.toBitmap(), width, height, ignore: new Set([...(a.noisy || []), ...(b.noisy || [])]) };
+}
+
+function verdict(d, width, height) {
   const pct = (d.px / (width * height)) * 100;
   const whole = d.cells.length > d.total * 0.6;
   return {
@@ -103,6 +80,16 @@ function compare(a, b) {
     changed: pct >= CHANGED_PCT || whole || d.px >= MIN_CHANGED_PX,
     areas: { cells: d.cells.sort((p, q) => q.px - p.px).slice(0, 400), whole },
   };
+}
+
+function compare(a, b) {
+  const m = bitmaps(a, b);
+  return m ? verdict(cellDiff(m.pa, m.pb, m.width, m.height, m.ignore), m.width, m.height) : SIZE_DIFFERS;
+}
+
+async function compareAsync(a, b) {
+  const m = bitmaps(a, b);
+  return m ? verdict(await cellDiffAsync(m.pa, m.pb, m.width, m.height, m.ignore), m.width, m.height) : SIZE_DIFFERS;
 }
 
 const shoot = (url, partition) => visit(url, async (wc) => {
@@ -113,7 +100,7 @@ const shoot = (url, partition) => visit(url, async (wc) => {
   let noisy = [];
   const s1 = first.getSize(), s2 = second.getSize();
   if (!second.isEmpty() && s1.width === s2.width && s1.height === s2.height) {
-    noisy = cellDiff(first.toBitmap(), second.toBitmap(), s1.width, s1.height).cells.map((c) => c.i);
+    noisy = (await cellDiffAsync(first.toBitmap(), second.toBitmap(), s1.width, s1.height)).cells.map((c) => c.i);
   }
   return { jpg: first.toJPEG(82), noisy };
 }, partition);
@@ -238,7 +225,7 @@ async function finish(check, save, shared = true) {
     const key = keyFor(r.route);
     const a = before.get(key), b = after.get(key);
     if (!a || !b) continue;
-    const { pct, changed, areas: where } = compare(a, b);
+    const { pct, changed, areas: where } = await compareAsync(a, b);
     let named = {};
     if (changed) {
       save(`route-${key}-before`, a.jpg);
@@ -250,4 +237,4 @@ async function finish(check, save, shared = true) {
   return results;
 }
 
-module.exports = { begin, finish, finishPerf, prewarm, shoot, compare, nameAreas, visit, measure, keyFor, captureIds };
+module.exports = { begin, finish, finishPerf, prewarm, shoot, compare, compareAsync, nameAreas, visit, measure, keyFor, captureIds };

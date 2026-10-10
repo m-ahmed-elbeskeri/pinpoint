@@ -4,6 +4,14 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Faster
+
+- **Comparing screenshots** (the visual change check, pins, "did anything change") runs in background workers instead of pausing the app.
+
+### Changed
+
+- Dependencies updated: Electron 44.6, Vite 8.3.3, axe-core 4.14, source-map-js 1.2.2, @babel/parser 8.
+
 ## [0.4.3] - 2026-10-10
 
 ### Added

@@ -33,6 +33,7 @@ To try it against a real site, open any local project in Pinpoint, start its dev
 ## Before you open a pull request
 
 ```bash
+npm run lint
 npm run typecheck
 npm run build
 ```

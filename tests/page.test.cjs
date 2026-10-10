@@ -1,6 +1,5 @@
 const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');

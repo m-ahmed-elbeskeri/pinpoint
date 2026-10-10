@@ -1,12 +1,11 @@
 const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os'), http = require('node:http');
-const { execFileSync, execFile } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 320) : ''}`); fs.writeFileSync(path.join(OUT, 'background.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started, poll } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-bg-'));
 const page = (t) => `<!doctype html><html lang="en"><head><title>${t}</title><link rel="stylesheet" href="/style.css"></head><body><h1>${t}</h1><p>Text on the ${t} page.</p></body></html>`;
@@ -66,12 +65,12 @@ server.listen(0, '127.0.0.1', () => {
   require(path.join(repo, 'electron', 'main.cjs'));
 
   app.whenReady().then(async () => {
-    await sleep(5000);
+    await started(require('electron'));
     const win = BrowserWindow.getAllWindows()[0];
     win.show(); win.focus();
     const host = win.webContents;
     const ui = (c) => host.executeJavaScript(c);
-    const until = async (code, ms) => { for (let t = 0; t < ms; t += 400) { const v = await ui(code); if (v) return v; await sleep(400); } return null; };
+    const until = poll(ui, 400);
     const type = (text) => ui(`(() => { const t = document.querySelector('.composer-box textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ${JSON.stringify(text)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     const seen = () => (fs.existsSync(seenLog) ? fs.readFileSync(seenLog, 'utf8').trim().split(NL).map((l) => JSON.parse(l)) : []);
     const worktrees = () => git('worktree', 'list').trim().split('\n').length;
@@ -83,9 +82,9 @@ server.listen(0, '127.0.0.1', () => {
       await type('Make the heading blue (slow)');
       await sleep(200);
       await ui(`document.querySelector('.bg-btn').click(); 0`);
-      await sleep(1500);
+      await until(`document.querySelectorAll('.bg-run').length === 1 && !document.querySelector('.composer-box textarea').value ? 1 : 0`, 20000);
       await type('Make the heading green');
-      await sleep(200);
+      await until(`document.querySelector('.bg-btn').disabled ? 0 : 1`, 20000);
       await ui(`document.querySelector('.bg-btn').click(); 0`);
       const both = await until(`document.querySelectorAll('.bg-run').length === 2 ? 1 : 0`, 15000);
       log('two background runs started', both === 1);

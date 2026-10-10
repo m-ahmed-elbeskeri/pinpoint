@@ -6,7 +6,7 @@ const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'vite.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started, pollFn } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 
 const proj = path.join(FIX, 'viteapp');
 const w = (rel, text) => { fs.mkdirSync(path.dirname(path.join(proj, rel)), { recursive: true }); fs.writeFileSync(path.join(proj, rel), text); };
@@ -55,13 +55,13 @@ app.whenReady().then(async () => {
   let up = false;
   for (let i = 0; i < 120 && !up; i++) { try { up = (await fetch(base + '/')).ok; } catch {} if (!up) await sleep(500); }
   log('dev server started', up);
-  await sleep(6500);
+  await started(require('electron'));
   const win = BrowserWindow.getAllWindows()[0];
   win.show(); win.focus();
   const host = win.webContents;
   const ui = (c) => host.executeJavaScript(c);
   const guests = () => webContents.getAllWebContents().filter((x) => x.getType() === 'webview');
-  const until = async (fn, ms) => { for (let t = 0; t < ms; t += 300) { const v = await fn(); if (v) return v; await sleep(300); } return null; };
+  const until = pollFn(300);
   const key = (k) => ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true })); 0`);
   const read = (rel) => fs.readFileSync(path.join(proj, rel), 'utf8');
   const mouse = (g, type, x, y) => g.sendInputEvent({ type, x: Math.round(x), y: Math.round(y), button: 'left', clickCount: 1 });
@@ -79,7 +79,8 @@ app.whenReady().then(async () => {
   };
   const tabBtn = (label) => ui(`[...document.querySelectorAll('.el-tabs button')].find((b) => b.textContent.startsWith(${JSON.stringify(label)})).click(); 0`);
   const setInput = (sel, value) => ui(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, ${JSON.stringify(value)}); i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
-  const applyBtn = () => until(() => ui(`(() => { const b = [...document.querySelectorAll('.note-pop-foot .btn')].find((x) => /Apply now/.test(x.textContent)); return b ? (b.disabled ? 'disabled: ' + b.title : 'ready') : ''; })()`), 6000);
+  const applyState = () => ui(`(() => { const b = [...document.querySelectorAll('.note-pop-foot .btn')].find((x) => /Apply now/.test(x.textContent)); return b ? (b.disabled ? 'disabled: ' + b.title : 'ready') : ''; })()`);
+  const applyBtn = async () => (await until(async () => ((await applyState()) === 'ready' ? 'ready' : ''), 8000)) || applyState();
   const clickApply = () => ui(`[...document.querySelectorAll('.note-pop-foot .btn')].find((x) => /Apply now/.test(x.textContent)).click(); 0`);
   const errors = [];
   host.on('console-message', (e) => { if ((e.level === 'error' || e.level === 3) && !/Security Warning/.test(e.message)) errors.push(e.message.slice(0, 160)); });
@@ -143,7 +144,6 @@ app.whenReady().then(async () => {
     await sleep(400);
     await ui(`document.querySelector('.note-pop .note-pop-foot .btn.ghost').click(); 0`);
     await sleep(300);
-    const src0 = read('src/App.jsx');
     const plan = await ui(`(async () => { const lines = [...document.querySelectorAll('.ann-list .ann-sub')].map((s) => s.textContent); return lines.join(' | '); })()`);
     log('annotation still carries the move', /moved to 4/.test(plan), plan);
 
@@ -178,6 +178,15 @@ app.whenReady().then(async () => {
     log('the tab says who it is viewed as', (await ui(`document.querySelector('.profile-btn').textContent`)) === 'Admin');
     try { fs.writeFileSync(path.join(OUT, 'profile.png'), (await host.capturePage()).toPNG()); } catch {}
     log('no errors in the app console', errors.length === 0, errors.join(' | '));
+
+    const overlayScript = require(path.join(OUT, 'pagetools.cjs')).errorOverlayScript;
+    const overlayText = async () => { for (const x of guests()) { const t = await x.executeJavaScript(overlayScript).catch(() => null); if (t) return t; } return ''; };
+    w('src/App.jsx', APP + '\nconst = ;\n');
+    const shown = await until(overlayText, 20000);
+    log('the dev error overlay is read, with the file it names', /App\.jsx/.test(shown || ''), String(shown).replace(/\s+/g, ' ').slice(0, 200));
+    w('src/App.jsx', APP);
+    const gone = await until(async () => ((await overlayText()) ? 0 : 1), 20000);
+    log('nothing is read once the error is fixed', gone === 1);
   } catch (e) { log('exception', false, e.stack); }
   stopVite();
   fs.appendFileSync(path.join(OUT, 'vite.out'), '[done]' + String.fromCharCode(10));

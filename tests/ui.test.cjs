@@ -1,5 +1,4 @@
 const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -8,7 +7,7 @@ const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + extra : ''}`); fs.writeFileSync(path.join(OUT, 'ui.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-proj-'));
 fs.mkdirSync(path.join(proj, 'src'));
@@ -54,7 +53,7 @@ server.listen(0, '127.0.0.1', () => {
   const call = (channel, args) => ipcMain._invokeHandlers.get(channel)({ sender: { isDestroyed: () => true, send() {} } }, args);
 
   app.whenReady().then(async () => {
-    await sleep(5000);
+    await started(require('electron'));
     const win = BrowserWindow.getAllWindows()[0];
     win.show(); win.focus();
     const host = win.webContents;

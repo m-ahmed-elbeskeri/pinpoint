@@ -194,7 +194,7 @@ function renderMarkers() {
   u.marks.style.display = hidden ? 'none' : '';
   if (u.marks.childElementCount !== markers.length * 2) {
     u.marks.innerHTML = '';
-    for (const m of markers) {
+    for (const _m of markers) {
       const box = document.createElement('div'); box.className = 'box mark';
       const badge = document.createElement('div'); badge.className = 'badge';
       u.marks.append(box, badge);

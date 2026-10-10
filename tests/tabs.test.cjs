@@ -1,11 +1,10 @@
 const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os'), http = require('node:http');
 const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 260) : ''}`); fs.writeFileSync(path.join(OUT, 'tabs.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 const page = (t) => `<!doctype html><html lang="en"><head><title>${t}</title></head><body style="font-family:system-ui;padding:30px"><h1 id="h">${t} heading</h1><a id="pop" href="/about" target="_blank">open about in a new window</a></body></html>`;
 const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html'); res.end(page(req.url.startsWith('/about') ? 'About' : 'Home')); });
 server.listen(0, '127.0.0.1', () => {
@@ -17,7 +16,7 @@ server.listen(0, '127.0.0.1', () => {
   const { app, BrowserWindow, webContents } = require('electron');
   require(path.join(repo, 'electron', 'main.cjs'));
   app.whenReady().then(async () => {
-    await sleep(4500);
+    await started(require('electron'));
     const win = BrowserWindow.getAllWindows()[0];
     win.show(); win.focus();
     const host = win.webContents;

@@ -1,5 +1,4 @@
 const OUT = process.env.PP_OUT || __dirname;
-const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os');
 const repo = process.cwd();
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-ud-'));
@@ -8,11 +7,11 @@ fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: pr
 process.env.PINPOINT_USER_DATA = ud;
 const { app, BrowserWindow } = require('electron');
 require(path.join(repo, 'electron', 'main.cjs'));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + extra : ''}`); fs.writeFileSync(path.join(OUT, 'picker.out'), out.join(String.fromCharCode(10)) + String.fromCharCode(10)); };
 app.whenReady().then(async () => {
-  await sleep(4000);
+  await started(require('electron'));
   const win = BrowserWindow.getAllWindows()[0];
   win.show(); win.focus();
   const host = win.webContents;

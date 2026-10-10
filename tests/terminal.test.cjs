@@ -7,7 +7,7 @@ const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'terminal.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started, poll } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-term-'));
 fs.writeFileSync(path.join(proj, 'index.html'), '<!doctype html><html lang="en"><head><title>Home</title></head><body><h1>Home</h1></body></html>');
@@ -24,12 +24,12 @@ server.listen(0, '127.0.0.1', () => {
   const terminal = require(path.join(repo, 'electron', 'terminal.cjs'));
 
   app.whenReady().then(async () => {
-    await sleep(5000);
+    await started(require('electron'));
     const win = BrowserWindow.getAllWindows()[0];
     win.show(); win.focus();
     const host = win.webContents;
     const ui = (code) => host.executeJavaScript(code);
-    const until = async (code, ms) => { for (let t = 0; t < ms; t += 300) { const v = await ui(code); if (v) return v; await sleep(300); } return null; };
+    const until = poll(ui, 300);
     const screen = `[...document.querySelectorAll('.term-screen')].find((s) => s.style.display !== 'none')?.querySelector('.xterm-rows')?.innerText || ''`;
     const toggleDrawer = () => ui(`[...document.querySelectorAll('.top-right .icon-btn')].find((b) => /Terminal/.test(b.title)).click(); 0`);
     const errors = [];

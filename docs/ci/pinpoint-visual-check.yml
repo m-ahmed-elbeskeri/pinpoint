@@ -22,9 +22,9 @@ jobs:
   visual:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
 
       - name: Get Pinpoint
@@ -67,7 +67,7 @@ jobs:
 
       - name: Keep the screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pinpoint-screenshots
           path: ${{ runner.temp }}/shots

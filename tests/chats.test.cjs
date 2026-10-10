@@ -7,7 +7,7 @@ const repo = process.cwd();
 const NL = String.fromCharCode(10);
 const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'chats.out'), out.join(NL) + NL); };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { sleep, started, poll } = require(require('node:path').join(process.cwd(), 'tests', 'wait.cjs'));
 
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-chats-'));
 fs.writeFileSync(path.join(proj, 'index.html'), '<!doctype html><html lang="en"><head><title>Home</title></head><body><h1>Home</h1><div style="height:3000px"></div><button id="deep" style="padding:20px">Deep button</button><div style="height:1500px"></div></body></html>');
@@ -50,12 +50,12 @@ server.listen(0, '127.0.0.1', () => {
   require(path.join(repo, 'electron', 'main.cjs'));
 
   app.whenReady().then(async () => {
-    await sleep(5000);
+    await started(require('electron'));
     const win = BrowserWindow.getAllWindows()[0];
     win.show(); win.focus();
     const host = win.webContents;
     const ui = (code) => host.executeJavaScript(code);
-    const until = async (code, ms) => { for (let t = 0; t < ms; t += 300) { const v = await ui(code); if (v) return v; await sleep(300); } return null; };
+    const until = poll(ui, 300);
     const send = async (text) => {
       await ui(`(() => { const t = document.querySelector('.composer-box textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ${JSON.stringify(text)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await sleep(200);
