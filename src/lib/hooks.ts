@@ -1,5 +1,3 @@
-// Self-contained pieces of the app shell's state: each owns its buffers and timers
-// and hands back only what the shell needs.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatItem, ConsoleEntry, NetworkFailure } from './types';
 
@@ -7,13 +5,9 @@ const api = window.pinpoint;
 
 type ConsoleMessage = Omit<ConsoleEntry, 'count' | 'at'>;
 
-// Console errors and failed requests reported by the open page.
-// A broken page reports them in bursts (a dev error overlay comes with dozens): they are
-// collected and applied a few times a second, so the app doesn't redraw for each one.
 export function usePageProblems() {
   const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
   const [netFails, setNetFails] = useState<NetworkFailure[]>([]);
-  // The latest lists, for code that runs later (after a run) and must not see a stale render's copy.
   const consoleRef = useRef(consoleLog);
   consoleRef.current = consoleLog;
   const netRef = useRef(netFails);
@@ -42,7 +36,6 @@ export function usePageProblems() {
   }, []);
   const queue = useCallback(() => { timer.current ||= window.setTimeout(flush, 150); }, [flush]);
 
-  // Failed network requests from the page.
   useEffect(() => api.onNetworkError((n) => { buf.current.network.push(n); queue(); }), [queue]);
 
   const onConsole = useCallback((c: ConsoleMessage) => {
@@ -54,8 +47,6 @@ export function usePageProblems() {
   return { consoleLog, netFails, consoleRef, netRef, onConsole, clearDiagnostics };
 }
 
-// The dev server's and the agent's raw output, for the drawer.
-// Terminal output can arrive hundreds of lines a second: it is collected and shown a few times a second.
 export function useLogs() {
   const [devLog, setDevLog] = useState('');
   const [agentLog, setAgentLog] = useState('');
@@ -75,24 +66,18 @@ export function useLogs() {
   return { devLog, agentLog, setDevLog, setAgentLog, addLog };
 }
 
-// Keeps the conversation at its end while it grows, unless the reader has scrolled up:
-// scrolling up to read leaves it where it is. A message you send jumps back down.
-// `chatEnd` goes on an empty element at the end of the scrolling box.
 export function useChatScroll(chat: ChatItem[], runId: string | null, job: string | null) {
   const chatEnd = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const chatLen = useRef(0);
-  // away: scrolled up from the end. fresh: something new arrived down there meanwhile.
   const [away, setAway] = useState<{ fresh: boolean } | null>(null);
   const awayRef = useRef(away);
   awayRef.current = away;
   const onChatScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-    // Only being right at the end counts as following along: any scroll up, however small, is left alone.
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
     if (stick.current ? awayRef.current : !awayRef.current) setAway(stick.current ? null : { fresh: false });
   }, []);
-  // Scrolling up lets go at once, before the next line of output can pull the view back down.
   const onChatWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     if (e.deltaY < 0 && el.scrollHeight > el.clientHeight) { stick.current = false; if (!awayRef.current) setAway({ fresh: false }); }
@@ -113,13 +98,10 @@ export function useChatScroll(chat: ChatItem[], runId: string | null, job: strin
     if (stick.current) box.scrollTop = box.scrollHeight;
     else if (awayRef.current && !awayRef.current.fresh) setAway({ fresh: true });
   }, [chat, runId, job]);
-  // Called when a different conversation is put on screen: start at its end.
   const follow = useCallback(() => { stick.current = true; }, []);
   return { chatEnd, away, onChatScroll, onChatWheel, toLatest, follow };
 }
 
-// One object of callbacks that never changes identity but always runs the latest versions,
-// so memoised children aren't rendered again just because their parent was.
 export function useStableActions<T extends Record<string, (...args: any[]) => any>>(handlers: T): T {
   const latest = useRef(handlers);
   latest.current = handlers;

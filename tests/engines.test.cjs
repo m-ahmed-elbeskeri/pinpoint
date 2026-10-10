@@ -1,6 +1,5 @@
-// Other browser engines for real: download WebKit and Firefox, then render a page in each.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), http = require('node:http');
 const { app, nativeImage } = require('electron');
 const repo = process.cwd();

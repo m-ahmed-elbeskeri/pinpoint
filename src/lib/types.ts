@@ -17,18 +17,15 @@ export interface SourceInfo {
   column?: number;
   components?: string[];
   framework?: string;
-  frame?: { url: string; line: number; column: number }; // compiled-code position, for source maps
-  owner?: string;                 // nearest component that renders the element
-  props?: Record<string, string>; // that component's props, summarized
+  frame?: { url: string; line: number; column: number };
+  owner?: string;
+  props?: Record<string, string>;
 }
 
-// The component behind a picked element, and how widely it is used in the project.
 export interface ComponentInfo { name: string; props?: Record<string, string>; uses?: number; fileCount?: number; files?: string[] }
 
-// Pseudo-states that can be forced on a picked element.
 export type ForcedState = 'hover' | 'focus' | 'focus-visible' | 'active' | 'disabled';
 
-// What the page is being shown as: emulated media features and a frozen page.
 export interface PageEnv { colorScheme: 'light' | 'dark' | null; reducedMotion: boolean }
 
 export interface A11yIssue {
@@ -47,46 +44,38 @@ export interface DesignSystem {
 
 export interface RouteCheckResult {
   route: string; key: string; pct: number; changed: boolean;
-  current?: boolean;  // the page that was open during the run
-  areas?: string[];   // what changed on it, named by element (on the open page: besides what was asked for)
-  asked?: string[];   // on the open page: the changed areas the user had pointed at
+  current?: boolean;
+  areas?: string[];
+  asked?: string[];
 }
 
-// A CSS rule that styles a picked element, and where it lives.
 export interface CssRuleInfo {
   selector: string; media?: string; file?: string; line?: number;
-  approx?: boolean;  // the line was found by searching the file, not from a source map
-  utility?: boolean; // generated utility class (Tailwind etc.): edit the class list instead
+  approx?: boolean;
+  utility?: boolean;
   declarations: { name: string; value: string; important: boolean }[];
-  wins: string[]; // tracked properties this rule currently decides
+  wins: string[];
 }
 
-// One step of a recorded interaction.
 export interface FlowStep { type: 'click' | 'fill' | 'check' | 'key' | 'navigate'; selector?: string; tag?: string; text?: string; value?: string; key?: string; url?: string; secret?: boolean }
 
-// Load cost of a page (measured in a hidden window before and after a run).
 export interface PerfMetrics { js: number; css: number; requests: number; nodes: number; lcp: number; cls: number }
 
-// Size of the production build's JS and CSS.
 export interface BuildSize { js: number; css: number; jsGzip: number; cssGzip: number; files: number; at: number }
 
 export interface Pin { id: string; url: string; label: string; pinnedAt: number; checkedAt?: number; pct?: number; changed?: boolean; error?: string; areas?: string[] }
 
-// A component found in the project, for the workspace.
 export interface ComponentProp { name: string; required: boolean; type: 'string' | 'number' | 'boolean' | 'enum' | 'node' | 'other'; options?: string[]; default?: string | number | boolean }
 export interface ComponentEntry { name: string; file: string; isDefault: boolean; props: ComponentProp[] }
 
-// A "view as" profile: its own browser storage (so its own login), plus settings applied to pages shown under it.
 export interface Profile { id: string; name: string; locale?: string; timezone?: string; flags?: string; headers?: string }
 
-// A request being handled in a separate copy of the project.
 export interface BgRun { id: string; title: string; status: 'running' | 'done' | 'failed'; step?: string; summary?: string; files?: FileChange[]; shot?: boolean }
 
 export interface UpdateState { status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'none' | 'error'; version?: string; percent?: number; url?: string; manual?: boolean }
 
 export type NetworkMode = 'normal' | 'slow' | 'hang' | 'error' | 'offline';
 
-// A request someone annotated for a developer to run, saved as one file.
 export interface Handoff {
   pinpointHandoff: 1; createdAt: number; url: string; title: string; viewport?: { width: number; height: number };
   instruction: string; annotations: Annotation[];
@@ -106,35 +95,35 @@ export interface ElementInfo {
   path?: string;
   rect: Rect;
   source?: SourceInfo | null;
-  tokens?: Record<string, string>; // css property -> the design token its value comes from
+  tokens?: Record<string, string>;
   component?: ComponentInfo | null;
   rules?: CssRuleInfo[];
-  leaf?: boolean; // contains only text, so its copy can be edited in place
+  leaf?: boolean;
 }
 
 export interface Annotation {
   id: string;
   n: number;
   kind: 'element' | 'drawing' | 'sketch' | 'reference' | 'flow';
-  steps?: FlowStep[];   // a recorded interaction
+  steps?: FlowStep[];
   startUrl?: string;
-  name?: string; // reference image file name
+  name?: string;
   note: string;
   color: string;
-  image?: string; // PNG data URL
+  image?: string;
   element?: ElementInfo;
   region?: Rect;
   hits?: ElementInfo[];
   viewport?: { width: number; height: number };
-  tabId?: string;                   // the browser tab it was made in
-  pageUrl?: string;                 // the page it was made on (a request can span several tabs)
-  tweaks?: Record<string, string>;  // live style edits applied in the page: css property -> value
-  states?: ForcedState[];           // states forced on the element while it was inspected
-  scope?: 'instance' | 'component'; // change just this one, or the component everywhere
-  textEdit?: { from: string; to: string };                    // copy edited in place
-  classEdit?: { from: string; to: string };                   // class list edited in place
-  propEdits?: Record<string, { from: string; to: string }>;   // component props changed live
-  reorder?: { from: number; to: number; count: number; before?: string | null }; // dragged to a new place among its siblings
+  tabId?: string;
+  pageUrl?: string;
+  tweaks?: Record<string, string>;
+  states?: ForcedState[];
+  scope?: 'instance' | 'component';
+  textEdit?: { from: string; to: string };
+  classEdit?: { from: string; to: string };
+  propEdits?: Record<string, { from: string; to: string }>;
+  reorder?: { from: number; to: number; count: number; before?: string | null };
 }
 
 export type ChatItem =
@@ -146,14 +135,14 @@ export type ChatItem =
   | { kind: 'status'; id: string; text: string }
   | {
     kind: 'done'; id: string; runId: string; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; undone?: boolean; commit?: GitCommit | null; shots?: boolean;
-    verify?: boolean;                           // the automatic check of the previous run
-    variant?: { index: number; total: number }; // one of several takes on the same request
-    routeCheck?: RouteCheckResult[];            // other pages, compared before and after
-    perf?: { before: PerfMetrics; after: PerfMetrics }; // the open page's load cost
-    build?: { now: BuildSize; previous: BuildSize | null }; // production build size, measured on request
-    visual?: 'none' | 'changed'; // whether the page on screen looked any different afterwards
-    instant?: boolean;           // written straight to the source, no agent
-    background?: boolean;        // came from a background run
+    verify?: boolean;
+    variant?: { index: number; total: number };
+    routeCheck?: RouteCheckResult[];
+    perf?: { before: PerfMetrics; after: PerfMetrics };
+    build?: { now: BuildSize; previous: BuildSize | null };
+    visual?: 'none' | 'changed';
+    instant?: boolean;
+    background?: boolean;
   }
   | { kind: 'variants'; id: string; options: { runId: string; index: number; files: number }[]; chosen?: string | null }
   | { kind: 'memory'; id: string; text: string; status: 'pending' | 'saved' | 'dismissed' };
@@ -168,11 +157,9 @@ export interface GitStatus {
   gh: { installed: boolean; authed: boolean; user: string | null };
 }
 
-// A shell installed on this computer, and a terminal running one.
 export interface TermShell { id: string; name: string; path: string; args: string[] }
 export interface TermSession { id: string; shell: string; name: string; exited: boolean; cols: number; rows: number }
 
-// A chat of this project that isn't the one on screen but is working, or finished unseen.
 export interface OtherChat { id: string; title: string; running: boolean }
 
 export interface FileChange { path: string; kind: 'add' | 'modify' | 'delete'; reverted?: boolean; add?: number; del?: number }
@@ -192,7 +179,7 @@ export interface ChatMeta { id: string; title: string; createdAt: number; update
 export interface Chat {
   id: string; title: string; createdAt: number; updatedAt: number; agent: AgentId;
   session: { id: string; agent: AgentId } | null;
-  designAtStart?: string | null; // DESIGN.md as sent at the start of the agent session
+  designAtStart?: string | null;
   items: ChatItem[];
 }
 
@@ -200,7 +187,7 @@ export interface MemoryItem { id: string; text: string; enabled: boolean; create
 export interface DesignDoc { path: string; exists: boolean; content: string }
 export interface RouteInfo { route: string; file: string; framework: string; dynamic: boolean }
 
-export interface ConsoleEntry { level: 'error' | 'warning'; message: string; source?: string; line?: number; count: number; at: number; file?: string; fileLine?: number } // file: the project file the source maps back to
+export interface ConsoleEntry { level: 'error' | 'warning'; message: string; source?: string; line?: number; count: number; at: number; file?: string; fileLine?: number }
 export interface NetworkFailure { url: string; method: string; status?: number; error?: string; resourceType?: string; at: number }
 
 export interface Settings {
@@ -219,7 +206,7 @@ export interface Settings {
   recentProjects: string[];
   panelSide: 'left' | 'right';
   panelWidth: number;
-  terminalShell?: string;        // the shell new terminals start in
+  terminalShell?: string;
   panelHidden: boolean;
   drawerHeight: number;
   useDesign: boolean;

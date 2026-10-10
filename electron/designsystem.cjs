@@ -1,7 +1,3 @@
-// Works out what design system a project uses (Tailwind, a component library,
-// CSS-variable tokens) so the agent reuses it instead of writing raw values,
-// and counts how often a component is used so "this one or all of them" is a
-// real choice.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -38,7 +34,6 @@ function walk(root, keep) {
   return out;
 }
 
-// The same list as walk(), read without blocking the app while it works.
 async function walkAsync(root, keep) {
   const out = [];
   const stack = [''];
@@ -63,18 +58,15 @@ function readSmall(file) {
   try { return fs.statSync(file).size <= MAX_BYTES ? fs.readFileSync(file, 'utf8') : null; } catch { return null; }
 }
 
-// Dependencies of the root package and of app packages one or two levels down.
 function allDeps(root, pkgFiles) {
   const deps = {};
   for (const f of pkgFiles) {
-    try { const p = JSON.parse(fs.readFileSync(path.join(root, f), 'utf8')); Object.assign(deps, p.dependencies, p.devDependencies); } catch { /* skip */ }
+    try { const p = JSON.parse(fs.readFileSync(path.join(root, f), 'utf8')); Object.assign(deps, p.dependencies, p.devDependencies); } catch {  }
   }
   return deps;
 }
 
-// Asked for on every live tweak and again when a run starts: the answer is kept for a
-// few seconds so a burst of edits walks the project once.
-let lastInspect = null; // { root, at, value }
+let lastInspect = null;
 function inspect(root) {
   if (lastInspect && lastInspect.root === root && Date.now() - lastInspect.at < 5000) return lastInspect.value;
   const value = inspectNow(root);
@@ -97,7 +89,6 @@ function inspectNow(root) {
   const styleFiles = files.filter((f) => /\.(css|scss|sass|less|pcss)$/.test(f));
   if (styleFiles.some((f) => /\.module\.\w+$/.test(f))) styling.push('CSS Modules');
 
-  // CSS custom properties: which files define them, and what they are.
   const tokens = new Map();
   const tokenFiles = [];
   let tailwindCss = null;
@@ -128,10 +119,7 @@ function inspectNow(root) {
   };
 }
 
-// How many times <Name …> appears in the project's source, and where.
-// Runs on every pick of a component, so the files are read without blocking the app
-// and the answer for a name is kept briefly (picking siblings asks the same thing).
-const usageCache = new Map(); // root:name -> { at, value }
+const usageCache = new Map();
 async function componentUsage(root, name) {
   if (!root || !/^[A-Za-z_$][\w$.]{1,60}$/.test(name || '')) return { count: 0, files: [] };
   const hit = usageCache.get(`${root}:${name}`);
@@ -155,7 +143,6 @@ async function componentUsage(root, name) {
   return value;
 }
 
-// The component's Storybook story file, if there is one, and whether the project uses Storybook.
 function findStory(root, name) {
   if (!root || !/^[A-Za-z_$][\w$]{1,60}$/.test(name || '')) return { file: null, storybook: false };
   let storybook = fs.existsSync(path.join(root, '.storybook'));

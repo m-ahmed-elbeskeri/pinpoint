@@ -73,7 +73,6 @@ export function drawShape(ctx: CanvasRenderingContext2D, s: Shape) {
       ctx.textBaseline = 'top';
       const lh = 14 + s.size * 3.6;
       s.text.split('\n').forEach((line, i) => {
-        // Contrasting halo keeps notes legible on any page background.
         ctx.lineWidth = 4;
         ctx.strokeStyle = isLight(s.color) ? 'rgba(0,0,0,.7)' : 'rgba(255,255,255,.9)';
         ctx.strokeText(line, a[0], a[1] + i * lh);
@@ -117,7 +116,6 @@ export function unionBounds(shapes: Shape[]): Rect | null {
   return { x: Math.round(x), y: Math.round(y), width: Math.round(r - x), height: Math.round(btm - y) };
 }
 
-// Points worth probing to find which page elements a drawing refers to.
 export function samplePoints(shapes: Shape[]): [number, number][] {
   const out: [number, number][] = [];
   for (const s of shapes) {
@@ -155,7 +153,6 @@ const loadImage = (src: string) => new Promise<HTMLImageElement>((res, rej) => {
   img.src = src;
 });
 
-// Flattens shapes onto a background (page screenshot or a whiteboard) → PNG data URL.
 export async function composite(opts: { background: string | null; width: number; height: number; shapes: Shape[]; board?: boolean }) {
   const bg = opts.background ? await loadImage(opts.background) : null;
   const scale = bg ? bg.width / opts.width : 2;
@@ -173,7 +170,6 @@ export async function composite(opts: { background: string | null; width: number
   return canvas.toDataURL('image/png');
 }
 
-// Shrinks a data URL for thumbnails in the chat transcript.
 export async function thumbnail(src: string, maxW = 320) {
   const img = await loadImage(src);
   const s = Math.min(1, maxW / img.width);

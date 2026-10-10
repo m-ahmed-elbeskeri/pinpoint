@@ -1,5 +1,3 @@
-// Every icon the app uses, in one place. They come from Phosphor; the names on the
-// left are what the rest of the code calls them, so the set can be changed here alone.
 import { SidebarSimpleIcon, type IconProps } from '@phosphor-icons/react';
 
 export {

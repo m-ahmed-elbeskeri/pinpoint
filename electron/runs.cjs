@@ -1,6 +1,3 @@
-// Persistent run records under <project>/.pinpoint/runs/<runId>/.
-// For every file a run changed we keep the before/after bytes, which powers the
-// diff viewer and lets Undo (all or per file) work even after a restart.
 const fs = require('node:fs');
 const path = require('node:path');
 const { structuredPatch } = require('diff');
@@ -38,7 +35,7 @@ function save(root, runId, snap, changes, meta = {}) {
       try {
         const abs = path.join(root, c.path);
         if (fs.statSync(abs).size <= MAX_DIFF_BYTES) after = fs.readFileSync(abs);
-      } catch { /* vanished */ }
+      } catch {  }
     }
     if (before) fs.writeFileSync(path.join(dir, `${i}.before`), before);
     if (after) fs.writeFileSync(path.join(dir, `${i}.after`), after);
@@ -63,7 +60,7 @@ function prune(root) {
       .map((d) => ({ d, t: fs.statSync(path.join(runsDir(root), d)).mtimeMs }))
       .sort((a, b) => b.t - a.t);
     for (const { d } of dirs.slice(KEEP_RUNS)) fs.rmSync(path.join(runsDir(root), d), { recursive: true, force: true });
-  } catch { /* nothing to prune */ }
+  } catch {  }
 }
 
 function load(root, runId) {
@@ -72,7 +69,6 @@ function load(root, runId) {
   return JSON.parse(raw.toString('utf8'));
 }
 
-// Text of each changed file before/after the run, for the diff viewer.
 function diff(root, runId) {
   const run = load(root, runId);
   const dir = runDir(root, runId);
@@ -88,8 +84,6 @@ function diff(root, runId) {
   });
 }
 
-// Restores files to their pre-run state. Files edited since the run (by you or
-// a later run) are reported as conflicts and left alone unless `force`.
 function revert(root, runId, paths, force) {
   const run = load(root, runId);
   const dir = runDir(root, runId);
@@ -118,7 +112,6 @@ function revert(root, runId, paths, force) {
   return result;
 }
 
-// Puts a reverted run's changes back (used when picking one of several variants).
 function apply(root, runId) {
   const run = load(root, runId);
   const dir = runDir(root, runId);
@@ -147,7 +140,6 @@ function setMeta(root, runId, patch) {
   fs.writeFileSync(path.join(runDir(root, runId), 'run.json'), JSON.stringify({ ...run, ...patch }, null, 2));
 }
 
-// Before/after screenshots live next to the run record.
 function saveShot(root, runId, name, dataUrl) {
   const [meta, b64] = dataUrl.split(',');
   saveShotBuffer(root, runId, name, Buffer.from(b64, 'base64'), /jpeg/.test(meta) ? 'jpg' : 'png');

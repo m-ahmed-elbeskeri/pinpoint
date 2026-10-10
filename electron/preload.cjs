@@ -1,4 +1,3 @@
-// Bridge between the Pinpoint UI (renderer) and the main process.
 const { contextBridge, ipcRenderer } = require('electron');
 
 const on = (channel) => (cb) => {

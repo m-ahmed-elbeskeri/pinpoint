@@ -7,7 +7,7 @@ interface Props {
   refresh(): Promise<void>;
   settings: Settings;
   saveSettings(p: Partial<Settings>): void;
-  busy: boolean;                 // agent running
+  busy: boolean;
   prDefaults(): { title: string; body: string };
   flash(msg: string): void;
 }
@@ -23,7 +23,6 @@ function Toggle({ on, onChange, label, hint }: { on: boolean; onChange(v: boolea
   );
 }
 
-// Branch chip + popover: branch per chat, commit after each run, open a PR.
 export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefaults, flash }: Props) {
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
@@ -36,7 +35,7 @@ export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefa
     const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) { setOpen(false); setPr(null); } };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const act = async (label: string, fn: () => Promise<string | void>) => {
     setWorking(label);

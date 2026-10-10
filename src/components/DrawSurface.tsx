@@ -8,11 +8,9 @@ interface Props {
   tool: Tool;
   color: string;
   size: number;
-  board?: boolean; // whiteboard background (sketch mode)
+  board?: boolean;
 }
 
-// A full-bleed canvas for freehand markup. Coordinates are CSS pixels of the
-// surface, which sits exactly on top of the webview (or is the whiteboard).
 export function DrawSurface({ shapes, onChange, tool, color, size, board }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -43,15 +41,15 @@ export function DrawSurface({ shapes, onChange, tool, color, size, board }: Prop
     c.width = Math.round(dims.w * devicePixelRatio);
     c.height = Math.round(dims.h * devicePixelRatio);
     paint();
-  }, [dims]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dims]);
 
-  useEffect(paint, [shapes]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(paint, [shapes]);
 
   useEffect(() => { if (textAt) setTimeout(() => textRef.current?.focus(), 0); }, [textAt]);
 
   const pos = (e: React.PointerEvent): [number, number] => {
     const r = canvas.current!.getBoundingClientRect();
-    const k = r.width / canvas.current!.offsetWidth || 1; // the stage may be zoomed in responsive mode
+    const k = r.width / canvas.current!.offsetWidth || 1;
     return [Math.round((e.clientX - r.left) / k), Math.round((e.clientY - r.top) / k)];
   };
 
@@ -72,7 +70,6 @@ export function DrawSurface({ shapes, onChange, tool, color, size, board }: Prop
     if (e.button !== 0) return;
     const p = pos(e);
     if (tool === 'text') {
-      // An open input commits on blur; this click only closes it.
       if (!textAt) setTextAt({ x: p[0], y: p[1] - 4, value: '' });
       return;
     }
@@ -91,7 +88,6 @@ export function DrawSurface({ shapes, onChange, tool, color, size, board }: Prop
       const last = s.points[s.points.length - 1];
       if (Math.hypot(p[0] - last[0], p[1] - last[1]) > 1.5) s.points.push(p);
     } else {
-      // Shift constrains shapes to squares/circles and arrows to 45° steps.
       let q = p;
       if (e.shiftKey) {
         const [a] = s.points;

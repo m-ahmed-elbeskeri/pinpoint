@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Play, Square, X } from './icons';
 import type { DevCandidate } from '../lib/types';
 
-// The terminal (and the library that draws it) is loaded the first time its tab is opened.
 const TerminalPane = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPane })));
 
 export type DrawerTab = 'term' | 'dev' | 'agent';
@@ -22,13 +21,11 @@ interface Props {
   onClose(): void;
 }
 
-// Bottom drawer: a terminal, the dev server's output and raw agent logs.
 export function Drawer(p: Props) {
   const [cmd, setCmd] = useState(p.devCommand);
   const pre = useRef<HTMLPreElement>(null);
-  const seen = useRef(false); // the terminal tab has been opened at least once
+  const seen = useRef(false);
   if (p.tab === 'term') seen.current = true;
-  // Only the end is drawn: laying the whole log out again on every update makes the app stutter.
   const text = (p.tab === 'dev' ? p.devLog : p.agentLog).slice(-40_000);
 
   useEffect(() => { setCmd(p.devCommand); }, [p.devCommand]);
@@ -59,7 +56,6 @@ export function Drawer(p: Props) {
         {p.tab !== 'dev' && <div className="spacer" />}
         <button className="icon-btn" onClick={p.onClose}><X size={15} /></button>
       </div>
-      {/* Kept mounted while the drawer is open, so switching tabs doesn't redraw the terminal. */}
       <div className="term-wrap" style={{ display: p.tab === 'term' ? 'flex' : 'none' }}>
         {(p.tab === 'term' || seen.current) && <Suspense fallback={null}><TerminalPane cwd={p.cwd} preferred={p.shell} onPrefer={p.onShell} /></Suspense>}
       </div>

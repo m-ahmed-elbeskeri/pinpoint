@@ -1,10 +1,5 @@
-// Runs inside every page shown in Pinpoint's browser (isolated world).
-// Draws the hover highlight + numbered markers in a closed shadow root and
-// reports picked elements to the host via ipcRenderer.sendToHost.
 const { ipcRenderer, webFrame } = require('electron');
 
-// React only registers its renderer with a DevTools hook that exists before it
-// loads. A minimal one lets Pinpoint change a component's props live.
 try {
   webFrame.executeJavaScript(`(() => {
     if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__) return;
@@ -18,11 +13,8 @@ try {
         on: noop, off: noop, emit: noop, sub: () => noop },
     });
   })()`);
-} catch { /* no main world yet (about:blank) */ }
+} catch {  }
 
-// Freezing a page has to hold its timers too, or a toast still dismisses itself
-// and a menu still closes on its delay. Timers set by the page go through a thin
-// wrapper: while frozen, timeouts wait (and run on release) and intervals skip.
 try {
   webFrame.executeJavaScript(`(() => {
     if (window.__pinpointFreeze) return;
@@ -42,25 +34,24 @@ try {
       for (const run of state.held.splice(0)) { try { run(); } catch (err) { console.error(err); } }
     } });
   })()`);
-} catch { /* no main world yet */ }
+} catch {  }
 
 let mode = 'browse';
 let hoverEl = null;
-let hoverStack = []; // children we climbed out of with ArrowUp, for ArrowDown
-let markers = [];    // [{uid, n, color, active}]
+let hoverStack = [];
+let markers = [];
 let hidden = false;
-let pickHold = 0; // when an element was picked and its screenshot is still being taken
+let pickHold = 0;
 let uidSeq = 0;
 let ui = null;
-let frozen = false;        // page events are held back so menus, tooltips and popovers stay open
-let layoutOn = true;       // box model and flex/grid overlays on the hovered element
-let altDown = false;       // Alt held: measure from the selected element to the hovered one
-let recording = false;     // clicks and typing are reported to the host as steps
-const tweaked = new Map(); // element -> { style, props, disabled }: live edits, and what to restore
+let frozen = false;
+let layoutOn = true;
+let altDown = false;
+let recording = false;
+const tweaked = new Map();
 
-const ACCENT = '#ff4f3a'; // markup red: readable on light and dark pages
+const ACCENT = '#ff4f3a';
 
-// ---------- overlay UI ----------
 function ensureUI() {
   if (ui && ui.host.isConnected) return ui;
   const host = document.createElement('pinpoint-overlay');
@@ -114,11 +105,9 @@ function describeShort(el) {
   return s;
 }
 
-// ---------- layout overlay ----------
 const num = (v) => parseFloat(v) || 0;
 const div = (cls, css) => { const d = document.createElement('div'); d.className = cls; d.style.cssText = css; return d; };
 
-// A line with its length in px, between two points on the same row or column.
 function ruler(parts, x1, y1, x2, y2) {
   const len = Math.round(Math.abs(x2 - x1) + Math.abs(y2 - y1));
   if (len < 1) return;
@@ -131,8 +120,6 @@ function ruler(parts, x1, y1, x2, y2) {
   parts.push(tag);
 }
 
-// Distances from the selected element (a) to the hovered one (b): the gaps
-// between them, or the insets when one contains the other.
 function measure(parts, a, b) {
   const midY = (Math.max(a.top, b.top) + Math.min(a.bottom, b.bottom)) / 2;
   const midX = (Math.max(a.left, b.left) + Math.min(a.right, b.right)) / 2;
@@ -148,8 +135,6 @@ function measure(parts, a, b) {
   else { ruler(parts, x, Math.min(a.top, b.top), x, Math.max(a.top, b.top)); ruler(parts, x, Math.min(a.bottom, b.bottom), x, Math.max(a.bottom, b.bottom)); }
 }
 
-// Margin (orange) and padding (green) of the hovered element, its flex/grid
-// children, and distances from the selected element while Alt is held.
 function renderLayout(u, el, r) {
   const parts = [];
   const cs = getComputedStyle(el);
@@ -185,14 +170,10 @@ function renderHover() {
     u.hover.hidden = true; u.label.hidden = true; u.layout.replaceChildren(); return;
   }
   const r = hoverEl.getBoundingClientRect();
-  // Most frames nothing has moved: the same element, in the same place. Drawing it again
-  // every frame costs the page its smoothness, so only a change (or every 20th frame, for
-  // children that moved inside it) redraws.
   const key = `${r.left},${r.top},${r.width},${r.height},${layoutOn},${altDown},${markers.length}`;
   if (hoverEl === drawnEl && key === drawnKey && !u.hover.hidden && ++drawnAge < 20) return;
   drawnEl = hoverEl; drawnKey = key; drawnAge = 0;
   u.hover.hidden = false; place(u.hover, r);
-  // Not for the page itself or near-full-screen wrappers: tinting everything says nothing.
   const huge = hoverEl === document.body || hoverEl === document.documentElement || r.width * r.height > innerWidth * innerHeight * 0.6;
   const note = layoutOn && !huge ? renderLayout(u, hoverEl, r) : (u.layout.replaceChildren(), '');
   u.label.hidden = false;
@@ -211,7 +192,6 @@ const markEls = new Map();
 function renderMarkers() {
   const u = ensureUI();
   u.marks.style.display = hidden ? 'none' : '';
-  // Rebuild only when the set changes; positions are updated every frame.
   if (u.marks.childElementCount !== markers.length * 2) {
     u.marks.innerHTML = '';
     for (const m of markers) {
@@ -223,7 +203,6 @@ function renderMarkers() {
   markers.forEach((m, i) => {
     const box = u.marks.children[i * 2];
     const badge = u.marks.children[i * 2 + 1];
-    // The marked element is looked up once and kept until it leaves the page.
     let el = markEls.get(m.uid);
     if (!el || !el.isConnected || el.getAttribute('data-pinpoint') !== m.uid) {
       el = document.querySelector(`[data-pinpoint="${m.uid}"]`);
@@ -250,7 +229,6 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-// ---------- element info ----------
 const STYLE_KEYS = [
   'display', 'position', 'width', 'height', 'margin', 'padding', 'color', 'background-color', 'background-image',
   'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align', 'border', 'border-radius',
@@ -269,7 +247,6 @@ function styles(el) {
 }
 
 function stableClass(c) {
-  // Skip utility variants and hashed CSS-module / styled-components names.
   return !/[:[\]/@!]/.test(c) && !/^(css|sc|jsx|svelte|emotion)-[a-z0-9]+$/i.test(c) && !/__[a-zA-Z0-9]{5,}$/.test(c) && c.length < 40;
 }
 
@@ -293,7 +270,7 @@ function selectorFor(el) {
     }
     parts.unshift(part);
     const sel = parts.join(' > ');
-    try { if (document.querySelectorAll(sel).length === 1) return sel; } catch { /* keep climbing */ }
+    try { if (document.querySelectorAll(sel).length === 1) return sel; } catch {  }
     cur = parent;
   }
   return parts.join(' > ');
@@ -323,11 +300,8 @@ function tagElement(el) {
   return uid;
 }
 
-// Styles worth sending for elements under a drawing: enough to act on "less loud"
-// or "more space" without the full set a direct pick gets.
 const HIT_STYLE_KEYS = new Set(['display', 'margin', 'padding', 'color', 'background-color', 'font-size', 'font-weight', 'border', 'border-radius', 'gap', 'box-shadow', 'opacity']);
 
-// detail: true = everything (direct pick), 'hit' = compact (under a drawing), false = identity only.
 function info(el, detail = true) {
   const r = el.getBoundingClientRect();
   const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
@@ -343,7 +317,7 @@ function info(el, detail = true) {
   return {
     ...base,
     id: el.id || undefined,
-    leaf: el.children.length === 0 || undefined, // only text inside: its copy can be edited in place
+    leaf: el.children.length === 0 || undefined,
     classes: [...el.classList].slice(0, 80),
     path: domPath(el),
     ...(detail === 'hit'
@@ -352,7 +326,6 @@ function info(el, detail = true) {
   };
 }
 
-// ---------- picking ----------
 function isOurs(el) { return el && ui && (el === ui.host || ui.host.contains(el)); }
 
 function targetAt(x, y) {
@@ -379,12 +352,11 @@ function swallow(e) {
 function onClick(e) {
   if (mode !== 'select') return;
   swallow(e);
-  if (suppressClick) { suppressClick = false; return; } // the end of a drag, not a pick
+  if (suppressClick) { suppressClick = false; return; }
   const el = hoverEl || targetAt(e.clientX, e.clientY);
   if (!el) return;
   const payload = info(el);
   hidden = true; pickHold = Date.now(); renderHover(); renderMarkers();
-  // Two frames so the capture the host takes next doesn't include our overlay.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     ipcRenderer.sendToHost('picked', { ...payload, dpr: devicePixelRatio, viewport: { width: innerWidth, height: innerHeight }, shift: e.shiftKey });
   }));
@@ -403,10 +375,6 @@ function onKey(e) {
   }
 }
 
-// ---------- direct manipulation: resize by the edges, drag to reorder ----------
-// Works on the selected element (the active pin). Its right and bottom edges
-// resize it; dragging its body moves it among its siblings. Both show at once
-// in the page and are reported to the host, which records them on the annotation.
 let manip = null;
 let suppressClick = false;
 const EDGE = 7;
@@ -422,14 +390,12 @@ function zoneAt(el, x, y) {
   return 'move';
 }
 
-// Where a dragged element would land: before which sibling, and where to draw the line.
 function dropTarget(el, x, y) {
   const parent = el.parentElement;
   if (!parent) return null;
   const all = [...parent.children].filter((c) => !isOurs(c));
   const sibs = all.filter((c) => c !== el);
   if (!sibs.length) return null;
-  // Laid out in a row when neighbours share a top edge; otherwise stacked.
   const a = all[0].getBoundingClientRect(), b = all[1].getBoundingClientRect();
   const row = Math.abs(a.top - b.top) < Math.min(a.height, b.height) / 2;
   let before = null;
@@ -482,7 +448,7 @@ function manipUp() {
   const m = manip;
   manip = null;
   ensureUI().drop.hidden = true;
-  if (!m.moved) return; // a plain click: handled as a pick
+  if (!m.moved) return;
   suppressClick = true;
   setTimeout(() => { suppressClick = false; }, 80);
   const uid = m.el.getAttribute('data-pinpoint');
@@ -494,7 +460,6 @@ function manipUp() {
   if (!m.target) return;
   const parent = m.el.parentElement;
   const kids = () => [...parent.children].filter((c) => !isOurs(c));
-  // Remember where it started (once), so the move can be undone and reported from the original position.
   if (!rec.order) rec.order = { parent, next: m.el.nextElementSibling, from: kids().indexOf(m.el) };
   parent.insertBefore(m.el, m.target.before);
   const now = kids();
@@ -503,7 +468,6 @@ function manipUp() {
   ipcRenderer.sendToHost('manip', { uid, kind: 'reorder', from: rec.order.from, to: now.indexOf(m.el), count: now.length, before: label });
 }
 
-// Registered before the listeners that swallow page input in select mode, so these still see it.
 window.addEventListener('pointerdown', manipDown, true);
 window.addEventListener('pointermove', manipMove, true);
 window.addEventListener('pointerup', manipUp, true);
@@ -515,24 +479,18 @@ window.addEventListener('click', onClick, true);
 window.addEventListener('mousemove', onMove, true);
 window.addEventListener('keydown', onKey, true);
 window.addEventListener('mouseleave', () => { if (mode === 'select') { hoverEl = null; } });
-// The host never sees clicks made in here; tell it, so its open menus can close.
 window.addEventListener('mousedown', () => ipcRenderer.sendToHost('pointer'), true);
 
-// ---------- freeze ----------
-// Holds transient UI open so it can be picked: page scripts stop hearing the
-// events that would close it, and the host forces :hover on what was hovered.
 function setFrozen(on, fromPage) {
   if (on === frozen) return;
   frozen = on;
   if (on) document.querySelectorAll(':hover').forEach((el) => { if (!isOurs(el)) el.setAttribute('data-pinpoint-hover', ''); });
-  try { webFrame.executeJavaScript(`window.__pinpointFreeze && window.__pinpointFreeze(${on ? 'true' : 'false'})`); } catch { /* page is gone */ }
-  // When unfreezing, the marks stay until the host has released :hover and sends 'thaw'.
+  try { webFrame.executeJavaScript(`window.__pinpointFreeze && window.__pinpointFreeze(${on ? 'true' : 'false'})`); } catch {  }
   if (fromPage) ipcRenderer.sendToHost('frozen', on);
 }
 
-// Keyboard shortcuts should work even while focus is inside the page.
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'F8') { setFrozen(!frozen, true); e.preventDefault(); return; } // works while typing too
+  if (e.key === 'F8') { setFrozen(!frozen, true); e.preventDefault(); return; }
   const tag = (e.target && e.target.tagName) || '';
   const typing = /INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable);
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -541,7 +499,6 @@ window.addEventListener('keydown', (e) => {
   else if (['v', 's', 'd', 'k'].includes(k)) ipcRenderer.sendToHost('key', k);
 }, true);
 
-// Registered after our own listeners, so picking still works on a frozen page.
 function hold(e) {
   if (!frozen) return;
   e.stopImmediatePropagation();
@@ -556,7 +513,6 @@ for (const t of [
 }
 document.addEventListener('visibilitychange', hold, true);
 
-// ---------- live tweaks ----------
 const byUid = (uid) => document.querySelector(`[data-pinpoint="${uid}"]`);
 
 function tweakRecord(el) {
@@ -565,8 +521,6 @@ function tweakRecord(el) {
   return rec;
 }
 
-// Inline !important styles win over the page's own, so the user sees the result
-// instantly. The original style attribute is put back when the tweak is dropped.
 function applyTweaks(el, rec) {
   if (rec.style == null) el.removeAttribute('style'); else el.setAttribute('style', rec.style);
   for (const [prop, value] of rec.props) el.style.setProperty(prop, value, 'important');
@@ -587,23 +541,17 @@ function untweak(el) {
   tweaked.delete(el);
 }
 
-// ---------- host commands ----------
 ipcRenderer.on('mode', (_e, m) => {
   mode = m;
   if (mode !== 'select') { hoverEl = null; hoverStack = []; }
   hidden = false;
   document.documentElement.style.cursor = mode === 'select' ? 'crosshair' : '';
   ensureUI();
-  // The render loop idles outside select mode, so clear the hover box right now
-  // or it stays frozen on the page.
   renderHover();
   renderMarkers();
 });
-// After a pick the overlay stays out of the way until the host has taken its screenshot
-// (it says so with 'hide' false); the new marker arriving meanwhile must not bring it back early.
 ipcRenderer.on('markers', (_e, list) => { markers = list || []; if (!pickHold || Date.now() - pickHold > 1500) hidden = false; ensureUI(); renderMarkers(); });
 ipcRenderer.on('hide', (_e, h) => { pickHold = 0; hidden = !!h; renderMarkers(); renderHover(); });
-// Hide just the hover box (markers stay); used before overview captures.
 ipcRenderer.on('clean', () => { hoverEl = null; renderHover(); ipcRenderer.sendToHost('cleaned'); });
 ipcRenderer.on('tweak', (_e, { uid, prop, value }) => {
   const el = byUid(uid);
@@ -619,7 +567,6 @@ ipcRenderer.on('setDisabled', (_e, { uid, on }) => {
   if (rec.disabled == null) rec.disabled = el.hasAttribute('disabled');
   el.toggleAttribute('disabled', on ? true : rec.disabled);
 });
-// Copy and class edits, shown live like style tweaks and restored the same way.
 ipcRenderer.on('setText', (_e, { uid, text }) => {
   const el = byUid(uid);
   if (!el || el.children.length) return;
@@ -634,11 +581,9 @@ ipcRenderer.on('setClass', (_e, { uid, value }) => {
   if (rec.cls == null) rec.cls = el.getAttribute('class') || '';
   el.setAttribute('class', value);
 });
-// Drop the live edits of one element, or of all of them.
 ipcRenderer.on('untweak', (_e, uid) => {
   if (uid) { const el = byUid(uid); if (el) untweak(el); } else for (const el of [...tweaked.keys()]) untweak(el);
 });
-// Fresh info for an element that is already tagged (after forcing a state on it).
 ipcRenderer.on('inspect', (_e, { reqId, uid }) => {
   const el = byUid(uid);
   ipcRenderer.sendToHost('reply', { reqId, data: el ? info(el) : null });
@@ -655,7 +600,6 @@ ipcRenderer.on('clear', () => {
   renderMarkers();
 });
 
-// Elements under a drawing: sample points -> distinct, reasonably specific elements.
 ipcRenderer.on('hitTest', (_e, { reqId, points }) => {
   const seen = new Set();
   const hits = [];
@@ -666,7 +610,6 @@ ipcRenderer.on('hitTest', (_e, { reqId, points }) => {
     seen.add(el);
     hits.push(el);
   }
-  // Prefer the innermost elements; drop ancestors of other hits.
   const specific = hits.filter((el) => !hits.some((o) => o !== el && el.contains(o))).slice(0, 8);
   ipcRenderer.sendToHost('hits', { reqId, hits: specific.map((el) => info(el, 'hit')) });
 });
@@ -677,15 +620,12 @@ ipcRenderer.on('scrollTo', (_e, uid) => {
 
 ipcRenderer.on('layout', (_e, on) => { layoutOn = !!on; renderHover(); });
 
-// Light / dark for sites that switch theme with a class or attribute rather than
-// the prefers-color-scheme media query (which the host emulates separately).
 const THEME_ATTRS = ['data-theme', 'data-mode', 'data-color-mode', 'data-color-scheme', 'data-bs-theme', 'data-mui-color-scheme', 'data-mantine-color-scheme'];
 let themeSaved = null;
 ipcRenderer.on('scheme', (_e, mode) => {
   const html = document.documentElement, body = document.body;
   if (!themeSaved && !mode) return;
   if (!themeSaved) themeSaved = { cls: html.className, body: body ? body.className : '', attrs: THEME_ATTRS.map((a) => [a, html.getAttribute(a)]) };
-  // Back to how the page had it, then apply the asked-for theme on top.
   html.className = themeSaved.cls;
   if (body) body.className = themeSaved.body;
   for (const [a, v] of themeSaved.attrs) { if (v == null) html.removeAttribute(a); else html.setAttribute(a, v); }
@@ -702,9 +642,6 @@ ipcRenderer.on('scheme', (_e, mode) => {
 });
 window.addEventListener('keyup', (e) => { if (e.key === 'Alt') altDown = false; }, true);
 
-// ---------- content stress tests ----------
-// Temporary rewrites of what the page shows, to see how the layout copes. All
-// of them are undone when switched off (or by a reload).
 const stress = { texts: new Map(), dir: null, on: new Set() };
 const ACCENTS = { a: 'á', e: 'é', i: 'í', o: 'ö', u: 'ü', c: 'ç', n: 'ñ', y: 'ý', A: 'Á', E: 'É', I: 'Í', O: 'Ö', U: 'Ü', C: 'Ç', N: 'Ñ' };
 
@@ -714,8 +651,6 @@ function pageStyle() {
     s = document.createElement('style');
     s.setAttribute('data-pinpoint-style', '');
     s.textContent = '[data-pinpoint-empty]{display:none!important}'
-      // Isolate: everything outside the element is removed from layout, its ancestors
-      // keep only what it inherits from them (display: contents), and it sits centered.
       + 'html[data-pinpoint-isolate] body{display:grid!important;place-items:center!important;min-height:100vh!important;margin:0!important;padding:32px!important;box-sizing:border-box!important}'
       + 'html[data-pinpoint-isolate] [data-pinpoint-iso-path]{display:contents!important}'
       + 'html[data-pinpoint-isolate] body *:not([data-pinpoint-iso-path]):not([data-pinpoint-iso]):not([data-pinpoint-iso] *):not(pinpoint-overlay){display:none!important}';
@@ -754,7 +689,6 @@ function applyStress() {
   document.querySelectorAll('[data-pinpoint-empty]').forEach((n) => n.removeAttribute('data-pinpoint-empty'));
   if (stress.on.has('empty')) {
     pageStyle();
-    // Lists, table bodies, and any container whose children repeat the same shape.
     const sig = (c) => `${c.tagName}.${[...c.classList].sort().join('.')}`;
     for (const box of document.body.querySelectorAll('*')) {
       if (isOurs(box) || box.children.length < 2) continue;
@@ -766,8 +700,6 @@ function applyStress() {
 }
 ipcRenderer.on('stress', (_e, kinds) => { stress.on = new Set(kinds || []); applyStress(); });
 
-// Show one element on its own, still live: the rest of the page drops out of
-// layout (nothing is removed, so component state survives) and it is centered.
 ipcRenderer.on('isolate', (_e, uid) => {
   document.querySelectorAll('[data-pinpoint-iso],[data-pinpoint-iso-path]').forEach((n) => { n.removeAttribute('data-pinpoint-iso'); n.removeAttribute('data-pinpoint-iso-path'); });
   const el = uid && byUid(uid);
@@ -778,25 +710,22 @@ ipcRenderer.on('isolate', (_e, uid) => {
   for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) p.setAttribute('data-pinpoint-iso-path', '');
 });
 
-// CSS generated for classes the page's build hasn't emitted yet (new Tailwind utilities).
 ipcRenderer.on('injectCss', (_e, css) => {
   let s = document.querySelector('style[data-pinpoint-tw]');
   if (!s) { s = document.createElement('style'); s.setAttribute('data-pinpoint-tw', ''); (document.head || document.documentElement).appendChild(s); }
   s.textContent = css || '';
 });
 
-// ---------- scroll sync (side-by-side sizes) ----------
 let syncedAt = 0;
 let scrollQueued = false;
 const scrollRoom = () => Math.max(1, document.documentElement.scrollHeight - innerHeight);
 window.addEventListener('scroll', () => {
-  if (scrollQueued || Date.now() - syncedAt < 250) return; // ignore the scroll we caused ourselves
+  if (scrollQueued || Date.now() - syncedAt < 250) return;
   scrollQueued = true;
   requestAnimationFrame(() => { scrollQueued = false; ipcRenderer.sendToHost('scroll', scrollY / scrollRoom()); });
 }, { capture: true, passive: true });
 ipcRenderer.on('syncScroll', (_e, ratio) => { syncedAt = Date.now(); scrollTo(0, ratio * scrollRoom()); });
 
-// ---------- interaction recording ----------
 const ACTIONABLE = 'a,button,input,select,textarea,label,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=switch],[onclick]';
 function stepTarget(el) {
   const t = (el.closest && el.closest(ACTIONABLE)) || el;

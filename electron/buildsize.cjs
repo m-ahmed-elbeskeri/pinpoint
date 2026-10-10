@@ -1,6 +1,3 @@
-// Production bundle size: runs the project's own build and adds up the JS and
-// CSS it emits (raw and gzipped). The dev-server numbers on each run are only
-// good for before/after; this is the size users actually download.
 const { exec } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,7 +11,6 @@ function readPkg(root) {
   try { return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')); } catch { return {}; }
 }
 
-// `next build` and `next dev` write to the same .next folder: the two can't run at once.
 function sharesDevFolder(root) {
   const pkg = readPkg(root);
   return !!{ ...pkg.dependencies, ...pkg.devDependencies }.next;
@@ -29,12 +25,12 @@ function collect(dir, since, acc) {
     const kind = /\.(m?js)$/.test(e.name) ? 'js' : /\.css$/.test(e.name) ? 'css' : null;
     if (!kind) continue;
     try {
-      if (fs.statSync(abs).mtimeMs < since) continue; // left over from an older build
+      if (fs.statSync(abs).mtimeMs < since) continue;
       const buf = fs.readFileSync(abs);
       acc[kind] += buf.length;
       acc[`${kind}Gzip`] += zlib.gzipSync(buf).length;
       acc.files++;
-    } catch { /* vanished */ }
+    } catch {  }
   }
 }
 
@@ -51,7 +47,7 @@ function measure(root) {
       for (const d of OUT_DIRS) collect(path.join(root, d), started, now);
       if (!now.files) return reject(new Error("The build finished, but no JS or CSS output was found in the usual folders (dist, build, out, .next, .output)."));
       let previous = null;
-      try { previous = JSON.parse(fs.readFileSync(historyFile(root), 'utf8')); } catch { /* first measurement */ }
+      try { previous = JSON.parse(fs.readFileSync(historyFile(root), 'utf8')); } catch {  }
       project.ensureDir(root);
       fs.writeFileSync(historyFile(root), JSON.stringify(now));
       resolve({ now, previous });

@@ -10,7 +10,6 @@ import { closeWorkspaceScript, storageScript, workspaceScript, type WorkspaceSpe
 import type { FlowStep } from '../lib/types';
 import type { A11yIssue } from '../lib/types';
 
-// Electron's <webview> element (subset of its API we use).
 interface WebviewEl extends HTMLElement {
   loadURL(url: string): Promise<void>;
   goBack(): void; goForward(): void; reload(): void; stop(): void;
@@ -30,8 +29,6 @@ export interface PickedElement extends ElementInfo {
 
 export interface FrameTarget { uid: string; selector: string }
 
-// Runs in the page. Scrolls so the given elements are on screen (centred when they fit),
-// through any scrolling containers they sit in. With none of them found, goes to `fallbackY`.
 function framePage(targets: FrameTarget[], fallbackY: number | null) {
   const els = targets.map((t) => {
     const marked = document.querySelector(`[data-pinpoint="${t.uid}"]`);
@@ -51,7 +48,6 @@ function framePage(targets: FrameTarget[], fallbackY: number | null) {
   if (b.top < 0 || b.bottom > innerHeight) {
     els[0].scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
     b = box();
-    // Several elements: centre the group when it fits, else start just above the first.
     if (els.length > 1 && (b.top < 0 || b.bottom > innerHeight)) {
       const h = b.bottom - b.top;
       window.scrollBy({ top: h <= innerHeight ? b.top - (innerHeight - h) / 2 : b.top - 40, behavior: 'instant' as ScrollBehavior });
@@ -67,26 +63,26 @@ export interface BrowserHandle {
   reload(): void;
   devtools(): void;
   send(channel: string, ...args: unknown[]): void;
-  capture(rect?: Rect, jpeg?: boolean): Promise<string>; // jpeg: quicker, for shots that are kept as JPEG
+  capture(rect?: Rect, jpeg?: boolean): Promise<string>;
   hitTest(points: [number, number][]): Promise<ElementInfo[]>;
   locateSource(uid: string): Promise<ElementInfo['source']>;
   size(): { width: number; height: number };
   links(): Promise<{ href: string; text: string }[]>;
   extractDesign(): Promise<string | null>;
-  id(): number | null;                                      // webContents id, for page-state calls
-  inspect(uid: string): Promise<ElementInfo | null>;        // re-read an element that's already picked
+  id(): number | null;
+  inspect(uid: string): Promise<ElementInfo | null>;
   tokens(uid: string): Promise<Record<string, string> | null>;
   a11y(axeSource: string): Promise<A11yIssue[] | null>;
-  reveal(selector: string): void;                           // scroll an element into view
-  breakpoints(): Promise<Breakpoint[]>;                     // widths the page's CSS switches at
-  classNames(): Promise<string[]>;                          // class names the page's CSS defines
-  errorOverlay(): Promise<string | null>;                   // what the dev server's error overlay says, when one is up
-  hasHmr(): Promise<boolean>;                               // the page updates itself when files change
-  frame(targets: FrameTarget[], fallbackY?: number): Promise<{ found: boolean; y: number }>; // bring these elements into view (or go back to a scroll position)
-  workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>; // render a component alone, over the page
+  reveal(selector: string): void;
+  breakpoints(): Promise<Breakpoint[]>;
+  classNames(): Promise<string[]>;
+  errorOverlay(): Promise<string | null>;
+  hasHmr(): Promise<boolean>;
+  frame(targets: FrameTarget[], fallbackY?: number): Promise<{ found: boolean; y: number }>;
+  workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>;
   closeWorkspace(): void;
-  setStorage(entries: [string, string][]): Promise<boolean>; // true when a value changed
-  setProp(uid: string, owner: string, name: string, value: unknown): Promise<boolean>; // live React prop change
+  setStorage(entries: [string, string][]): Promise<boolean>;
+  setProp(uid: string, owner: string, name: string, value: unknown): Promise<boolean>;
 
   url(): string;
   title(): string;
@@ -94,8 +90,8 @@ export interface BrowserHandle {
 
 interface Props {
   initialUrl: string;
-  hidden?: boolean; // a background tab: kept alive, not shown
-  partition?: string; // which browser storage the page lives in (a "view as" profile)
+  hidden?: boolean;
+  partition?: string;
   onManip(m: { uid: string; kind: 'resize' | 'reorder'; width?: string | null; height?: string | null; from?: number; to?: number; count?: number; before?: string | null }): void;
   onPicked(el: PickedElement): void;
   onNavigate(state: { url: string; title: string; canBack: boolean; canForward: boolean }): void;
@@ -104,9 +100,9 @@ interface Props {
   onKey(key: string): void;
   onError(msg: string | null): void;
   onConsole(entry: { level: 'error' | 'warning'; message: string; source?: string; line?: number }): void;
-  onPageChange(): void; // a full (non in-page) navigation or reload started a new document
-  onFrozen(on: boolean): void; // the page was frozen or unfrozen with F / F8 from inside it
-  onStep(step: FlowStep): void; // something the user did while recording
+  onPageChange(): void;
+  onFrozen(on: boolean): void;
+  onStep(step: FlowStep): void;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -143,7 +139,6 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
       catch { return null; }
     },
     size() {
-      // Layout size, not the on-screen box: responsive mode may scale the stage.
       return { width: wv.current?.offsetWidth || 0, height: wv.current?.offsetHeight || 0 };
     },
     async links() {
@@ -211,7 +206,6 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
       'dom-ready': () => { ready.current = true; nav(); cb.current.onReady(); },
       'did-navigate': (e) => { nav(); if (e) { cb.current.onPageChange(); cb.current.onStep({ type: 'navigate', url: e.url }); } },
       'console-message': (e) => {
-        // Electron ≥ 35 reports level as a string; older versions used 0-3.
         const level = typeof e.level === 'number' ? ['verbose', 'info', 'warning', 'error'][e.level] : e.level;
         if (level !== 'error' && level !== 'warning') return;
         if (/Electron Security Warning/.test(e.message)) return;
@@ -232,7 +226,6 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
         else if (e.channel === 'step') cb.current.onStep(data);
         else if (e.channel === 'manip') cb.current.onManip(data);
-        // A click on the page counts as a click outside any open menu.
         else if (e.channel === 'pointer') el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         else if (e.channel === 'hits' || e.channel === 'reply') {
           const res = pending.current.get(data.reqId);
@@ -244,8 +237,6 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     return () => { for (const [k, fn] of Object.entries(handlers)) el.removeEventListener(k, fn); };
   }, []);
 
-  // visibility, not display: a webview that is display:none loses its page.
-  // allowpopups lets window.open / target=_blank reach the main process, which turns them into tabs (no window is ever created).
   return <webview ref={wv as any} src={src} partition={props.partition || 'persist:pinpoint'} className={`webview ${props.hidden ? 'bg-tab' : ''}`} {...({ allowpopups: 'true' } as object)} />;
 });
 

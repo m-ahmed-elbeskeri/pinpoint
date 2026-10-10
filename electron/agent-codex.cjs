@@ -1,7 +1,3 @@
-// Codex as a live session over `codex app-server` (JSON-RPC on stdio), which
-// supports steering a running turn (turn/steer) and interrupting it
-// (turn/interrupt). Falls back to one-shot `codex exec` if the app server
-// can't be started (older Codex versions).
 const { spawnCli, lineReader, killProc } = require('./cli.cjs');
 
 const INIT_TIMEOUT_MS = 60000;
@@ -23,8 +19,8 @@ function runCodex(opts) {
   let fellBack = false;
   let fallbackHandle = null;
   let threadId = null;
-  let activeTurn = null;       // id of the in-progress turn
-  let nextInput = null;        // input to start once an interrupted turn completes
+  let activeTurn = null;
+  let nextInput = null;
   let cancelling = false;
   let startedAt = Date.now();
   let seq = 0;
@@ -130,8 +126,6 @@ function runCodex(opts) {
       if (m.error) pnd.reject(new Error(m.error.message || JSON.stringify(m.error)));
       else pnd.resolve(m.result);
     } else if (m.id != null && m.method) {
-      // Server → client request (approvals, user input). We run with approvals
-      // off, so these are rare; accept approvals, decline anything else.
       if (/requestApproval|Approval$/.test(m.method)) send({ id: m.id, result: { decision: settings.codexSandbox === 'read-only' ? 'decline' : 'accept' } });
       else send({ id: m.id, error: { code: -32601, message: `Pinpoint does not handle ${m.method}` } });
     } else if (m.method) {
@@ -159,7 +153,6 @@ function runCodex(opts) {
     });
   });
 
-  // Handshake → thread → first turn.
   (async () => {
     const timer = setTimeout(() => { if (!initialized) fallback('timed out'); }, INIT_TIMEOUT_MS);
     try {
@@ -191,7 +184,6 @@ function runCodex(opts) {
       const input = toInput(text, imgs);
       if (!activeTurn) { startTurn(input).catch((e) => onEvent({ type: 'error', text: e.message })); return true; }
       request('turn/steer', { threadId, input, expectedTurnId: activeTurn })
-        // The turn may have just ended; start a new one with the message instead.
         .catch(() => startTurn(input).catch((e) => onEvent({ type: 'error', text: e.message })));
       return true;
     },
@@ -215,7 +207,6 @@ function runCodex(opts) {
   };
 }
 
-// ---------- one-shot fallback: `codex exec --json` (no live steering) ----------
 function runCodexExec({ settings, cwd, prompt, images, sessionId, onEvent }) {
   const sandbox = settings.codexSandbox || 'workspace-write';
   const common = ['--json', '--skip-git-repo-check', '-c', `sandbox_mode="${sandbox}"`];

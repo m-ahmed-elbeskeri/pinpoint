@@ -1,6 +1,5 @@
-// Drives the real app window: picks an element, opens each panel, and saves screenshots to look at.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -57,7 +56,6 @@ server.listen(0, '127.0.0.1', () => {
   app.whenReady().then(async () => {
     await sleep(5000);
     const win = BrowserWindow.getAllWindows()[0];
-    // Kept in front: a covered or minimized window can't be captured or clicked.
     win.show(); win.focus();
     const host = win.webContents;
     const guest = webContents.getAllWebContents().find((w) => w.getType() === 'webview');
@@ -82,12 +80,11 @@ server.listen(0, '127.0.0.1', () => {
       log('app window + page loaded', !!guest && /Demo shop/.test(guest.getTitle()), guest && guest.getTitle());
       await shot('home');
 
-      // ---- pick the React button
       await ui(`document.addEventListener('click', (e) => { (window.__clicks = window.__clicks || []).push([String(e.target.className || e.target.tagName).slice(0, 30), e.isTrusted, e.detail, e.clientX, e.clientY].join(':')); }, true); 0`);
       await key('s');
       await sleep(300);
       let pop = false;
-      for (let attempt = 0; attempt < 3 && !pop; attempt++) { // a stray real mouse move can steal the first click
+      for (let attempt = 0; attempt < 3 && !pop; attempt++) {
         guest.focus();
         await clickIn('#rb');
         await sleep(2500);
@@ -96,7 +93,6 @@ server.listen(0, '127.0.0.1', () => {
       log('picking opens the note with element tools', pop);
       await shot('picked');
       log('host clicks during pick (expect none)', true, JSON.stringify(await ui(`[window.__clicks || [], document.activeElement.className || document.activeElement.tagName]`)));
-      // The Props and CSS tabs appear once the component and its rules have been looked up.
       let tabs = [];
       for (let i = 0; i < 20 && tabs.length < 4; i++) { tabs = await ui(`[...document.querySelectorAll('.el-tabs button')].map((b) => b.textContent)`); if (tabs.length < 4) await sleep(400); }
       log('tool tabs', tabs.length === 4, tabs.join(' | '));
@@ -107,7 +103,6 @@ server.listen(0, '127.0.0.1', () => {
       const rules = await ui(`[...document.querySelectorAll('.el-rule-head')].map((r) => r.textContent)`);
       log('css tab lists rules with files', rules.some((r) => r.includes('.btn') && r.includes('app.css:6')), rules.join(' || '));
 
-      // ---- live prop edit through the UI (Component tab)
       await ui(`document.querySelectorAll('.el-tabs button')[2].click(); 0`);
       await sleep(300);
       const propNames = await ui(`[...document.querySelectorAll('.el-stack .el-field > span')].map((s) => s.textContent)`);
@@ -115,13 +110,11 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(600);
       log('prop edit re-renders the component', (await pg(`rb.textContent`)) === 'Add to cart (2)', `${propNames.join(',')} -> ${await pg(`rb.textContent`)}`);
 
-      // ---- live tweak through the UI (Styles tab)
       await ui(`document.querySelectorAll('.el-tabs button')[0].click(); 0`);
       await sleep(300);
       await ui(`(() => { const input = document.querySelector('.el-grid .el-field input:not([type=color])'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(input, '40px'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await sleep(400);
       log('style tweak applies in the page', (await pg(`getComputedStyle(rb).paddingTop`)) === '40px');
-      // ---- forced :hover
       await ui(`[...document.querySelectorAll('.el-row .chip')].find((c) => c.textContent === ':hover').click(); 0`);
       await sleep(1200);
       log('forced :hover', (await pg(`getComputedStyle(rb).backgroundColor`)) === 'rgb(17, 51, 153)', await pg(`getComputedStyle(rb).backgroundColor`));
@@ -131,7 +124,6 @@ server.listen(0, '127.0.0.1', () => {
       const annSub = await ui(`[...document.querySelectorAll('.ann-sub')].map((s) => s.textContent).join(' / ')`);
       log('annotation summarises what was set', /:hover/.test(annSub) && /tweak/.test(annSub), annSub);
 
-      // ---- responsive mode, conditions menu, side by side
       await ui(`[...document.querySelectorAll('.vp-toggles > button')].find((b) => b.title.startsWith('Phone')).click(); 0`);
       await sleep(1200);
       log('responsive mode sizes the page', (await pg(`innerWidth`)) === 390, String(await pg(`innerWidth`)));
@@ -153,7 +145,6 @@ server.listen(0, '127.0.0.1', () => {
       await ui(`document.querySelector('.multi-head .icon-btn').click(); [...document.querySelectorAll('.vp-toggles > button')].find((b) => b.title.startsWith('Fill the window')).click(); 0`);
       await sleep(800);
 
-      // ---- record an interaction, then replay it with real input
       await ui(`document.querySelector('.mode-seg button:last-child').click(); 0`);
       await sleep(400);
       guest.focus();
@@ -180,7 +171,6 @@ server.listen(0, '127.0.0.1', () => {
       await shot('end');
       log('no errors in the app console', errors.length === 0, errors.join(' | ').slice(0, 400));
 
-      // ---- line lookup without a source map
       const cssrules = require(path.join(repo, 'electron', 'cssrules.cjs'));
       log('cssrules module loads', typeof cssrules.matched === 'function');
     } catch (err) { log('exception', false, err.stack); }

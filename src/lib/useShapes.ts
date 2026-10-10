@@ -1,4 +1,3 @@
-// The shapes drawn on a surface (the page or the sketch board), with undo and redo.
 import { useState } from 'react';
 import type { Shape } from './types';
 

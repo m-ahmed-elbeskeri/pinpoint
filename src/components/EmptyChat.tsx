@@ -3,7 +3,7 @@ import type { Mode } from '../lib/types';
 
 interface Props {
   agentName: string;
-  cliMissing: boolean; // the chosen agent's command-line tool wasn't found
+  cliMissing: boolean;
   setMode(m: Mode): void;
 }
 
@@ -14,7 +14,6 @@ const STEPS = [
   { mode: null, icon: Send, name: 'Send', key: '↵', text: '' },
 ] as const;
 
-// What a chat shows before its first message: the four steps, the first three of which switch to that mode.
 export function EmptyChat({ agentName, cliMissing, setMode }: Props) {
   return (
     <div className="chat-empty">

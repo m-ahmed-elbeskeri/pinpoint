@@ -1,6 +1,3 @@
-// Finds the React components a project exports and what props they take, for
-// the component workspace: render any of them alone, with controls for its
-// props and a grid of its variants. No Storybook involved.
 const fs = require('node:fs');
 const path = require('node:path');
 const { parse, walk } = require('./instant.cjs');
@@ -25,7 +22,6 @@ function files(root) {
   return out;
 }
 
-// A prop's type, reduced to what a control can be built for.
 function propType(t) {
   if (!t) return { type: 'other' };
   if (t.type === 'TSParenthesizedType') return propType(t.typeAnnotation);
@@ -55,7 +51,6 @@ function scanFile(root, rel) {
   let ast;
   try { ast = parse(code, rel); } catch { return []; }
 
-  // Type declarations in this file, to resolve `props: ButtonProps`.
   const types = new Map();
   for (const node of ast.program.body) {
     const d = node.type === 'ExportNamedDeclaration' && node.declaration ? node.declaration : node;
@@ -63,7 +58,7 @@ function scanFile(root, rel) {
     else if (d.type === 'TSTypeAliasDeclaration' && d.typeAnnotation.type === 'TSTypeLiteral') types.set(d.id.name, d.typeAnnotation.members);
   }
   const members = (ann) => {
-    const t = ann?.typeAnnotation?.typeAnnotation; // the annotation node wraps the type itself
+    const t = ann?.typeAnnotation?.typeAnnotation;
     if (!t) return null;
     if (t.type === 'TSTypeLiteral') return t.members;
     if (t.type === 'TSTypeReference' && t.typeName.type === 'Identifier') return types.get(t.typeName.name) || null;
@@ -71,7 +66,6 @@ function scanFile(root, rel) {
   };
   const hasJsx = (fn) => { let yes = false; walk(fn, (n) => { if (n.type === 'JSXElement' || n.type === 'JSXFragment') yes = true; }); return yes; };
 
-  // The function behind a declaration: plain, arrow, or wrapped in memo()/forwardRef().
   const unwrap = (init) => {
     if (!init) return null;
     if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression' || init.type === 'FunctionDeclaration') return init;
@@ -105,7 +99,7 @@ function scanFile(root, rel) {
   };
 
   const out = [];
-  const locals = new Map(); // name -> function, for `export default Name` and `export { Name }`
+  const locals = new Map();
   for (const node of ast.program.body) {
     if (node.type === 'FunctionDeclaration' && node.id) locals.set(node.id.name, node);
     if (node.type === 'VariableDeclaration') for (const d of node.declarations) if (d.id.type === 'Identifier') locals.set(d.id.name, unwrap(d.init));

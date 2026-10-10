@@ -10,14 +10,12 @@ interface Props {
   onClose(): void;
 }
 
-// A reference image laid over the live page, to line a build up against its mockup.
 export function MockupOverlay({ overlay, onChange, onDiff, onClose }: Props) {
   const start = useRef<{ px: number; py: number; x: number; y: number; k: number } | null>(null);
 
   const down = (e: React.PointerEvent) => {
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    // k: screen pixels per page pixel, when the stage is zoomed.
     start.current = { px: e.clientX, py: e.clientY, x: overlay.x, y: overlay.y, k: el.getBoundingClientRect().width / el.offsetWidth || 1 };
   };
   const move = (e: React.PointerEvent) => {
@@ -49,8 +47,6 @@ export function MockupOverlay({ overlay, onChange, onDiff, onClose }: Props) {
 
 const load = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
 
-// The mockup redrawn at the page screenshot's size (fitted to its width, shifted
-// by the overlay's offset), so the two can be compared pixel for pixel.
 export async function fitMockup(mockup: string, shot: string, offset: { x: number; y: number }, frameWidth: number): Promise<string> {
   const [m, s] = await Promise.all([load(mockup), load(shot)]);
   const c = document.createElement('canvas');
@@ -58,7 +54,7 @@ export async function fitMockup(mockup: string, shot: string, offset: { x: numbe
   const ctx = c.getContext('2d')!;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, c.width, c.height);
-  const k = s.width / (frameWidth || s.width); // screenshot pixels per CSS pixel
+  const k = s.width / (frameWidth || s.width);
   ctx.drawImage(m, offset.x * k, offset.y * k, s.width, m.height * (s.width / m.width));
   return c.toDataURL('image/jpeg', 0.9);
 }

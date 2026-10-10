@@ -1,9 +1,7 @@
-// Odds and ends with no better home.
 import type { Rect } from './types';
 
 export const errText = (e: unknown) => String((e as Error)?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
-// Reads an image file, shrinking big ones so requests stay light.
 export function readImage(file: File, maxEdge = 1800): Promise<string> {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();

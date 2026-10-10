@@ -1,5 +1,3 @@
-// Same mark as build/icon.svg: a highlighter-yellow tile, a pointer and a
-// markup stroke. Solid colors only.
 export function Logo({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="64 64 896 896" aria-hidden="true" className="logo-mark">

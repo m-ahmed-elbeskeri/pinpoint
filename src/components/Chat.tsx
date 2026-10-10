@@ -7,7 +7,6 @@ import {
 } from './icons';
 import type { BuildSize, ChatItem, DiffFile, FileChange, PerfMetrics, RevertResult } from '../lib/types';
 
-// Diffs per run are fetched once and shared by every file row of that run.
 const diffCache = new Map<string, Promise<DiffFile[]>>();
 const loadDiff = (runId: string) => {
   if (!diffCache.has(runId)) diffCache.set(runId, window.pinpoint.runDiff(runId).catch((e) => { diffCache.delete(runId); throw e; }));
@@ -15,7 +14,6 @@ const loadDiff = (runId: string) => {
 };
 export const invalidateDiff = (runId: string) => diffCache.delete(runId);
 
-// Before/after thumbnails under a run; click opens the compare view.
 const shotCache = new Map<string, Promise<Record<string, string>>>();
 function ShotStrip({ runId, onOpen }: { runId: string; onOpen(): void }) {
   const [shots, setShots] = useState<Record<string, string> | null>(null);
@@ -35,8 +33,6 @@ function ShotStrip({ runId, onOpen }: { runId: string; onOpen(): void }) {
   );
 }
 
-// What the run did to how the open page loads, in plain words: a verdict first, then
-// only the differences worth a look. Nothing is shown when nothing moved.
 function PerfLine({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } }) {
   const { before: b, after: a } = perf;
   const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
@@ -54,7 +50,7 @@ function PerfLine({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } 
   if (Math.abs(a.cls - b.cls) >= 0.01) items.push({ text: a.cls > b.cls ? 'content jumps around more while loading' : 'content jumps around less while loading', worse: a.cls > b.cls });
   if (b.lcp && a.lcp && Math.abs(a.lcp - b.lcp) >= 150) items.push({ text: `main content appears ${Math.abs(a.lcp - b.lcp)} ms ${a.lcp > b.lcp ? 'later' : 'sooner'}`, worse: a.lcp > b.lcp });
   const worse = items.some((i) => i.worse), better = items.some((i) => !i.worse);
-  if (!items.length) return null; // nothing moved: the numbers are behind "Load stats"
+  if (!items.length) return null;
   return (
     <div className={`route-check ${worse ? 'moved' : ''}`}>
       <Timer size={12} />
@@ -64,7 +60,6 @@ function PerfLine({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } 
   );
 }
 
-// Every load number, before and after, shown when asked for.
 function PerfStats({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } }) {
   const { before: b, after: a } = perf;
   const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
@@ -89,7 +84,6 @@ function PerfStats({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics }
   );
 }
 
-// Size of the real production build, measured when asked.
 function BuildLine({ build }: { build: { now: BuildSize; previous: BuildSize | null } }) {
   const { now, previous } = build;
   const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
@@ -106,7 +100,6 @@ function BuildLine({ build }: { build: { now: BuildSize; previous: BuildSize | n
   );
 }
 
-// The takes on one request, side by side: look, compare, pick.
 function VariantPicker({ item, busy, onPick, onCompare }: {
   item: Extract<ChatItem, { kind: 'variants' }>; busy: boolean;
   onPick(runId: string): void; onCompare(runId: string): void;
@@ -142,7 +135,6 @@ function VariantPicker({ item, busy, onPick, onCompare }: {
   );
 }
 
-// Compact inline diff for one file, shown inside the chat.
 function InlineDiff({ runId, path, onFirstLine }: { runId: string; path: string; onFirstLine(line: number): void }) {
   const [file, setFile] = useState<DiffFile | null | undefined>(undefined);
   useEffect(() => {
@@ -185,11 +177,10 @@ function InlineDiff({ runId, path, onFirstLine }: { runId: string; path: string;
   );
 }
 
-// The files of a run. A long list starts folded to its first few, so the card stays a glance.
 const FILES_SHOWN = 5;
 function FileList({ count, children }: { count: number; children: ReactNode[] }) {
   const [all, setAll] = useState(false);
-  const fold = count > FILES_SHOWN + 1; // never hide just one
+  const fold = count > FILES_SHOWN + 1;
   return (
     <ul className="done-files">
       {fold && !all ? children.slice(0, FILES_SHOWN) : children}
@@ -248,14 +239,12 @@ function FileRow({ runId, change, disabled, onReview, onRevert, onOpen }: {
 
 const HEX = /(#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b)/;
 
-// Hex colors get a little swatch, which helps when reading design rules.
 function WithSwatches({ text }: { text: string }) {
   const parts = text.split(HEX);
   if (parts.length === 1) return <>{text}</>;
   return <>{parts.map((p, i) => (i % 2 ? <span key={i} className="hex"><i style={{ background: p }} />{p}</span> : p))}</>;
 }
 
-// Minimal, safe markdown: fenced code, inline code, bold, headings, bullets.
 function Inline({ text }: { text: string }) {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
   return (
@@ -293,7 +282,6 @@ export function Markdown({ text }: { text: string }) {
           const h = para.match(/^#{1,4}\s+(.*)$/);
           if (h && lines.length === 1) return <h4 key={`${i}-${j}`}><Inline text={h[1]} /></h4>;
           if (lines.every((l) => l.startsWith('>'))) return <blockquote key={`${i}-${j}`}><Inline text={lines.map((l) => l.replace(/^>\s?/, '')).join(' ')} /></blockquote>;
-          // A heading followed by a list/paragraph without a blank line between them.
           if (/^#{1,4}\s/.test(lines[0]) && lines.length > 1) {
             return <div key={`${i}-${j}`}><h4><Inline text={lines[0].replace(/^#{1,4}\s+/, '')} /></h4><Markdown text={lines.slice(1).join('\n')} /></div>;
           }
@@ -352,8 +340,8 @@ function Thinking({ text, streaming }: { text: string; streaming?: boolean }) {
 
 interface ItemProps {
   item: ChatItem;
-  live?: boolean;                 // part of the run that is going on right now
-  onForceSteer(id: string): void; // push a waiting message in now
+  live?: boolean;
+  onForceSteer(id: string): void;
   root: string;
   busy: boolean;
   onReload(): void;
@@ -445,16 +433,13 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
       const n = item.changes.length;
       const files = `${n} file${n > 1 ? 's' : ''}`;
       const moved = item.routeCheck?.filter((r) => r.changed) || [];
-      // Files changed but the page looks the same: worth saying loudly. A fresh load of the
-      // page (the route check) is the better witness; the on-screen screenshots are the fallback.
       const here = item.routeCheck?.find((r) => r.current);
       const noVisual = n > 0 && item.ok && !item.undone && !item.variant && !item.verify && (here ? !here.changed : item.visual === 'none');
-      const elsewhere = moved.filter((r) => !r.current); // pages the user wasn't looking at
-      const sideEffects = moved.some((r) => r.current && r.asked?.length && r.areas?.length); // more changed here than was pointed at
+      const elsewhere = moved.filter((r) => !r.current);
+      const sideEffects = moved.some((r) => r.current && r.asked?.length && r.areas?.length);
       const others = (item.routeCheck?.filter((r) => !r.current) || []).length;
       const counted = item.changes.filter((c) => c.add != null);
       const added = counted.reduce((s, c) => s + (c.add || 0), 0), removed = counted.reduce((s, c) => s + (c.del || 0), 0);
-      // A check that found nothing to fix is a footnote, not a result: one quiet line.
       const quiet = !!item.verify && n === 0;
       return (
         <div className={`done-card ${item.ok ? 'ok' : 'fail'} ${item.undone ? 'undone' : ''} ${quiet ? 'quiet' : ''}`}>
@@ -527,7 +512,6 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
           {item.perf && <PerfLine perf={item.perf} />}
           {item.perf && loadStats && <PerfStats perf={item.perf} />}
           {item.build && <BuildLine build={item.build} />}
-          {/* A check that changed nothing has nothing to review or undo. */}
           {!(item.verify && n === 0) && <div className="done-actions">
             {n > 0 && (
               <button className="btn xs" onClick={() => onReview(item.runId)} title="See exactly what changed and revert individual files">
@@ -565,13 +549,10 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
 
 export type ChatActions = Omit<ItemProps, 'item' | 'live' | 'root' | 'busy' | 'gitRepo'>;
 
-// A message is rendered again only when it changes itself, so a long conversation
-// costs nothing while you type, drag a divider, or the agent streams its next line.
 const ChatRow = memo(ChatItemView);
 export const ChatList = memo(function ChatList({ items, actions, root, busy, gitRepo }: {
   items: ChatItem[]; actions: ChatActions; root: string; busy: boolean; gitRepo: boolean;
 }) {
-  // Messages after the last finished run belong to the one going on now.
   let lastDone = -1;
   if (busy) items.forEach((it, i) => { if (it.kind === 'done') lastDone = i; });
   return <>{items.map((item, i) => <ChatRow key={item.id} item={item} live={busy && i > lastDone && item.kind === 'user'} root={root} busy={busy} gitRepo={gitRepo} {...actions} />)}</>;

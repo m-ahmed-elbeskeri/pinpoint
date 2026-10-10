@@ -1,8 +1,3 @@
-// Entry point for coding agents. Each run is a live session that can be
-// steered while it works (see agent-claude.cjs / agent-codex.cjs). Sessions emit:
-//   session {sessionId} · text {text} · thinking {text} · tool {id,name,detail}
-//   tool_result {id, ok, text} · log {text} · error {text} · status {text}
-//   done {ok, cost?, durationMs?, turns?}
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -28,7 +23,6 @@ function runAgent(opts) {
   return opts.settings.agent === 'codex' ? runCodex(opts) : runClaude(opts);
 }
 
-// Model / thinking-level options for the composer dropdowns.
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const CLAUDE_MODELS = [
   { id: 'opus', label: 'Opus', desc: 'Latest Opus: strong and balanced', efforts: CLAUDE_EFFORTS },
@@ -40,7 +34,7 @@ const CLAUDE_MODELS = [
 function readCodexConfig() {
   try {
     const toml = fs.readFileSync(path.join(os.homedir(), '.codex', 'config.toml'), 'utf8');
-    const top = toml.split(/^\[/m)[0]; // only top-level keys
+    const top = toml.split(/^\[/m)[0];
     const get = (k) => (top.match(new RegExp('^' + k + '\\s*=\\s*"([^"]*)"', 'm')) || [])[1];
     return { model: get('model'), effort: get('model_reasoning_effort') };
   } catch { return {}; }
@@ -59,7 +53,7 @@ function codexModels() {
         defaultEffort: m.default_reasoning_level,
       }));
     if (list.length) return list;
-  } catch { /* fall through */ }
+  } catch {  }
   const efforts = ['low', 'medium', 'high', 'xhigh'];
   return [
     { id: 'gpt-5.5', label: 'GPT-5.5', desc: '', efforts },

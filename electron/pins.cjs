@@ -1,6 +1,3 @@
-// Pinned visual baselines: pages marked "should not change". Each pin keeps a
-// screenshot under <project>/.pinpoint/pins/; checking re-shoots the page in a
-// hidden window and reports how much of it differs, and where.
 const fs = require('node:fs');
 const path = require('node:path');
 const project = require('./project.cjs');
@@ -11,7 +8,6 @@ const indexFile = (root) => path.join(dir(root), 'pins.json');
 const safe = (id) => String(id).replace(/[^\w-]/g, '');
 const img = (root, id, which) => path.join(dir(root), `${safe(id)}.${which}.jpg`);
 
-// `noisy` (cells of the page that move by themselves) is kept on disk but not sent to the UI.
 function readAll(root) {
   try { return JSON.parse(fs.readFileSync(indexFile(root), 'utf8')); } catch { return []; }
 }
@@ -33,13 +29,12 @@ async function add(root, { url, label }) {
   return list(root);
 }
 
-// Re-shoot every pin and compare it with its baseline.
 async function check(root) {
   const pins = readAll(root);
   for (const p of pins) {
     const shot = await shoot(p.url);
     let base = null;
-    try { base = fs.readFileSync(img(root, p.id, 'base')); } catch { /* baseline lost */ }
+    try { base = fs.readFileSync(img(root, p.id, 'base')); } catch {  }
     p.checkedAt = Date.now();
     if (!shot || !base) { p.error = shot ? 'Baseline missing' : "Page didn't load"; p.changed = false; continue; }
     delete p.error;
@@ -56,9 +51,8 @@ async function check(root) {
 const dataUrl = (file) => { try { return `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`; } catch { return null; } };
 const images = (root, id) => ({ before: dataUrl(img(root, id, 'base')), after: dataUrl(img(root, id, 'now')) });
 
-// The page was meant to change: its latest screenshot becomes the baseline.
 function accept(root, id) {
-  try { fs.renameSync(img(root, id, 'now'), img(root, id, 'base')); } catch { /* nothing newer to accept */ }
+  try { fs.renameSync(img(root, id, 'now'), img(root, id, 'base')); } catch {  }
   return write(root, readAll(root).map((p) => (p.id === id ? { ...p, pct: 0, changed: false, areas: undefined, pinnedAt: Date.now(), noisy: p.noisyNow || p.noisy } : p)));
 }
 

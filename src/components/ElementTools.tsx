@@ -8,8 +8,8 @@ interface Props {
   ann: Annotation;
   section: ToolSection | null;
   setSection(s: ToolSection | null): void;
-  classNames: string[]; // what the page's CSS defines, for autocomplete
-  generated: string[];  // classes Pinpoint generated CSS for, so they already show
+  classNames: string[];
+  generated: string[];
   isolated: boolean;
   onStates(states: ForcedState[]): void;
   onScope(scope: Annotation['scope']): void;
@@ -46,7 +46,6 @@ const FIELDS: Field[] = [
   { prop: 'background-color', label: 'Fill', kind: 'color' },
 ];
 
-// "rgb(255, 79, 58)" -> "#ff4f3a" for <input type="color">.
 function toHex(v: string | undefined) {
   if (!v) return '#000000';
   if (/^#[0-9a-f]{6}$/i.test(v)) return v;
@@ -55,7 +54,6 @@ function toHex(v: string | undefined) {
   return '#' + m[1].split(/[\s,/]+/).filter(Boolean).slice(0, 3).map((n) => Math.round(parseFloat(n)).toString(16).padStart(2, '0')).join('');
 }
 
-// Arrow keys nudge every number in the value ("8px 16px" -> "9px 17px").
 function nudge(value: string, delta: number) {
   const decimals = Math.abs(delta) < 1 ? 2 : 0;
   return value.replace(/-?\d*\.?\d+/g, (n) => String(+(parseFloat(n) + delta).toFixed(decimals)));
@@ -64,8 +62,6 @@ function nudge(value: string, delta: number) {
 const where = (r: CssRuleInfo) => (r.utility ? 'utility class' : r.file ? `${r.file.split('/').pop()}${r.line ? `:${r.approx ? '~' : ''}${r.line}` : ''}` : '');
 const isFile = (r: CssRuleInfo) => !!r.file && !r.utility && !/^inline|^https?:/.test(r.file);
 
-// Everything a picked element can be asked or made to do: forced states, scope,
-// live style tweaks, copy and class edits, component props, and its CSS rules.
 export function ElementTools(p: Props) {
   const { ann, section, setSection } = p;
   const el = ann.element!;
@@ -179,7 +175,6 @@ export function ElementTools(p: Props) {
           ) : <p className="hint el-hint">This element contains other elements. Pick the one holding the text to edit its copy.</p>}
           <div className={`el-classes ${ann.classEdit ? 'set' : ''}`}>
             {classes.map((c) => {
-              // Added here but not in the page's CSS yet: it will only take effect once the agent writes it.
               const pending = p.classNames.length > 0 && !(el.classes || []).includes(c) && !p.classNames.includes(c) && !p.generated.includes(c);
               return (
               <span key={c} className={`el-class ${pending ? 'pending' : ''}`} title={pending ? "Your CSS doesn't define this class yet, so nothing changes in the page until the agent adds it to the source" : undefined}>{c}<button onClick={() => p.onClasses(classes.filter((x) => x !== c).join(' '))} title="Remove"><X size={9} /></button></span>

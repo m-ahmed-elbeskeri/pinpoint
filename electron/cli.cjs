@@ -1,15 +1,13 @@
-// Shared helpers for spawning agent CLIs.
 const { spawn } = require('node:child_process');
 
 const isWin = process.platform === 'win32';
 
-// With shell:true on Windows, args containing spaces/quotes must be quoted by us.
 const q = (a) => (isWin && /[\s"&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
 
 function spawnCli(bin, args, cwd) {
   return spawn(q(bin), args.map(q), {
     cwd,
-    shell: isWin, // lets npm-installed .cmd shims resolve on Windows
+    shell: isWin,
     env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
     windowsHide: true,
   });
@@ -35,7 +33,6 @@ function killProc(proc) {
   else proc.kill('SIGTERM');
 }
 
-// Pull a short human-readable detail out of a Claude Code tool input.
 function toolDetail(input = {}) {
   return (
     input.file_path || input.path || input.notebook_path || input.command ||

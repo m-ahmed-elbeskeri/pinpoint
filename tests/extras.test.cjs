@@ -1,7 +1,5 @@
-// Round 5: Tailwind class generation (v4 and v3), Vue prop editing, live isolate,
-// starting Storybook (stand-in script), issue + gist flow (stand-in gh), build size.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -13,7 +11,6 @@ const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 260) : ''}`); fs.writeFileSync(path.join(OUT, 'extras.out'), out.join(NL) + NL); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ---- a stand-in for the GitHub CLI: records what it was asked to do
 const gh = { calls: [], gistFile: null, issueBody: null };
 const realExecFile = cp.execFile;
 cp.execFile = function (cmd, args, opts, cb) {
@@ -27,14 +24,13 @@ cp.execFile = function (cmd, args, opts, cb) {
   setImmediate(() => cb(null, outText, ''));
 };
 
-// ---- the project: Tailwind 4, a build script, a story and a "storybook" script
 const proj = path.join(FIX, 'tw4');
 fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
 fs.writeFileSync(path.join(proj, 'src', 'Button.stories.js'), 'export default { title: "Button" };');
 fs.writeFileSync(path.join(proj, 'sb.js'), `require('http').createServer((q, s) => { s.setHeader('content-type', 'application/json'); s.end(JSON.stringify({ entries: { 'button--default': { type: 'story', id: 'button--default', importPath: './src/Button.stories.js' } } })); }).listen(6006); setTimeout(() => process.exit(0), 30000);`);
 fs.writeFileSync(path.join(proj, 'build.js'), `const fs = require('fs'); fs.mkdirSync('dist', { recursive: true }); fs.writeFileSync('dist/app.js', 'console.log(1);'.repeat(+fs.readFileSync('size.txt', 'utf8'))); fs.writeFileSync('dist/app.css', 'a{color:red}'.repeat(50));`);
 fs.writeFileSync(path.join(proj, 'size.txt'), '200');
-fs.rmSync(path.join(proj, '.pinpoint'), { recursive: true, force: true }); // start without an earlier measurement
+fs.rmSync(path.join(proj, '.pinpoint'), { recursive: true, force: true });
 const pkg = JSON.parse(fs.readFileSync(path.join(proj, 'package.json'), 'utf8'));
 pkg.scripts = { build: 'node build.js', storybook: 'node sb.js' };
 fs.writeFileSync(path.join(proj, 'package.json'), JSON.stringify(pkg));
@@ -67,7 +63,6 @@ app.whenReady().then(async () => {
   await sleep(500);
   const js = (code) => wc.executeJavaScript(code);
 
-  // ---- Tailwind: classes the build hasn't emitted
   try {
     const tailwind = require(path.join(repo, 'electron', 'tailwind.cjs'));
     const v4 = await tailwind.generate(proj, { entry: path.join(proj, 'src', 'app.css'), config: '' }, ['p-7', 'bg-brand', 'hover:underline', 'definitely-not-a-class']);
@@ -86,7 +81,6 @@ app.whenReady().then(async () => {
     log('tailwind 3: generates utilities with the project config', v3.includes('.p-7') && v3.includes('.bg-brand') && /md\\:flex/.test(v3) && /255 0 170|#ff00aa/i.test(v3), `${v3.length} bytes`);
   } catch (err) { log('tailwind exception', false, err.stack); }
 
-  // ---- Vue: find the component and edit its props live
   try {
     const src = await js(lib('inspect').locateSourceScript('v1'));
     log('vue component and props are read', src && src.owner === 'Badge' && src.props && src.props.label === '"New"' && src.props.count === '3', JSON.stringify(src));
@@ -98,7 +92,6 @@ app.whenReady().then(async () => {
     await sleep(200);
     log('vue numeric prop edit', (await js(`vb.textContent`)) === 'Sale:9:1', await js(`vb.textContent`));
 
-    // ---- isolate: alone on the page, live
     wc.send('isolate', 'v1');
     await sleep(200);
     const iso = await js(`(() => { const r = vb.getBoundingClientRect(); return [getComputedStyle(side).display, getComputedStyle(wrapper).display, Math.abs((r.left + r.width / 2) - innerWidth / 2) < 3, Math.abs((r.top + r.height / 2) - innerHeight / 2) < 3].join('|'); })()`);
@@ -111,7 +104,6 @@ app.whenReady().then(async () => {
     log('isolate off restores the page', (await js(`[getComputedStyle(side).display, getComputedStyle(wrapper).display, vb.textContent].join('|')`)) === 'block|flex|Sale:9:2');
   } catch (err) { log('vue/isolate exception', false, err.stack); }
 
-  // ---- Storybook: started from the project's script, then the story URL is found
   try {
     const before = await call('story:find', 'Button');
     log('story file found, storybook not running, can be started', before.file === 'src/Button.stories.js' && before.url === null && before.canStart === true, JSON.stringify(before));
@@ -119,7 +111,6 @@ app.whenReady().then(async () => {
     log('storybook started and the story URL returned', url === 'http://localhost:6006/iframe.html?id=button--default&viewMode=story', url);
   } catch (err) { log('storybook exception', false, err.message); }
 
-  // ---- issue with the hand-off attached as a gist
   try {
     electron.shell.openExternal = async () => {};
     const handoff = { pinpointHandoff: 1, createdAt: 1, url: 'http://x/', title: 't', instruction: 'Make it pop', annotations: [{ id: 'a', n: 1, kind: 'reference', note: 'like this', color: '#f00', image: 'data:image/png;base64,AAAA' }] };
@@ -131,14 +122,12 @@ app.whenReady().then(async () => {
     log('no screenshots: no gist is made', r2.gist === null && gh.calls.filter((c) => c.startsWith('gist')).length === 1);
   } catch (err) { log('issue exception', false, err.stack); }
 
-  // ---- production build size
   try {
     const first = await call('build:measure');
     log('build measured', first.previous === null && first.now.files === 2 && first.now.js === 3000 && first.now.jsGzip > 0 && first.now.jsGzip < first.now.js, JSON.stringify(first.now));
     fs.writeFileSync(path.join(proj, 'size.txt'), '400');
     const second = await call('build:measure');
     log('second measure compares with the first', second.previous && second.previous.js === 3000 && second.now.js === 6000);
-    // A Next.js project whose dev server was started outside the app (here: our test server) must not be built over.
     const next = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-next-'));
     fs.writeFileSync(path.join(next, 'package.json'), '{"scripts":{"build":"node -e 0"},"dependencies":{"next":"15"}}');
     fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: next, url: '' }));

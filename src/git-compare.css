@@ -1,6 +1,3 @@
-/* Git panel, commit chips, before/after thumbnails and the compare view. */
-
-/* ---------- git chip + popover ---------- */
 .git-wrap { position: relative; min-width: 0; }
 .git-wrap > .chip { max-width: 190px; }
 .git-dirty { min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font: 700 9.5px/15px var(--mono); text-align: center; }
@@ -28,14 +25,12 @@
 .git-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; }
 .git-check input { accent-color: var(--accent); }
 
-/* ---------- commit chip on a run ---------- */
 .commit-chip {
   display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 999px; cursor: copy;
   font: 500 10.5px var(--mono); color: var(--text-2); background: rgba(255,255,255,.05); border: 1px solid var(--line-2); flex-shrink: 0;
 }
 .commit-chip:hover { color: var(--text); border-color: #45454d; }
 
-/* ---------- before/after thumbnails ---------- */
 .shot-strip {
   position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; margin-top: 8px; padding: 6px;
   border-radius: 10px; background: rgba(0,0,0,.2); border: 1px solid var(--line); text-align: left;
@@ -50,14 +45,13 @@
 .shot-strip:hover .shot-cta { opacity: 1; transform: none; }
 .shot-strip:hover { border-color: var(--line-2); }
 
-/* ---------- compare modal ---------- */
 .compare-modal {
   width: min(1320px, calc(100vw - 40px)); height: min(900px, calc(100vh - 60px)); display: flex; flex-direction: column;
   background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden;
 }
 .compare-modal .diff-head .seg button { gap: 5px; }
 .compare-body { flex: 1; min-height: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-.compare-body > * { flex-shrink: 0; } /* never squash the stage; the body scrolls instead */
+.compare-body > * { flex-shrink: 0; }
 .cmp-stage { position: relative; align-self: center; max-width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line-2); cursor: ew-resize; user-select: none; touch-action: none; }
 .cmp-stage.static { cursor: default; }
 .cmp-stage img { display: block; max-width: 100%; max-height: calc(100vh - 220px); }

@@ -1,7 +1,3 @@
-/* First-run welcome stage. Solid colors only: graphite, highlighter yellow
-   (--accent) and markup red (--mark). The demo loop runs on one clock (--T);
-   each actor's keyframes are percentages of it so they stay in sync. */
-
 .welcome {
   --T: 7.5s;
   --y: #ffd60a;
@@ -11,7 +7,6 @@
   container: welcome / inline-size;
 }
 
-/* ---------- backdrop: print-style dot grid with crop marks ---------- */
 .backdrop { position: absolute; inset: 0; pointer-events: none; }
 .dots {
   position: absolute; inset: 0;
@@ -28,7 +23,6 @@
 @keyframes fadeIn { from { opacity: 0; } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } }
 
-/* ---------- layout ---------- */
 .welcome-inner { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 64px; align-items: center; width: min(1180px, 100%); }
 @container welcome (max-width: 920px) {
   .welcome-inner { grid-template-columns: 1fr; gap: 40px; justify-items: center; text-align: center; }
@@ -39,7 +33,6 @@
 }
 @container welcome (max-width: 520px) { .demo { display: none; } }
 
-/* ---------- copy ---------- */
 .welcome-logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 26px; animation: fadeUp .6s ease-out both; }
 .welcome-logo .logo-mark { animation: logoDrop .9s cubic-bezier(.3,1.6,.5,1) both; }
 @keyframes logoDrop { from { transform: translateY(-18px) rotate(-12deg) scale(.7); opacity: 0; } }
@@ -54,14 +47,11 @@
 .mk svg { position: absolute; overflow: visible; pointer-events: none; }
 .mk path { fill: none; stroke: var(--r); stroke-linecap: round; stroke-linejoin: round; }
 
-/* "Point" gets circled */
 .circle-word svg { left: -14%; top: -18%; width: 128%; height: 136%; }
 .circle-word path { stroke-width: 3.2; stroke-dasharray: 620; stroke-dashoffset: 620; animation: draw .9s cubic-bezier(.6,.1,.3,1) 1s forwards; }
-/* "Draw" gets underlined with a scribble */
 .scribble-word svg { left: -2%; bottom: -14%; width: 104%; height: 26%; }
 .scribble-word path { stroke-width: 4; stroke-dasharray: 260; stroke-dashoffset: 260; animation: draw .6s ease-out 1.55s forwards; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
-/* "Ship it." gets a highlighter swipe */
 .highlight-word { color: #111113; padding: 0 .12em; z-index: 0; transition: color .3s; }
 .highlight-word .swash {
   position: absolute; z-index: -1; left: -.06em; right: -.06em; top: .12em; bottom: .02em; background: var(--y);
@@ -96,7 +86,6 @@
 .welcome-hints { display: flex; gap: 14px; margin-top: 26px; font-size: 12px; color: var(--muted); animation: fadeUp .8s ease-out 1.4s both; }
 .welcome-hints span { display: inline-flex; align-items: center; gap: 6px; }
 
-/* ---------- demo stage ---------- */
 .demo { position: relative; perspective: 1400px; animation: stageIn 1.1s cubic-bezier(.2,.8,.2,1) .35s both; }
 @keyframes stageIn { from { opacity: 0; transform: translateY(40px) rotateX(18deg) scale(.94); } }
 .demo-window {

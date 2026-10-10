@@ -1,8 +1,3 @@
-// Unintended-change check: screenshots the open page and the project's other
-// pages before and after a run (in hidden windows that share the browser's
-// session) and reports which ones changed and where. The "after" set of one run
-// is the baseline of the next, as long as no file changed in between; baselines
-// are also taken ahead of time while the app is idle, so runs rarely wait.
 const { BrowserWindow, nativeImage } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -12,34 +7,30 @@ const snapshot = require('./snapshot.cjs');
 const SIZE = { width: 1280, height: 1400 };
 const LOAD_TIMEOUT_MS = 20000;
 const SETTLE_MS = 800;
-const NOISE_GAP_MS = 500;  // two captures this far apart tell moving content from still content
+const NOISE_GAP_MS = 500;
 const CHANGED_PCT = 0.5;
-const MIN_CHANGED_PX = 30; // more than a blinking caret
-const MAX_ROUTES = 9;      // the open page plus up to 8 others
+const MIN_CHANGED_PX = 30;
+const MAX_ROUTES = 9;
 const CELL = 24;
 
-// Animations and transitions jump to their end state, so two loads of the same page look the same.
 const STILL_CSS = '*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}';
 
-const captureIds = new Set(); // webContents ids of our hidden windows (their failed requests aren't page problems)
-let baseline = null;          // { root, fingerprint, origin, shots: Map<key, { jpg, noisy }> }
-let warming = null;           // a baseline being taken ahead of a run: { root, origin, fingerprint, promise }
+const captureIds = new Set();
+let baseline = null;
+let warming = null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const keyFor = (route) => route.replace(/[^\w]+/g, '-').replace(/^-+|-+$/g, '') || 'home';
 const originOf = (url) => url.replace(/^(\w+:\/\/[^/]+).*/, '$1');
 
-// Cheap identity of the project's files: any edit, by anyone, changes it.
 function fingerprint(root) {
   const h = crypto.createHash('sha1');
   for (const rel of snapshot.walk(root).sort()) {
-    try { const st = fs.statSync(path.join(root, rel)); h.update(`${rel}:${st.mtimeMs}:${st.size}\n`); } catch { /* vanished */ }
+    try { const st = fs.statSync(path.join(root, rel)); h.update(`${rel}:${st.mtimeMs}:${st.size}\n`); } catch {  }
   }
   return h.digest('hex');
 }
 
-// The same value, computed without blocking the app: this one runs while the user
-// is browsing, and a large project takes long enough to stat that clicks would stall.
 async function fingerprintAsync(root) {
   const h = crypto.createHash('sha1');
   const files = (await snapshot.walkAsync(root)).sort();
@@ -50,10 +41,8 @@ async function fingerprintAsync(root) {
   return h.digest('hex');
 }
 
-// Loads a URL in a hidden window, lets it settle, and hands the page to `use`.
 const DEFAULT_PARTITION = 'persist:pinpoint';
 
-// `partition` is the browser profile to load the page in (so a "view as" profile's login is used).
 async function visit(url, use, partition = DEFAULT_PARTITION) {
   const win = new BrowserWindow({
     show: false, frame: false, useContentSize: true, ...SIZE,
@@ -73,9 +62,6 @@ async function visit(url, use, partition = DEFAULT_PARTITION) {
   }
 }
 
-// ---------- comparing two screenshots ----------
-// Changed pixels, bucketed into grid cells. Each cell keeps the tight bounds of
-// its changed pixels, so the boxes hug what actually changed.
 function cellDiff(pa, pb, width, height, ignore) {
   const cols = Math.ceil(width / CELL), rows = Math.ceil(height / CELL);
   const hits = new Uint16Array(cols * rows);
@@ -103,10 +89,6 @@ function cellDiff(pa, pb, width, height, ignore) {
   return { cells, px, total: cols * rows };
 }
 
-// Did a page change, by how much, and where. `a` and `b` are shots ({ jpg, noisy });
-// cells that were moving on their own in either shot (a carousel, a clock) are left out.
-// A percentage alone misses small things (a heading's color is a fraction of a
-// percent of the page), so any change bigger than a blinking caret counts.
 function compare(a, b) {
   const ia = nativeImage.createFromBuffer(a.jpg), ib = nativeImage.createFromBuffer(b.jpg);
   const { width, height } = ia.getSize();
@@ -115,7 +97,6 @@ function compare(a, b) {
   const ignore = new Set([...(a.noisy || []), ...(b.noisy || [])]);
   const d = cellDiff(ia.toBitmap(), ib.toBitmap(), width, height, ignore);
   const pct = (d.px / (width * height)) * 100;
-  // Most of the page moved: a layout shift or a background change, not a list of spots.
   const whole = d.cells.length > d.total * 0.6;
   return {
     pct: pct >= 1 ? Math.round(pct * 10) / 10 : Math.round(pct * 100) / 100,
@@ -124,8 +105,6 @@ function compare(a, b) {
   };
 }
 
-// One page: two captures a moment apart. What differs between them is content
-// that moves by itself, and is not held against a run.
 const shoot = (url, partition) => visit(url, async (wc) => {
   const first = await wc.capturePage();
   if (first.isEmpty()) return null;
@@ -152,18 +131,12 @@ async function shootAll(routes, partition, workers = 3) {
   return shots;
 }
 
-// ---------- naming what changed ----------
-// Runs in the page: names the element under each changed box and groups the
-// boxes by element. `targets` are the selectors the user pointed at; a change
-// on (or inside, or right over) one of them is what they asked for, the rest
-// are side effects.
 const NAME_AREAS = (cells, targets) => `(${((cells, targets) => {
   const wanted = targets.flatMap((sel) => { try { return [...document.querySelectorAll(sel)]; } catch { return []; } });
   const over = (el, c) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.left < c.x + c.w && r.right > c.x && r.top < c.y + c.h && r.bottom > c.y; };
   const groups = new Map();
   for (const c of cells) {
     let el = document.elementFromPoint(c.x + c.w / 2, c.y + c.h / 2) || document.body;
-    // A link or a span inside a paragraph: report the paragraph.
     while (el.parentElement && el.parentElement !== document.body && getComputedStyle(el).display.startsWith('inline')) el = el.parentElement;
     const asked = wanted.some((t) => t === el || t.contains(el) || (el.contains(t) && over(t, c)));
     const g = groups.get(el) || { px: 0, asked: false };
@@ -180,7 +153,6 @@ const NAME_AREAS = (cells, targets) => `(${((cells, targets) => {
   return [...groups].sort((p, q) => q[1].px - p[1].px).slice(0, 8).map(([el, g]) => ({ name: describe(el), asked: g.asked }));
 }).toString()})(${JSON.stringify(cells)}, ${JSON.stringify(targets)})`;
 
-// → { areas: what changed (minus what was asked for), asked: what was asked for }, both as element names.
 async function nameAreas(url, where, targets = [], partition) {
   if (where.whole || !where.cells.length) return { areas: ['most of the page (the layout shifted, or the background changed)'], asked: [] };
   const named = (await visit(url, (wc) => wc.executeJavaScript(NAME_AREAS(where.cells, targets)), partition).catch(() => null)) || [];
@@ -188,8 +160,6 @@ async function nameAreas(url, where, targets = [], partition) {
   return { areas: pick(false), asked: pick(true) };
 }
 
-// ---------- load cost ----------
-// Script and style bytes, requests, DOM size, layout shift, largest paint.
 const PROBE = `(async () => {
   const res = performance.getEntriesByType('resource');
   const size = (r) => r.transferSize || r.encodedBodySize || r.decodedBodySize || 0;
@@ -205,7 +175,6 @@ const PROBE = `(async () => {
   return { js: sum(js), css: sum(css), requests: res.length, nodes: document.getElementsByTagName('*').length, lcp: Math.round(lcp), cls: Math.round(cls * 1000) / 1000 };
 })()`;
 const probe = (url, partition) => visit(url, (wc) => wc.executeJavaScript(PROBE), partition);
-// A few tries: a page that is mid-rebuild can fail a load.
 const measure = async (url, partition) => {
   for (let attempt = 0; attempt < 3; attempt++) {
     const m = await probe(url, partition);
@@ -215,12 +184,9 @@ const measure = async (url, partition) => {
   return null;
 };
 
-// ---------- baselines ----------
 const usable = (b, root, origin, fp, list, partition = DEFAULT_PARTITION) => !!b && b.root === root && b.origin === origin && b.partition === partition && b.fingerprint === fp && (!b.shots || list.every((r) => b.shots.has(keyFor(r.route))));
 
-// Take the "before" screenshots now, while nothing is running, so the next run
-// doesn't have to wait for them. Does nothing when they are already current.
-let prewarming = false; // a prewarm is working out whether it has anything to do
+let prewarming = false;
 async function prewarm(root, routes, partition = DEFAULT_PARTITION) {
   const list = routes.slice(0, MAX_ROUTES);
   if (!list.length || prewarming) return;
@@ -229,9 +195,7 @@ async function prewarm(root, routes, partition = DEFAULT_PARTITION) {
   let fp;
   try { fp = await fingerprintAsync(root); } finally { prewarming = false; }
   if (usable(baseline, root, origin, fp, list, partition) || usable(warming, root, origin, fp, list, partition)) return;
-  // One page at a time: this is background work, and the person is using the app (and the dev server) meanwhile.
   const promise = shootAll(list, partition, 1).then(async (shots) => {
-    // Only keep it if nothing was edited while the pages were loading.
     if (await fingerprintAsync(root) === fp) baseline = { root, origin, partition, fingerprint: fp, shots };
     return shots;
   });
@@ -240,9 +204,6 @@ async function prewarm(root, routes, partition = DEFAULT_PARTITION) {
   promise.catch(() => {}).finally(() => { if (warming === mine) warming = null; });
 }
 
-// Call when a run starts. Resolves to the "before" shots: the last run's
-// "after" shots or an idle-time baseline when nothing was edited since.
-// `perfUrl` (the open page) is also measured before and after, for the load-cost delta.
 function begin(root, routes, perfUrl, targets = [], partition = DEFAULT_PARTITION) {
   const list = routes.slice(0, MAX_ROUTES);
   if (!list.length && !perfUrl) return null;
@@ -251,12 +212,10 @@ function begin(root, routes, perfUrl, targets = [], partition = DEFAULT_PARTITIO
   const before = usable(baseline, root, origin, fp, list, partition) ? Promise.resolve(baseline.shots)
     : usable(warming, root, origin, fp, list, partition) ? warming.promise.then((shots) => (list.every((r) => shots.has(keyFor(r.route))) ? shots : shootAll(list, partition)))
       : shootAll(list, partition);
-  // After the screenshots, so the dev server isn't compiling several pages while we time one.
   const perfBefore = perfUrl ? before.then(() => measure(perfUrl, partition), () => measure(perfUrl, partition)) : Promise.resolve(null);
   return { root, origin, routes: list, before, perfUrl, perfBefore, targets, partition };
 }
 
-// Before/after load cost of the open page.
 async function finishPerf(check) {
   if (!check.perfUrl) return null;
   const before = await check.perfBefore.catch(() => null);
@@ -265,21 +224,17 @@ async function finishPerf(check) {
   return after ? { before, after } : null;
 }
 
-// Call when the run has finished. Returns one entry per page checked:
-// { route, key, pct, changed, current, areas, asked } where `areas` names what
-// changed on it, and hands back the before/after images of the pages that changed.
-// `shared` false = the run only touched the open page's own file, so only that page is checked.
 async function finish(check, save, shared = true) {
   const before = await check.before;
   const routes = shared ? check.routes : check.routes.filter((r) => r.current);
   if (!routes.length) return [];
-  await sleep(1500); // let the dev server finish rebuilding
+  await sleep(1500);
   const after = await shootAll(routes, check.partition);
   if (shared) baseline = { root: check.root, origin: check.origin, partition: check.partition, fingerprint: await fingerprintAsync(check.root), shots: after };
-  else baseline = null; // some pages weren't re-shot: start fresh next time
+  else baseline = null;
   const results = [];
   for (const r of routes) {
-    await new Promise(setImmediate); // comparing a page is a burst of pixel work: let the app breathe between pages
+    await new Promise(setImmediate);
     const key = keyFor(r.route);
     const a = before.get(key), b = after.get(key);
     if (!a || !b) continue;
@@ -288,7 +243,6 @@ async function finish(check, save, shared = true) {
     if (changed) {
       save(`route-${key}-before`, a.jpg);
       save(`route-${key}-after`, b.jpg);
-      // Only on the open page is there something the user pointed at.
       named = await nameAreas(r.url, where, r.current ? check.targets : [], check.partition);
     }
     results.push({ route: r.route, key, pct, changed, current: !!r.current, areas: named.areas, asked: named.asked?.length ? named.asked : undefined });

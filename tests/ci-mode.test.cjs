@@ -1,6 +1,5 @@
-// CI mode end to end, from plain node: serve a small site, capture, change it, capture, compare.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os'), http = require('node:http');
 const { execFile } = require('node:child_process');
 const repo = process.cwd();

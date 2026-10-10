@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Columns2, Loader2, MonitorSmartphone, ScanEye, SplitSquareHorizontal, X } from './icons';
 
 export interface CompareTarget {
-  runId?: string;                             // a run's shots…
-  pair?: string;                              // …optionally another page of that run ("route-pricing")
-  images?: { before: string; after: string }; // or two images given directly
+  runId?: string;
+  pair?: string;
+  images?: { before: string; after: string };
   labels?: [string, string];
   title?: string;
 }
@@ -18,7 +18,6 @@ type Mode = 'slider' | 'side' | 'changes';
 
 const load = (src: string) => new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
 
-// Marks pixels that differ between before and after on top of the after image.
 export async function diffOverlay(before: string, after: string): Promise<{ url: string; pct: number }> {
   const [a, b] = await Promise.all([load(before), load(after)]);
   const w = b.width, h = b.height;
@@ -32,14 +31,12 @@ export async function diffOverlay(before: string, after: string): Promise<{ url:
   for (let i = 0; i < px.length; i += 4) {
     const d = Math.abs(px[i] - da[i]) + Math.abs(px[i + 1] - da[i + 1]) + Math.abs(px[i + 2] - da[i + 2]);
     if (d > 60) { changed++; px[i] = 255; px[i + 1] = Math.round(px[i + 1] * .25 + 50); px[i + 2] = 40; }
-    else { const g = (px[i] + px[i + 1] + px[i + 2]) / 3; px[i] = px[i + 1] = px[i + 2] = g * .45 + 120; } // fade unchanged areas
+    else { const g = (px[i] + px[i + 1] + px[i + 2]) / 3; px[i] = px[i + 1] = px[i + 2] = g * .45 + 120; }
   }
   xb.putImageData(db, 0, 0);
   return { url: cb.toDataURL('image/jpeg', .85), pct: (changed / (w * h)) * 100 };
 }
 
-// True when two screenshots are the same to the eye (the same test diffOverlay's `pct < 0.01` was),
-// without building the marked-up image, and stopping at the first sign of a real difference.
 export async function looksSame(before: string, after: string): Promise<boolean> {
   const [a, b] = await Promise.all([load(before), load(after)]);
   const w = b.width, h = b.height;
@@ -67,8 +64,7 @@ export function CompareView({ runId, pair, images, labels = ['Before', 'After'],
   const stage = useRef<HTMLDivElement>(null);
 
   const reload = () => (runId ? window.pinpoint.runShots(runId).then(setShots).catch(() => setShots({})) : Promise.resolve());
-  useEffect(() => { reload(); }, [runId]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Whatever the source, the rest of the view works with shots.before / shots.after.
+  useEffect(() => { reload(); }, [runId]);
   const shots: Record<string, string> | null = images ?? (all && pair ? { before: all[`${pair}-before`], after: all[`${pair}-after`] } : all);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -77,7 +73,7 @@ export function CompareView({ runId, pair, images, labels = ['Before', 'After'],
   }, [onClose]);
   useEffect(() => {
     if (mode === 'changes' && shots?.before && shots?.after && !diff) diffOverlay(shots.before, shots.after).then(setDiff).catch(() => {});
-  }, [mode, shots?.before, shots?.after]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, shots?.before, shots?.after]);
 
   const drag = (e: React.PointerEvent) => {
     const el = stage.current;
@@ -93,7 +89,6 @@ export function CompareView({ runId, pair, images, labels = ['Before', 'After'],
     el.addEventListener('pointerup', up);
   };
 
-  // Phone, tablet, then desktop (stored as width 0).
   const width = (k: string) => parseInt(k.slice(5)) || Infinity;
   const sizes = shots && !pair && !images ? Object.keys(shots).filter((k) => k.startsWith('size-')).sort((a, b) => width(a) - width(b)) : [];
   const has = shots?.before && shots?.after;

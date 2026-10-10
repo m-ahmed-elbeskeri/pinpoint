@@ -1,5 +1,3 @@
-// Several chats in one project: one keeps working while another is on screen,
-// with a stand-in agent CLI (speaks Claude Code's stream-json, edits files, costs nothing).
 const OUT = process.env.PP_OUT || __dirname;
 const path = require('node:path');
 const fs = require('node:fs');
@@ -14,8 +12,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-chats-'));
 fs.writeFileSync(path.join(proj, 'index.html'), '<!doctype html><html lang="en"><head><title>Home</title></head><body><h1>Home</h1><div style="height:3000px"></div><button id="deep" style="padding:20px">Deep button</button><div style="height:1500px"></div></body></html>');
 
-// The stand-in answers "slow" requests after a few seconds and everything else at once.
-// Each request writes a file named after its first word, so the tests can tell who did what.
 const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-agent-'));
 fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "const fs = require('fs'), path = require('path');",
@@ -74,7 +70,6 @@ server.listen(0, '127.0.0.1', () => {
     try {
       log('stand-in agent detected', await until(`document.querySelector('.agent-seg button.on') && !document.querySelector('.agent-seg button.on.missing') ? 1 : 0`, 8000) === 1);
 
-      // ---- a slow request, then a new chat beside it
       await send('slow-alpha please');
       log('the first chat is working', await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000) === 1);
       await sleep(600);
@@ -84,14 +79,12 @@ server.listen(0, '127.0.0.1', () => {
       log('the new chat starts empty and idle', (await ui(`document.querySelectorAll('.chat .msg').length + (document.querySelector('.chat .working') ? 100 : 0)`)) === 0);
       log('the first chat is listed as still working', /running:slow-alpha/.test(await chips()), await chips());
 
-      // ---- the second chat runs to the end while the first is still going
       await send('quick-beta please');
       log('the second chat finishes on its own', await until(`document.querySelectorAll('.chat .done-card').length === 1 ? 1 : 0`, 6000) === 1, await userText());
       log('only its own messages are in it', (await userText()).includes('quick-beta') && !(await userText()).includes('slow-alpha'), await userText());
       log('its file was written', fs.existsSync(path.join(proj, 'quick-beta.txt')));
       log('the first chat was still working then', !fs.existsSync(path.join(proj, 'slow-alpha.txt')) && /running:slow-alpha/.test(await chips()), await chips());
 
-      // ---- the first one finishes out of sight
       log('the first chat is marked finished when its agent is done', !!(await until(`document.querySelector('.other-chats button.finished') ? 1 : 0`, 15000)), await chips());
       log('its file was written too', fs.existsSync(path.join(proj, 'slow-alpha.txt')));
       const saved = () => fs.readdirSync(path.join(proj, '.pinpoint', 'chats')).map((f) => JSON.parse(fs.readFileSync(path.join(proj, '.pinpoint', 'chats', f), 'utf8')));
@@ -99,14 +92,12 @@ server.listen(0, '127.0.0.1', () => {
       const alpha = saved().find((c) => /slow-alpha/.test(c.title));
       log('and saved with its result', !!alpha && alpha.items.some((i) => i.kind === 'done') && alpha.items.some((i) => i.kind === 'text' && /Wrote slow-alpha/.test(i.text)), alpha ? alpha.items.map((i) => i.kind).join() : 'not saved');
 
-      // ---- going back to it
       await ui(`document.querySelector('.other-chats button').click(); 0`);
       await sleep(700);
       log('opening it shows its whole conversation', (await userText()).includes('slow-alpha') && (await ui(`document.querySelectorAll('.chat .done-card').length`)) === 1 && /Wrote slow-alpha/.test(await ui(`document.querySelector('.chat').innerText`)), await userText());
       log('its result lists only the file it wrote itself', /Changed 1 file/.test(await ui(`document.querySelector('.chat .done-card').innerText`)) && !/quick-beta/.test(await ui(`document.querySelector('.chat .done-card').innerText`)), await ui(`document.querySelector('.chat .done-card').innerText.slice(0, 80)`));
       log('the reminder goes away once it has been looked at', (await chips()) === '', await chips());
 
-      // ---- leaving a working chat and coming back before it is done
       await send('slow-gamma please');
       await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000);
       await sleep(500);
@@ -122,7 +113,6 @@ server.listen(0, '127.0.0.1', () => {
       log('and it finishes on screen', await until(`document.querySelectorAll('.chat .done-card').length === 2 ? 1 : 0`, 15000) === 1, await ui(`document.querySelectorAll('.chat .done-card').length`));
       log('each chat kept its own agent session', (() => { const s = saved(); return s.length === 2 && new Set(s.map((c) => c.session && c.session.id)).size === 2; })(), saved().map((c) => c.session && c.session.id).join());
 
-      // ---- reading earlier messages while the agent keeps writing
       await ui(`(() => { const c = document.querySelector('.chat'); c.style.flex = 'none'; c.style.height = '160px'; })()`);
       await send('slow-delta please');
       await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000);
@@ -140,10 +130,9 @@ server.listen(0, '127.0.0.1', () => {
       const back = await until(`(() => { const c = document.querySelector('.chat'); return c.scrollHeight - c.scrollTop - c.clientHeight < 12 && !document.querySelector('.to-latest') ? 1 : 0; })()`, 4000);
       log('pressing it goes to the end and the button leaves', back === 1);
 
-      // ---- before/after screenshots show the annotated element, wherever the page was left
       const guest = webContents.getAllWebContents().find((w) => w.getType() === 'webview');
       const pg = (code) => guest.executeJavaScript(code);
-      await sleep(6000); // the last run's own "after" screenshot (and its one reload of a page without hot reload) is over
+      await sleep(6000);
       const cardsBefore = await ui(`document.querySelectorAll('.chat .done-card').length`);
       await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true })); 0`);
       await pg(`document.querySelector('#deep').scrollIntoView({ block: 'center', behavior: 'instant' }); 0`);
@@ -172,7 +161,6 @@ server.listen(0, '127.0.0.1', () => {
       for (let i = 0; i < 30 && !again; i++) { await sleep(400); again = await pg(inView); }
       log('the "after" screenshot is taken at the same place', again, await pg(`scrollY`));
 
-      // ---- a steering message that is waiting can be pushed in at once
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
       await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', bubbles: true })); 0`);
       await send('slow-steer please');
@@ -187,7 +175,7 @@ server.listen(0, '127.0.0.1', () => {
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 20000);
       log('finished runs offer no Send now button', (await ui(`document.querySelectorAll('.steer-now').length`)) === 0);
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
-      try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch { /* window covered */ }
+      try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }
     } catch (e) { log('exception', false, e.stack); }
     server.close();
     fs.appendFileSync(path.join(OUT, 'chats.out'), '[done]' + String.fromCharCode(10));

@@ -49,17 +49,14 @@ export const MOD = isMac ? '⌘' : 'Ctrl';
 document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
 
-
-// Quick sizes in the URL bar; responsive mode's own bar has the rest.
 const QUICK_SIZES = [
   { icon: Monitor, label: 'Fill the window', w: 0, h: 0 },
   { icon: Tablet, label: 'Tablet 820 × 1180 (responsive mode)', w: 820, h: 1180 },
   { icon: Smartphone, label: 'Phone 390 × 844 (responsive mode)', w: 390, h: 844 },
 ];
 
-// ---------- app ----------
 export default function App() {
-  const browser = useRef<BrowserHandle | null>(null); // the active tab's page
+  const browser = useRef<BrowserHandle | null>(null);
   const handles = useRef<Record<string, BrowserHandle | null>>({});
   const frame = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -68,7 +65,6 @@ export default function App() {
   const [agents, setAgents] = useState<Record<AgentId, { ok: boolean; version?: string }> | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [urlInput, setUrlInput] = useState('');
-  // Browser tabs. Everything below that talks about "the page" means the active one.
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTab, setActiveTab] = useState('');
   const tab = tabs.find((t) => t.id === activeTab);
@@ -102,15 +98,14 @@ export default function App() {
   const [runId, setRunId] = useState<string | null>(null);
   const [session, setSession] = useState<{ id: string; agent: AgentId } | null>(null);
   const [device, setDevice] = useState<Device>(DEVICE_OFF);
-  const [avail, setAvail] = useState({ w: 0, h: 0 }); // room for the page inside the stage
-  const dragging = useRef(false);                     // a panel divider is being dragged
+  const [avail, setAvail] = useState({ w: 0, h: 0 });
+  const dragging = useRef(false);
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);
   const area = useRef<HTMLDivElement>(null);
   const deviceRef = useRef(device);
   deviceRef.current = device;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // Live sizes while dragging a splitter; persisted to settings on release.
   const [panelWidth, setPanelWidth] = useState<number | null>(null);
   const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
   const [resizing, setResizing] = useState<'panel' | 'drawer' | 'device' | null>(null);
@@ -121,11 +116,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Project context
   const [chatId, setChatId] = useState<string | null>(null);
   const [chatCreated, setChatCreated] = useState(0);
-  // DESIGN.md is sent once, when an agent session starts. We keep what was sent
-  // so we can tell the user when edits won't reach the current chat.
   const [designAtStart, setDesignAtStart] = useState<string | null>(null);
   const [design, setDesign] = useState<DesignDoc | null>(null);
   const [memory, setMemory] = useState<MemoryItem[]>([]);
@@ -136,53 +128,51 @@ export default function App() {
   const [includeDiag, setIncludeDiag] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
-  const [compare, setCompare] = useState<CompareTarget | null>(null); // what the before/after view is showing
-  // Page state: emulated media features, a frozen page, a mockup laid over it.
+  const [compare, setCompare] = useState<CompareTarget | null>(null);
   const [env, setEnv] = useState<PageEnv>({ colorScheme: null, reducedMotion: false });
   const [frozen, setFrozenState] = useState(false);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [toolSection, setToolSection] = useState<ToolSection | null>(null);
   const [classNames, setClassNames] = useState<string[]>([]);
-  const [generated, setGenerated] = useState<string[]>([]);       // classes Pinpoint generated CSS for (new Tailwind utilities)
+  const [generated, setGenerated] = useState<string[]>([]);
   const twTimer = useRef<ReturnType<typeof setTimeout>>();
-  const [isolated, setIsolated] = useState<string | null>(null);  // annotation shown on its own
-  const [cond, setCond] = useState<Conditions>(NO_CONDITIONS);     // stress tests, data states, animation speed
-  const [multi, setMulti] = useState(false);                       // phone / tablet / desktop side by side
+  const [isolated, setIsolated] = useState<string | null>(null);
+  const [cond, setCond] = useState<Conditions>(NO_CONDITIONS);
+  const [multi, setMulti] = useState(false);
   const [rec, setRec] = useState<{ steps: FlowStep[]; startUrl: string } | null>(null);
   const recRef = useRef(rec);
   recRef.current = rec;
   const condRef = useRef(cond);
   condRef.current = cond;
-  const runFlowRef = useRef<Record<string, { steps: FlowStep[]; startUrl: string }>>({}); // runId -> interaction to replay before checking
+  const runFlowRef = useRef<Record<string, { steps: FlowStep[]; startUrl: string }>>({});
   const [designSystem, setDesignSystem] = useState<DesignSystem | null>(null);
   const [a11y, setA11y] = useState<A11yIssue[]>([]);
   const [includeA11y, setIncludeA11y] = useState(false);
-  const [job, setJob] = useState<string | null>(null);         // label shown between the runs of a variants job
+  const [job, setJob] = useState<string | null>(null);
   const { chatEnd, away, onChatScroll, onChatWheel, toLatest, follow } = useChatScroll(chat, runId, job);
-  const [profiles, setProfiles] = useState<Profile[]>([]);     // "view as" profiles of this project
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const profilesRef = useRef(profiles);
   profilesRef.current = profiles;
-  const viewAs = profiles.find((p) => p.id === tab?.profile); // who the active tab is being viewed as
-  const profileApplied = useRef<Record<string, string>>({});   // page -> the profile settings it was loaded with
-  const [plan, setPlan] = useState<{ ok: boolean; summary?: string[]; reason?: string } | null>(null); // can the open note be applied without the agent
-  const [wsOpen, setWsOpen] = useState(false);                 // component workspace
-  const [enginesOpen, setEnginesOpen] = useState(false);       // other browser engines
+  const viewAs = profiles.find((p) => p.id === tab?.profile);
+  const profileApplied = useRef<Record<string, string>>({});
+  const [plan, setPlan] = useState<{ ok: boolean; summary?: string[]; reason?: string } | null>(null);
+  const [wsOpen, setWsOpen] = useState(false);
+  const [enginesOpen, setEnginesOpen] = useState(false);
   const [bgRuns, setBgRuns] = useState<BgRun[]>([]);
   const [bgBlocked, setBgBlocked] = useState<string | null>(null);
   const [patchView, setPatchView] = useState<{ title: string; text: string } | null>(null);
   const [update, setUpdate] = useState<UpdateState | null>(null);
   const runMetaRef = useRef<Record<string, RunMeta>>({});
-  const beforeShotRef = useRef<{ id: string; shot: string } | null>(null); // the current run's "before" screenshot
+  const beforeShotRef = useRef<{ id: string; shot: string } | null>(null);
   const variantJob = useRef<{ base: AgentRequest; total: number; index: number; done: { runId: string; index: number; files: number }[] } | null>(null);
-  const verifyPending = useRef<string | null>(null);           // run waiting for its automatic check
+  const verifyPending = useRef<string | null>(null);
   const pendingNote = useRef<string | null>(null);
   const axeRef = useRef<string | null>(null);
-  const runPageRef = useRef<Record<string, string>>({});       // runId -> page URL when it started
+  const runPageRef = useRef<Record<string, string>>({});
   const loadingRef = useRef(false);
   loadingRef.current = loading;
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // Refs mirror state for async handlers and IPC subscriptions.
   const runRef = useRef<string | null>(null);
   runRef.current = runId;
   const navRef = useRef(nav);
@@ -198,12 +188,10 @@ export default function App() {
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500); };
 
-  // ---------- boot ----------
   useEffect(() => {
     api.getSettings().then((s) => {
       setSettings(s);
       setUrlInput(s.projectDir ? s.url : '');
-      // Reopen the tabs the project had (or its last page).
       const urls = !s.projectDir ? [''] : s.tabs?.length ? s.tabs : [s.url || ''];
       const list = urls.map((u, i) => makeTab(u ? normalizeUrl(u) : '', s.tabProfiles?.[i] || ''));
       setTabs(list);
@@ -219,7 +207,6 @@ export default function App() {
     if ('claudePath' in patch || 'codexPath' in patch) api.detectAgents().then(setAgents);
   }, []);
 
-  // ---------- project context ----------
   const projectDir = settings?.projectDir || '';
   const refreshRoutes = useCallback(() => { api.listRoutes().then(setRoutes).catch(() => setRoutes([])); }, []);
   const refreshGit = useCallback(async () => { await api.gitStatus().then(setGitStatus).catch(() => setGitStatus(null)); }, []);
@@ -232,7 +219,6 @@ export default function App() {
     api.designSystem().then(setDesignSystem).catch(() => setDesignSystem(null));
     refreshRoutes();
     refreshGit();
-    // Reopen the most recent conversation for this project.
     api.listChats().then(async (list) => {
       const last = list[0] ? await api.loadChat(list[0].id) : null;
       if (last) {
@@ -243,7 +229,6 @@ export default function App() {
     }).catch(() => {});
   }, [projectDir, refreshRoutes]);
 
-  // Autosave the conversation (debounced).
   useEffect(() => {
     if (!projectDir || !chatId || !chat.length) return;
     const t = setTimeout(() => {
@@ -251,13 +236,10 @@ export default function App() {
       api.saveChat({ id: chatId, title, createdAt: chatCreated || Date.now(), updatedAt: Date.now(), agent: settingsRef.current?.agent || 'claude', session, designAtStart, items: chat }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
-  }, [chat, session, chatId, projectDir, designAtStart]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chat, session, chatId, projectDir, designAtStart]);
 
-  // ---------- several chats at once ----------
-  // Leaving a chat doesn't stop it. A chat whose agent is still working is parked here:
-  // its messages keep being collected, and it is put back on screen as it is when reopened.
   const parked = useRef(new Map<string, ParkedChat>());
-  const [others, setOthers] = useState<OtherChat[]>([]); // chats working, or finished and not looked at yet
+  const [others, setOthers] = useState<OtherChat[]>([]);
   const chatRef = useRef(chat);
   chatRef.current = chat;
   const syncOthers = (finished?: ParkedChat, seen?: string) => setOthers((o) => [
@@ -269,7 +251,6 @@ export default function App() {
     id: p.id, title: chatTitle(p.items), createdAt: p.createdAt, updatedAt: Date.now(), agent: p.agent, session: p.session, designAtStart: p.designAtStart, items: p.items,
   }).catch(() => {});
 
-  // Puts the chat on screen away. False when it can't be left right now.
   const leaveChat = () => {
     if (job || variantJob.current) { flash('Variants are being made in this chat. Wait for them before switching.'); return false; }
     if (queuedRef.current.length) { flash('A message is waiting to be sent in this chat. Switch once it has gone out.'); return false; }
@@ -317,7 +298,6 @@ export default function App() {
     syncOthers(undefined, id);
   };
 
-  // What an agent event does to a chat that isn't on screen.
   const parkedEvent = (p: ParkedChat, e: AgentEvent) => {
     const add = (item: ChatItem) => { p.items = [...p.items, item]; };
     switch (e.type) {
@@ -355,19 +335,15 @@ export default function App() {
   const parkedEventRef = useRef(parkedEvent);
   parkedEventRef.current = parkedEvent;
 
-  // ---------- page state ----------
-  // Emulated media (and focus, while frozen) are re-applied when they change and on every new page.
   const applyEnv = useCallback(async (e: PageEnv, isFrozen: boolean) => {
     const id = browser.current?.id();
     if (id == null) return;
-    browser.current?.send('scheme', e.colorScheme); // sites that switch theme with a class or attribute
-    // Touch input replaces the mouse, which picking and drawing need, so it is only on while browsing.
+    browser.current?.send('scheme', e.colorScheme);
     const touch = deviceRef.current.on && deviceRef.current.touch && modeRef.current === 'browse';
     try { await api.emulate(id, { ...e, focus: isFrozen, touch }); } catch (err) { flash(errText(err)); }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => { applyEnv(env, frozen); }, [env, frozen, applyEnv, device.on, device.touch, mode]);
 
-  // The page froze or unfroze: hold :hover on whatever was under the pointer, or let it go.
   const onFrozen = useCallback(async (on: boolean) => {
     setFrozenState(on);
     const b = browser.current;
@@ -375,42 +351,35 @@ export default function App() {
     if (!b || id == null) return;
     try {
       await api.forceState(id, '[data-pinpoint-hover]', on ? ['hover'] : []);
-      // Animations stop with the page, and pick up at the speed that was set.
       await api.setAnimationRate(id, on ? 0 : condRef.current.anim);
     } catch (err) { flash(errText(err)); }
     if (!on) b.send('thaw');
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   const setFrozen = useCallback((on: boolean) => { browser.current?.send('freeze', on); onFrozen(on); }, [onFrozen]);
 
-  // Accessibility audit of the open page (axe-core), refreshed when the page settles.
   const runA11y = useCallback(async () => {
     if (settingsRef.current?.a11yCheck === false || !/^(https?|file):/.test(navRef.current.url)) { setA11y([]); return; }
     try {
       axeRef.current ??= await api.a11ySource();
       const res = await browser.current?.a11y(axeRef.current);
       if (res) setA11y(res);
-    } catch { /* the page navigated mid-audit */ }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    } catch {  }
+  }, []);
   useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => {
       browser.current?.breakpoints().then(setBreakpoints);
       browser.current?.classNames().then(setClassNames);
-      // Client-rendered content arrives after load, so stress tests are applied again once it has.
       if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
     }, 1500);
-    // The heavier checks wait until the page has been open a moment, so clicking through
-    // pages isn't slowed by an audit and background screenshots of each one.
     const audit = setTimeout(runA11y, 2500);
     const warmup = setTimeout(() => {
-      // Baseline screenshots for the unintended-change check, taken now so a run doesn't wait for them.
       const warm = otherRoutes(navRef.current.url);
       if (warm?.routes.length && !runRef.current) api.prewarmRoutes(warm.routes, warm.partition).catch(() => {});
     }, 5000);
     return () => { clearTimeout(t); clearTimeout(audit); clearTimeout(warmup); };
   }, [nav.url, loading, settings?.a11yCheck, runA11y]);
 
-  // ---------- test conditions ----------
   const changeConditions = async (next: Conditions) => {
     const prev = condRef.current;
     setCond(next);
@@ -420,7 +389,7 @@ export default function App() {
     try {
       if (next.stress.join() !== prev.stress.join()) b.send('stress', next.stress);
       if (next.anim !== prev.anim) await api.setAnimationRate(id, next.anim);
-      if (next.network !== prev.network) { await api.setNetwork(id, next.network); b.reload(); } // data states show on the next load
+      if (next.network !== prev.network) { await api.setNetwork(id, next.network); b.reload(); }
     } catch (e) { flash(errText(e)); }
   };
   const stepAnimation = async () => {
@@ -429,7 +398,6 @@ export default function App() {
     try { await api.setAnimationRate(id, 1); await sleep(100); await api.setAnimationRate(id, 0); } catch (e) { flash(errText(e)); }
   };
 
-  // ---------- interaction recording ----------
   const onStep = useCallback((s: FlowStep) => {
     setRec((r) => {
       if (!r) return r;
@@ -455,11 +423,10 @@ export default function App() {
     setActiveId(ann.id);
     setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
   };
-  // Start from the page the recording started on and do the steps again.
   const replayFlow = async (flow: { steps: FlowStep[]; startUrl: string }) => {
     const b = browser.current;
     if (!b) return;
-    setMode('browse'); // select mode would swallow the replayed clicks
+    setMode('browse');
     if (navRef.current.url === flow.startUrl) b.reload(); else b.load(flow.startUrl);
     await sleep(600);
     for (let i = 0; i < 50 && loadingRef.current; i++) await sleep(200);
@@ -469,7 +436,6 @@ export default function App() {
     await sleep(500);
   };
 
-  // ---------- hand-off ----------
   const buildHandoff = (): Handoff => ({
     pinpointHandoff: 1, createdAt: Date.now(), url: navRef.current.url, title: navRef.current.title,
     viewport: browser.current?.size(), instruction: instruction.trim(), annotations: annRef.current,
@@ -504,22 +470,18 @@ export default function App() {
     } catch (e) { flash(errText(e)); }
   };
 
-  // ---------- responsive mode ----------
   useEffect(() => {
     const el = area.current;
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
-      // While a divider is dragged the room changes every frame; it is read once when the drag ends
-      // (unless a device size is on, where the page is rescaled to fit as you drag).
       if (dragging.current && !deviceRef.current.on) return;
       const w = Math.floor(e.contentRect.width), h = Math.floor(e.contentRect.height);
       setAvail((a) => (a.w === w && a.h === h ? a : { w, h }));
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [!!settings]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [!!settings]);
 
-  // Dragging an edge of the page resizes it, like the handles in browser dev tools.
   const startDeviceResize = (axis: 'x' | 'y' | 'xy') => (e: React.PointerEvent) => {
     e.preventDefault();
     const el = e.currentTarget as Element;
@@ -528,7 +490,6 @@ export default function App() {
     const sx = e.clientX, sy = e.clientY, k = deviceScale;
     const w0 = device.w, h0 = device.h || Math.round(deviceH);
     const move = (ev: PointerEvent) => {
-      // The page is centered, so its right edge moves half as fast as its width grows.
       const w = axis === 'y' ? w0 : Math.min(3840, Math.max(240, Math.round(w0 + ((ev.clientX - sx) * 2) / k)));
       const h = axis === 'x' ? device.h : Math.min(3840, Math.max(240, Math.round(h0 + (ev.clientY - sy) / k)));
       setDevice((d) => ({ ...d, w, h }));
@@ -543,12 +504,10 @@ export default function App() {
     setTimeout(() => composerRef.current?.focus(), 50);
   };
 
-  // True when DESIGN.md was edited after the current agent session received it.
   const designChanged = !!session && designAtStart !== null && (settings?.useDesign && design?.exists ? design.content : '') !== designAtStart;
 
   const currentRoute = useMemo(() => matchRoute(routes, nav.url, projectDir), [routes, nav.url, projectDir]);
 
-  // Maps React 19 stack positions through the dev server's source maps.
   const enrichSource = async (src: SourceInfo | null | undefined): Promise<SourceInfo | null> => {
     if (!src) return null;
     if (src.frame) {
@@ -558,8 +517,6 @@ export default function App() {
     return src;
   };
 
-  // Console errors point into served (compiled) code: say which project file and line that is.
-  // Best effort and bounded, so a slow dev server doesn't hold up the request.
   const locateConsole = async (entries: ConsoleEntry[]): Promise<ConsoleEntry[]> => {
     const located = Promise.all(entries.map(async (c, i) => {
       if (c.level !== 'error' || !c.line || !/^https?:/.test(c.source || '') || i < entries.length - 12) return c;
@@ -569,7 +526,6 @@ export default function App() {
     return Promise.race([located, sleep(2000).then(() => entries)]);
   };
 
-  // ---------- navigation ----------
   const go = (raw: string) => {
     const url = normalizeUrl(raw);
     if (!url) return;
@@ -578,7 +534,6 @@ export default function App() {
     saveSettings({ url });
   };
 
-  // ---------- mode ----------
   const setMode = useCallback((m: Mode) => {
     setModeState(m);
     setPopover(null);
@@ -594,15 +549,12 @@ export default function App() {
     if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
   }, [applyEnv]);
 
-  // Numbered markers for element annotations, drawn inside the page they belong to.
   useEffect(() => {
     browser.current?.send('markers', markerList(annotations.filter((a) => !a.tabId || a.tabId === activeTab), activeId));
   }, [annotations, activeId, activeTab]);
 
-  // ---------- tabs ----------
   const switchTab = (id: string) => {
     if (id === activeTabRef.current) return;
-    // The tab being left goes back to plain browsing: no picking, no frozen page.
     browser.current?.send('mode', 'browse');
     if (frozenRef.current) setFrozen(false);
     if (isolated) isolate(null);
@@ -612,8 +564,8 @@ export default function App() {
   };
   const newTab = (url?: string) => {
     let start = url || '';
-    if (!start) { try { const u = new URL(navRef.current.url); if (/^https?:$/.test(u.protocol)) start = u.origin + '/'; } catch { /* a blank tab */ } }
-    const t = makeTab(start, tabsRef.current.find((x) => x.id === activeTabRef.current)?.profile || ''); // stays the same user
+    if (!start) { try { const u = new URL(navRef.current.url); if (/^https?:$/.test(u.protocol)) start = u.origin + '/'; } catch {  } }
+    const t = makeTab(start, tabsRef.current.find((x) => x.id === activeTabRef.current)?.profile || '');
     setTabs((ts) => [...ts, t]);
     switchTab(t.id);
   };
@@ -626,11 +578,8 @@ export default function App() {
     if (id === activeTabRef.current) switchTab(next[Math.min(i, next.length - 1)].id);
     setTabs(next);
     delete handles.current[id];
-    setAnnotations((prev) => prev.filter((a) => a.tabId !== id)); // its pins pointed at elements that are gone
+    setAnnotations((prev) => prev.filter((a) => a.tabId !== id));
   };
-  // ---------- "view as" profiles ----------
-  // Language, time zone, headers and flags for a tab's page. They only take
-  // effect on a fresh load, so the page is reloaded once when they change.
   const applyTabProfile = async (t: Tab) => {
     const h = handles.current[t.id];
     const id = h?.id();
@@ -649,7 +598,7 @@ export default function App() {
     const t = tabsRef.current.find((x) => x.id === id);
     if (!t || t.profile === profile) return;
     setPopover(null);
-    setAnnotations((prev) => prev.filter((a) => a.tabId !== id)); // the page is loaded again as someone else
+    setAnnotations((prev) => prev.filter((a) => a.tabId !== id));
     patchTab(id, { profile, initialUrl: t.url && t.url !== 'about:blank' ? t.url : t.initialUrl });
   };
   const saveProfiles = (list: Profile[]) => {
@@ -659,8 +608,6 @@ export default function App() {
     for (const t of tabsRef.current) if (t.profile) applyTabProfile(t);
   };
 
-  // ---------- instant edits ----------
-  // Whether the open note's changes can go straight into the source, and why not when they can't.
   const editKey = popover ? JSON.stringify((({ tweaks, textEdit, classEdit, reorder, propEdits, states, element }) => [tweaks, textEdit, classEdit, reorder, propEdits, states, element?.source, element?.rules?.length])(annotations.find((a) => a.id === popover.id) || ({} as Annotation))) : '';
   useEffect(() => {
     const a = popover && annRef.current.find((x) => x.id === popover.id);
@@ -671,7 +618,7 @@ export default function App() {
       api.instantPlan(bare).then((p) => { if (live) setPlan(p); }).catch(() => { if (live) setPlan(null); });
     }, 250);
     return () => { live = false; clearTimeout(t); };
-  }, [editKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editKey]);
 
   const applyInstant = async (id: string) => {
     const a = annRef.current.find((x) => x.id === id);
@@ -680,7 +627,6 @@ export default function App() {
     const runId = uid();
     try {
       const res = await api.instantApply(runId, bare);
-      // The source says it now; the live preview of the same thing comes off so the real result shows.
       await releaseElement(a);
       (a.tabId ? handles.current[a.tabId] : browser.current)?.send('clear');
       setAnnotations((prev) => prev.filter((x) => x.id !== id));
@@ -695,7 +641,6 @@ export default function App() {
     } catch (e) { flash(errText(e)); }
   };
 
-  // Dragging on the page: an edge resizes the selected element, its body moves it among its siblings.
   const onManip = (m: { uid: string; kind: 'resize' | 'reorder'; width?: string | null; height?: string | null; from?: number; to?: number; count?: number; before?: string | null }) => {
     const a = annRef.current.find((x) => x.element?.uid === m.uid);
     if (!a) return;
@@ -708,7 +653,6 @@ export default function App() {
     setActiveId(a.id);
   };
 
-  // ---------- background runs ----------
   useEffect(() => api.onBgEvent((e) => {
     setBgRuns((list) => list.map((r) => (r.id !== e.id ? r
       : e.type === 'step' ? { ...r, step: e.text }
@@ -731,10 +675,8 @@ export default function App() {
   };
   const discardBg = (r: BgRun) => { api.bgDiscard(r.id).catch(() => {}); setBgRuns((list) => list.filter((x) => x.id !== r.id)); };
 
-  // ---------- updates ----------
   useEffect(() => { api.updateState().then(setUpdate).catch(() => {}); return api.onUpdateState(setUpdate); }, []);
 
-  // The newly shown tab gets the current mode, markers and page settings; page problems start over.
   useEffect(() => {
     if (!activeTab) return;
     syncPage();
@@ -747,10 +689,8 @@ export default function App() {
       api.setAnimationRate(id, condRef.current.anim).catch(() => {});
       api.setNetwork(id, condRef.current.network).catch(() => {});
     }
-  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Links that would open a window open a tab.
-  useEffect(() => api.onNewTab((url) => newTab(url)), []); // eslint-disable-line react-hooks/exhaustive-deps
-  // Remember the open tabs with the project.
+  }, [activeTab]);
+  useEffect(() => api.onNewTab((url) => newTab(url)), []);
   const tabUrls = tabs.map((t) => (t.url && t.url !== 'about:blank' ? t.url : t.initialUrl)).join('\n');
   useEffect(() => {
     if (!projectDir || !tabs.length) return;
@@ -759,12 +699,11 @@ export default function App() {
       saveSettings({ tabs: tabUrls.split('\n').filter(Boolean), tabProfiles: open.map((t) => t.profile), activeTab: Math.max(0, tabsRef.current.findIndex((x) => x.id === activeTabRef.current)) });
     }, 800);
     return () => clearTimeout(t);
-  }, [tabUrls, activeTab, projectDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tabUrls, activeTab, projectDir]);
 
   const nextN = () => (annRef.current.length ? Math.max(...annRef.current.map((a) => a.n)) + 1 : 1);
   const colorFor = (n: number) => ANNOTATION_COLORS[(n - 1) % ANNOTATION_COLORS.length];
 
-  // ---------- select mode: element picked in page ----------
   const onPicked = useCallback(async (el: PickedElement) => {
     const n = nextN();
     const vp = el.viewport;
@@ -772,7 +711,6 @@ export default function App() {
     const crop = clampRect({ x: el.rect.x - pad, y: el.rect.y - pad, width: el.rect.width + pad * 2, height: el.rect.height + pad * 2 }, vp);
     const { dpr: _d, viewport: _v, shift: _s, ...element } = el;
     const ann: Annotation = { id: uid(), n, kind: 'element', note: '', color: colorFor(n), element, viewport: vp, tabId: activeTabRef.current, pageUrl: navRef.current.url };
-    // The note opens on the click; the screenshot of the element is attached as soon as it is taken.
     setAnnotations((prev) => [...prev, ann]);
     setActiveId(ann.id);
     setToolSection(null);
@@ -782,9 +720,8 @@ export default function App() {
         const image = await browser.current!.capture(crop);
         setAnnotations((prev) => prev.map((a) => (a.id === ann.id ? { ...a, image } : a)));
       }
-    } catch { /* page may have navigated */ } finally { browser.current?.send('hide', false); }
+    } catch {  } finally { browser.current?.send('hide', false); }
 
-    // Where it comes from, which design tokens it uses, and how widely its component is used.
     const source = await enrichSource(await browser.current!.locateSource(el.uid));
     const wc = browser.current!.id();
     const [tokens, usage, rules] = await Promise.all([
@@ -798,7 +735,6 @@ export default function App() {
     }
   }, []);
 
-  // ---------- element tools: live tweaks, forced states, scope ----------
   const patchAnn = (id: string, fn: (a: Annotation) => Annotation) => setAnnotations((prev) => prev.map((a) => (a.id === id ? fn(a) : a)));
 
   const tweak = (id: string, prop: string, value: string) => {
@@ -828,7 +764,6 @@ export default function App() {
     try { await api.forceState(wc, `[data-pinpoint="${uid}"]`, classes); } catch (e) { flash(errText(e)); return; }
     if (states.includes('disabled') !== !!a.states?.includes('disabled')) b.send('setDisabled', { uid, on: states.includes('disabled') });
     patchAnn(id, (x) => ({ ...x, states: states.length ? states : undefined }));
-    // Re-read the element as it looks now: that's what the agent and the thumbnail should show.
     await sleep(150);
     const fresh = await b.inspect(uid);
     if (!fresh) return;
@@ -837,11 +772,10 @@ export default function App() {
     let image: string | undefined;
     b.send('hide', true);
     await sleep(90);
-    try { if (crop.width > 2 && crop.height > 2) image = await b.capture(crop); } catch { /* keep the old close-up */ } finally { b.send('hide', false); }
+    try { if (crop.width > 2 && crop.height > 2) image = await b.capture(crop); } catch {  } finally { b.send('hide', false); }
     patchAnn(id, (x) => (x.element ? { ...x, image: image ?? x.image, element: { ...x.element, styles: fresh.styles, html: fresh.html, rect: fresh.rect } } : x));
   };
 
-  // Copy and class edits: shown in the page, written to source by the agent.
   const editText = (id: string, text: string) => {
     const a = annRef.current.find((x) => x.id === id);
     if (!a?.element) return;
@@ -854,7 +788,6 @@ export default function App() {
     const from = (a.element.classes || []).join(' ');
     browser.current?.send('setClass', { uid: a.element.uid, value });
     patchAnn(id, (x) => ({ ...x, classEdit: value === from ? undefined : { from, to: value } }));
-    // Classes the page's CSS doesn't have yet: ask the project's Tailwind for them, so they show now.
     const missing = value.split(/\s+/).filter((c) => c && !classNames.includes(c));
     if (!designSystem?.tailwind || !missing.length) return;
     clearTimeout(twTimer.current);
@@ -864,13 +797,11 @@ export default function App() {
         const css = await api.tailwindCss(want);
         if (css == null) return;
         browser.current?.send('injectCss', css);
-        // Only the ones that actually produced a rule count as generated.
         setGenerated(want.filter((c) => css.includes(c.replace(/[^\w-]/g, (ch) => '\\' + ch))));
-      } catch { /* Tailwind isn't installed or the class doesn't exist: it stays marked as pending */ }
+      } catch {  }
     }, 350);
   };
 
-  // Production build size for a run card (builds the project; slow but real).
   const measureBuild = async (runId: string) => {
     setBusy('Building the project to measure it…');
     try {
@@ -880,7 +811,6 @@ export default function App() {
     } catch (e) { flash(errText(e)); } finally { setBusy(null); }
   };
 
-  // A component prop changed live (React dev builds). Values keep the type they had.
   const typed = (summary: string, raw: string) => (summary.startsWith('"') ? raw : summary === 'true' || summary === 'false' ? raw === 'true' : Number(raw));
   const editProp = async (id: string, name: string, raw: string) => {
     const a = annRef.current.find((x) => x.id === id);
@@ -905,7 +835,6 @@ export default function App() {
     setIsolated(a ? id : null);
   };
 
-  // Open the component's Storybook story, or set up a request for the agent to write one.
   const openStory = async (id: string) => {
     const a = annRef.current.find((x) => x.id === id);
     const comp = a?.element?.component;
@@ -930,9 +859,8 @@ export default function App() {
     } catch (e) { flash(errText(e)); }
   };
 
-  // Puts an element back the way the page had it: no live tweaks, no forced state.
   const releaseElement = async (a: Annotation) => {
-    const b = (a.tabId && handles.current[a.tabId]) || browser.current; // the tab it was picked in
+    const b = (a.tabId && handles.current[a.tabId]) || browser.current;
     const wc = b?.id();
     if (!a.element || !b) return;
     b.send('untweak', a.element.uid);
@@ -941,7 +869,6 @@ export default function App() {
     if (a.states?.length && wc != null) await api.forceState(wc, `[data-pinpoint="${a.element.uid}"]`, []).catch(() => {});
   };
 
-  // ---------- draw & sketch ----------
   const makeDrawing = async (n: number): Promise<Annotation | null> => {
     const b = browser.current;
     if (!b || !page.shapes.length) return null;
@@ -975,7 +902,6 @@ export default function App() {
     } finally { setBusy(null); }
   };
 
-  // ---------- reference images ----------
   const addReferences = async (files: File[] | FileList) => {
     const imgs = [...files].filter((f) => f.type.startsWith('image/'));
     if (!imgs.length) return;
@@ -998,28 +924,21 @@ export default function App() {
     if (files.length) { e.preventDefault(); addReferences(files); }
   };
 
-  // ---------- send to agent ----------
-  // Messages sent while the agent works are steering: "queue" lands after its
-  // current step, "now" interrupts it. If the run can't take live input, they
-  // wait here and go out as one follow-up when it finishes.
   const queuedRef = useRef<AgentRequest[]>([]);
   const [flushTick, setFlushTick] = useState(0);
   const sessionRef = useRef(session);
   sessionRef.current = session;
 
-  // The other pages of the app, for the before/after check of pages the user isn't looking at.
   const otherRoutes = (url: string, targets: string[] = []) => {
     if (!/^https?:/.test(url)) return undefined;
     let origin = '';
     try { origin = new URL(url).origin; } catch { return undefined; }
-    // The open page is checked too: a change can land somewhere on it you weren't looking.
     let here = '/';
-    try { here = new URL(url).pathname; } catch { /* keep "/" */ }
+    try { here = new URL(url).pathname; } catch {  }
     const list = [
       { route: currentRoute?.route || here, url, current: true },
       ...routes.filter((r) => !r.dynamic && r.route !== currentRoute?.route).slice(0, 8).map((r) => ({ route: r.route, url: origin + r.route })),
     ];
-    // The pages are loaded the way the open tab sees them (its "view as" profile).
     const partition = partitionOf(tabsRef.current.find((t) => t.id === activeTabRef.current)?.profile || '');
     return { routes: list, currentFile: currentRoute?.file, perfUrl: settingsRef.current?.perfCheck === false ? undefined : url, targets, partition };
   };
@@ -1049,17 +968,16 @@ export default function App() {
     }
   };
 
-  // Send whatever piled up while a non-steerable run was going.
   useEffect(() => {
     if (runId || variantJob.current || !queuedRef.current.length) return;
     const merged = mergeRequests(queuedRef.current);
     queuedRef.current = [];
     startRun(merged);
-  }, [runId, flushTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runId, flushTick]);
 
   const send = async (mode: 'queue' | 'now' | 'bg' = 'queue') => {
     if (!settings || busy || (mode !== 'bg' && job && !runRef.current)) return;
-    verifyPending.current = null; // the user moved on; don't start a check on top of their message
+    verifyPending.current = null;
     if (!settings.projectDir) {
       flash('Pick the project folder the agent should edit.');
       const dir = await api.pickFolder();
@@ -1078,29 +996,25 @@ export default function App() {
 
       const b = browser.current!;
       const hasPage = !!navRef.current.url && navRef.current.url !== 'about:blank';
-      // The screenshots show where the change is asked for: the annotated elements are brought
-      // into view first, wherever the page has been scrolled to since they were picked.
       const targets: FrameTarget[] = anns.flatMap((a) => (a.kind === 'element' && a.element && (!a.pageUrl || a.pageUrl === navRef.current.url) ? [{ uid: a.element.uid, selector: a.element.selector }] : []));
       let frame: RunMeta['frame'];
       if (hasPage) {
         const at = await b.frame(targets);
         frame = { targets, y: at.y };
-        if (targets.length) await sleep(140); // the overlay's markers follow the scroll on the next frames
+        if (targets.length) await sleep(140);
       }
       let overview: string | undefined;
       if (hasPage && (anns.some((a) => a.kind === 'element') || (anns.length === 0 && !runRef.current))) {
         b.send('clean');
         await sleep(80);
-        try { overview = await b.capture(); } catch { /* ignore */ }
+        try { overview = await b.capture(); } catch {  }
       }
-      // The overview shows live tweaks and forced states; everything after it should see the real page.
       if (isolated) isolate(null);
       if (anns.some((a) => a.tweaks || a.states?.length || a.textEdit || a.classEdit || a.propEdits)) {
         await Promise.all(anns.map(releaseElement));
         await sleep(120);
       }
 
-      // A clean "before" screenshot for the before/after compare (new runs only).
       const before = hasPage && !runRef.current ? await cleanCapture() : null;
 
       const devTail = stripAnsi(devLog).split('\n').slice(-40).join('\n');
@@ -1131,11 +1045,10 @@ export default function App() {
       setAnnotations([]);
       setActiveId(null);
       setPopover(null);
-      for (const h of Object.values(handles.current)) h?.send('clear'); // pins can be on several tabs
+      for (const h of Object.values(handles.current)) h?.send('clear');
       if (hasDiag) clearDiagnostics();
       if (a11yIssues) setIncludeA11y(false);
 
-      // Background: handled in a separate copy of the project while this chat stays free.
       if (mode === 'bg') {
         const id = uid();
         const title = (request.instruction || anns.map((a) => a.note).find(Boolean) || 'Background request').split('\n')[0].slice(0, 80);
@@ -1157,7 +1070,6 @@ export default function App() {
         return;
       }
 
-      // Variants: the same request, run several times from the same starting point.
       const total = settings.variants >= 2 ? Math.min(MAX_VARIANTS, settings.variants) : 0;
       setChat((c) => [...c, { kind: 'user', id: uid(), text: request.instruction, annotations: thumbs, agent: settings.agent, ...(total && { variants: total }) }]);
       if (total) {
@@ -1171,17 +1083,15 @@ export default function App() {
 
   const cancel = () => { if (runId) api.cancelAgent(runId); };
 
-  // A steering message that is waiting (behind the agent's current step, or for the run to end) goes in now.
   const forceSteer = async (itemId: string) => {
     const running = runRef.current;
     const item = chatRef.current.find((it) => it.id === itemId);
     if (!running || !item || item.kind !== 'user') return;
-    if (item.steer === 'later') api.cancelAgent(running); // this run can't take messages: stopping it sends what is queued
+    if (item.steer === 'later') api.cancelAgent(running);
     else if (!(await api.nudgeAgent(running).catch(() => false))) { flash("The agent couldn't be interrupted just now."); return; }
     setChat((c) => c.map((it) => (it.id === itemId && it.kind === 'user' ? { ...it, steer: 'now' as const } : it)));
   };
 
-  // Marks reverted files on the run's card after an undo or a per-file revert.
   const applyRevert = (id: string, r: RevertResult) => {
     invalidateDiff(id);
     setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === id
@@ -1199,7 +1109,6 @@ export default function App() {
       return r;
     } catch (e) { flash(errText(e)); return null; }
   };
-  // Page screenshot without Pinpoint's hover box or pins.
   const cleanCapture = async (): Promise<string | null> => {
     const b = browser.current;
     if (!b) return null;
@@ -1208,29 +1117,24 @@ export default function App() {
     try { return await b.capture(undefined, true); } catch { return null; } finally { b.send('hide', false); }
   };
 
-  // After a run, wait for hot reload (or our own reload for file:// pages) to settle, then shoot.
   const captureAfter = async (id: string) => {
     const url = runPageRef.current[id];
     if (!url) return;
     await sleep(/^file:/.test(url) ? 500 : 1800);
     for (let i = 0; i < 40 && loadingRef.current; i++) await sleep(200);
     await sleep(400);
-    if (navRef.current.url !== url) return; // user moved to another page meanwhile
-    // The same place as the "before" screenshot, even if the page was scrolled or reloaded since.
+    if (navRef.current.url !== url) return;
     const frame = runMetaRef.current[id]?.frame;
     const aim = async () => { if (frame) { await browser.current?.frame(frame.targets, frame.y); await sleep(150); } };
     await aim();
     let shot = await cleanCapture();
     if (!shot) return;
-    // Did anything on screen actually change? Said plainly on the run's card when it didn't.
     const before = beforeShotRef.current?.id === id ? beforeShotRef.current.shot : null;
     const judge = async (after: string): Promise<'none' | 'changed' | undefined> => {
       if (!before) return undefined;
-      try { return (await looksSame(before, after)) ? 'none' : 'changed'; } catch { return undefined; } // sizes differ or an image failed to load
+      try { return (await looksSame(before, after)) ? 'none' : 'changed'; } catch { return undefined; }
     };
     let visual = await judge(shot);
-    // Looks the same: maybe the page just wasn't hot-reloaded (a static server). Reload once and look again.
-    // Pages with hot reload are trusted: they would have updated, and a reload would lose their state.
     if (visual === 'none' && /^https?:/.test(url) && !(await browser.current?.hasHmr())) {
       browser.current?.reload();
       await sleep(500);
@@ -1243,7 +1147,6 @@ export default function App() {
     await api.saveShot(id, 'after', shot);
     setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === id ? { ...it, shots: true, visual } : it)));
   };
-  // A variant finished: keep its screenshot, put the files back, then start the next one or offer the choice.
   const nextVariant = async (e: Extract<AgentEvent, { type: 'done' }>) => {
     const j = variantJob.current;
     if (!j) return;
@@ -1264,17 +1167,15 @@ export default function App() {
       return;
     }
     setJob(`Starting variant ${j.index + 1} of ${j.total}…`);
-    await sleep(1500); // hot reload back to the starting point
+    await sleep(1500);
     const before = await cleanCapture();
     j.index++;
     setJob(null);
-    // The session already has the request and its screenshots; without one, send it all again.
     const slim = !!sessionRef.current;
     const variant = { index: j.index, total: j.total };
     startRun({ ...j.base, ...(slim && { instruction: '', annotations: [], overview: undefined }), diagnostics: undefined, note: undefined, variant }, before, { variant, frame: runMetaRef.current[e.runId]?.frame });
   };
 
-  // Everything that follows a finished run: screenshots, the next variant, the automatic check.
   const afterRun = async (e: Extract<AgentEvent, { type: 'done' }>) => {
     const meta = runMetaRef.current[e.runId] || {};
     if (meta.variant) return nextVariant(e);
@@ -1285,8 +1186,7 @@ export default function App() {
     if (verifyPending.current !== e.runId || runRef.current || queuedRef.current.length) return;
     verifyPending.current = null;
     const shots = await api.runShots(e.runId).catch(() => ({} as Record<string, string>));
-    if (!shots.after) return; // the page wasn't open, so there is nothing to look at
-    // The request was about an interaction: get the page back into that state before looking.
+    if (!shots.after) return;
     const flow = runFlowRef.current[e.runId];
     if (flow) {
       setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Replaying the recorded interaction…' }]);
@@ -1295,9 +1195,8 @@ export default function App() {
       if (shot) shots.after = shot;
       if (runRef.current || queuedRef.current.length) return;
     }
-    // Identical screenshots: the change didn't show. The check is told, so it looks for why.
     let same = false;
-    if (shots.before) { try { same = await looksSame(shots.before, shots.after); } catch { /* different sizes */ } }
+    if (shots.before) { try { same = await looksSame(shots.before, shots.after); } catch {  } }
     const since = meta.startedAt || 0;
     const cons = consoleRef.current.filter((c) => c.at >= since);
     const net = netRef.current.filter((n) => n.at >= since);
@@ -1313,7 +1212,6 @@ export default function App() {
   const afterRunRef = useRef(afterRun);
   afterRunRef.current = afterRun;
 
-  // Apply one of the variants (switching away from another one if needed).
   const pickVariant = async (itemId: string, id: string) => {
     const item = chat.find((c) => c.id === itemId && c.kind === 'variants') as Extract<ChatItem, { kind: 'variants' }> | undefined;
     if (!item || runRef.current) return;
@@ -1323,7 +1221,7 @@ export default function App() {
       invalidateDiff(id);
       setChat((c) => c.map((it) => (it.id === itemId && it.kind === 'variants' ? { ...it, chosen: id }
         : it.kind === 'done' && it.runId === id ? { ...it, undone: false, changes: it.changes.map((ch) => ({ ...ch, reverted: false })) } : it)));
-      browser.current?.reload(); // show the chosen variant even when the dev server doesn't hot-reload a restore
+      browser.current?.reload();
       const opt = item.options.find((o) => o.runId === id);
       pendingNote.current = `[Pinpoint: the user picked variant ${opt?.index} of the ${item.options.length} you made. Its files are on disk now; the other variants were discarded. Re-read files before editing them.]`;
       refreshGit();
@@ -1331,7 +1229,6 @@ export default function App() {
     } catch (e) { flash(errText(e)); }
   };
 
-  // The mockup overlay against the page, pixel by pixel.
   const diffMockup = async () => {
     const b = browser.current;
     if (!overlay || !b) return;
@@ -1343,7 +1240,6 @@ export default function App() {
     } catch { flash("Couldn't read the mockup image."); }
   };
 
-  // Screenshot the current page at phone, tablet and desktop widths for a run.
   const captureSizes = async (id: string) => {
     const original = device;
     const plan: Device[] = [{ on: true, w: 390, h: 844, zoom: 'fit', touch: false }, { on: true, w: 820, h: 1180, zoom: 'fit', touch: false }, DEVICE_OFF];
@@ -1366,7 +1262,6 @@ export default function App() {
     } catch (e) { flash(errText(e)); }
   };
 
-  // Pull request title/description drafted from this chat.
   const prDefaults = () => {
     const users = chat.filter((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }>[];
     const first = users[0];
@@ -1401,7 +1296,6 @@ export default function App() {
       } else flash(r.failed.length ? `Reverted ${r.restored.length}; couldn't restore ${r.failed.join(', ')}` : `Reverted ${r.restored.length} file(s)`);
     } catch (e) { flash(errText(e)); }
   };
-  // A chat that is still working keeps working; the new one starts beside it.
   const newChat = () => {
     if (!leaveChat()) return;
     setChat([]); setSession(null); setChatId(null); setDesignAtStart(null);
@@ -1429,7 +1323,6 @@ export default function App() {
   };
   const askToFix = () => {
     setIncludeDiag(true);
-    // Name the actual problems, so the request reads as a task and not as "go look for errors".
     const cons = consoleRef.current, errors = cons.filter((c) => c.level === 'error');
     const list = [
       ...(errors.length ? errors : cons).slice(-4).map((c) => `- ${c.message.split('\n')[0].slice(0, 160)}${c.source ? ` (${c.source.split('/').pop()!.split('?')[0]}${c.line ? `:${c.line}` : ''})` : ''}`),
@@ -1440,8 +1333,6 @@ export default function App() {
     setTimeout(() => composerRef.current?.focus(), 50);
   };
 
-  // ---------- agent events ----------
-  // Token deltas arrive fast; batch them into a state update every 50 ms (redrawing the chat each frame made the app stutter).
   const deltaBuf = useRef<{ kind: 'text' | 'thinking'; text: string }[]>([]);
   const deltaTimer = useRef(0);
   const flushDeltas = useCallback(() => {
@@ -1451,16 +1342,13 @@ export default function App() {
     if (!buf.length) return;
     setChat((c) => mergeDeltas(c, buf));
   }, []);
-  // A complete block replaces the streamed draft of the same kind (or is added).
   const finalizeBlock = (kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []) => {
     if (deltaTimer.current) { clearTimeout(deltaTimer.current); flushDeltas(); }
     setChat((c) => finalizeItems(c, kind, text, extra));
   };
 
   useEffect(() => api.onAgentEvent((e: AgentEvent) => {
-    // Other pages are compared after the run has already been reported as done.
     if (e.type === 'routes') {
-      // A fresh load shows the change but the open page doesn't: it wasn't hot-reloaded, so reload it.
       const fresh = e.results.find((r) => r.current);
       setChat((c) => c.map((it) => {
         if (it.kind !== 'done' || it.runId !== e.runId) return it;
@@ -1472,14 +1360,13 @@ export default function App() {
       return;
     }
     if (e.runId !== runRef.current) {
-      // A chat that isn't on screen: its messages are collected for when it is opened again.
       const p = [...parked.current.values()].find((x) => x.runId === e.runId);
       if (p) parkedEventRef.current(p, e);
       return;
     }
     const push = (item: ChatItem) => setChat((c) => {
       const last = c[c.length - 1];
-      if (item.kind === 'error' && last?.kind === 'error' && last.text === item.text) return c; // same error twice
+      if (item.kind === 'error' && last?.kind === 'error' && last.text === item.text) return c;
       return [...c, item];
     });
     switch (e.type) {
@@ -1516,7 +1403,6 @@ export default function App() {
         ]);
         setRunId(null);
         runRef.current = null;
-        // Static files have no hot reload, so refresh them ourselves.
         if (e.changes?.length && /^file:/.test(navRef.current.url)) browser.current?.reload();
         refreshGitRef.current();
         verifyPending.current = e.runId;
@@ -1534,9 +1420,6 @@ export default function App() {
   const refreshGitRef = useRef(refreshGit);
   refreshGitRef.current = refreshGit;
 
-
-  // The conversation's buttons, as one object that never changes identity, so
-  // finished messages aren't rendered again when anything else on screen changes.
   const chatHandlers = {
     onReload: () => browser.current?.reload(),
     onUndo: undoRun,
@@ -1552,7 +1435,6 @@ export default function App() {
   };
   const chatActions = useStableActions<ChatActions>(chatHandlers);
 
-  // ---------- dev server ----------
   useEffect(() => api.onDevEvent((e) => {
     if (e.type === 'log') addLog('dev', e.text);
     else if (e.type === 'started') { setDevRunning(true); setDevLog(''); }
@@ -1563,26 +1445,23 @@ export default function App() {
         setTimeout(() => go(e.url), 400);
       }
     }
-  }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  }), []);
   const loadErrorRef = useRef(loadError);
   loadErrorRef.current = loadError;
 
-  // Work out the project's dev command, and whether its server is already up.
-  // (We only offer that URL: another app could be on the same port.)
   useEffect(() => {
     setDevInfo(null);
     if (!projectDir) return;
     let live = true;
     api.detectDev().then((d) => { if (live) setDevInfo(d); }).catch(() => {});
     return () => { live = false; };
-  }, [projectDir]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectDir]);
   const devCommand = settings?.devCommand || devInfo?.command || '';
 
   const startDev = async (cmd: string) => {
     try { await api.startDev(cmd); saveSettings({ devCommand: cmd }); }
     catch (e) { flash((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
   };
-  // One click from the welcome screen or a load error: run the detected command.
   const quickStartDev = () => {
     setDrawerOpen(true); setDrawerTab('dev');
     if (devCommand && !devRunning) startDev(devCommand);
@@ -1593,7 +1472,6 @@ export default function App() {
     const dir = await api.pickFolder();
     if (!dir) return;
     setSettings(await api.getSettings()); setSession(null); flash(`Project: ${dir}`);
-    // A different project starts from its welcome screen, not the old project's page.
     if (dir !== prev) {
       const blank = makeTab('');
       handles.current = {};
@@ -1605,15 +1483,11 @@ export default function App() {
     }
   };
 
-  // ---------- layout ----------
   const startResize = (which: 'panel' | 'drawer') => (e: React.PointerEvent) => {
     e.preventDefault();
-    // Capture the pointer so moves over the <webview> (a separate process) still reach us.
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     setResizing(which);
     dragging.current = true;
-    // The grid is resized directly, once per frame, and the new size goes into state
-    // when the drag ends: re-rendering the whole window on every pointer move is what made this stutter.
     const grid = (e.currentTarget as HTMLElement).closest('.app') as HTMLElement | null;
     const left = settingsRef.current?.panelSide === 'left';
     let last = 0, frame = 0;
@@ -1648,7 +1522,6 @@ export default function App() {
   };
   const togglePanel = () => saveSettings({ panelHidden: !settingsRef.current?.panelHidden });
 
-  // ---------- keyboard ----------
   const handleKey = useCallback((key: string, e?: KeyboardEvent) => {
     const m = modeRef.current;
     if (key === 'Escape') { setPopover(null); if (m !== 'browse') setMode('browse'); return; }
@@ -1683,7 +1556,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleKey, page, sketch]);
 
-  // ---------- annotations ----------
   const updateNote = (id: string, note: string) => setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, note } : a)));
   const removeAnn = (id: string) => {
     const a = annRef.current.find((x) => x.id === id);
@@ -1699,7 +1571,6 @@ export default function App() {
   };
 
   const agentReady = settings && agents ? agents[settings.agent]?.ok : true;
-  // Responsive mode: the page gets its exact size and is scaled down to fit when it's bigger than the stage.
   const deviceScale = !device.on || !avail.w ? 1
     : device.zoom === 'fit' ? Math.min(1, avail.w / device.w, device.h ? avail.h / device.h : 1) : device.zoom;
   const deviceH = device.h || avail.h / deviceScale;
@@ -1715,7 +1586,6 @@ export default function App() {
     if (!popover || !frame.current) return {};
     const fw = frame.current.clientWidth, fh = frame.current.clientHeight;
     const w = 320;
-    // Element notes carry the state / scope / tweak tools, so they need more room.
     const isEl = popAnn?.kind === 'element';
     const h = 130 + (isEl ? 94 + ((popAnn?.element?.component?.uses ?? 0) > 1 ? 30 : 0) + (toolSection ? 200 : 0) : 0);
     const below = popover.rect.y + popover.rect.height + 10;
@@ -1738,7 +1608,6 @@ export default function App() {
 
   return (
     <div className={`app ${resizing ? 'resizing' : ''}`} style={gridStyle}>
-      {/* ---------- top bar ---------- */}
       <TopBar
         mod={MOD} projectDir={settings.projectDir} onPickProject={pickProject}
         mode={mode} setMode={setMode}
@@ -1752,9 +1621,7 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
       />
 
-      {/* ---------- browser ---------- */}
       <main className="stage">
-        {/* Tabs on the left, tools for the page being shown on the right. */}
         <div className="tabbar">
           <div className="tabstrip">
             {tabs.map((t) => (
@@ -1772,7 +1639,6 @@ export default function App() {
             <button className="tab-new" onClick={() => newTab()} title={`New tab (${MOD}+T)`}><Plus size={13} /></button>
           </div>
         </div>
-        {/* Navigation for the active tab, and tools for the page it shows. */}
         <div className="navbar">
           <div className="nav-btns">
             <button className="icon-btn" disabled={!nav.canBack} onClick={() => browser.current?.back()} title="Back"><ArrowLeft size={16} /></button>
@@ -1819,7 +1685,7 @@ export default function App() {
           <div className="device-box" style={device.on ? { width: device.w * deviceScale, height: deviceH * deviceScale } : undefined}>
           <div ref={frame} className={`frame mode-${mode}`} style={device.on ? { width: device.w, height: deviceH, transform: `scale(${deviceScale})` } : undefined}>
             {tabs.map((t) => {
-              const here = () => t.id === activeTabRef.current; // background tabs stay loaded but don't drive the UI
+              const here = () => t.id === activeTabRef.current;
               return (
                 <BrowserView
                   key={`${t.id}:${t.profile}`}
@@ -1957,7 +1823,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* ---------- side panel ---------- */}
       <aside
         className={`panel ${left ? 'left' : 'right'}`}
         style={settings.panelHidden ? { display: 'none' } : undefined}
@@ -2100,7 +1965,6 @@ export default function App() {
         />
         </div>
       )}
-      {/* The webview swallows pointer events; a shield keeps splitter drags smooth. */}
       {resizing && <div className={`drag-shield ${resizing}`} />}
 
       {sheet && (

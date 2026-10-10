@@ -13,13 +13,11 @@ const THEME = {
   brightBlack: '#6b7080', brightRed: '#ff8597', brightGreen: '#6ee7b7', brightYellow: '#ffe45c', brightBlue: '#93c0ff', brightMagenta: '#dab4f5', brightCyan: '#8be9f5', brightWhite: '#ffffff',
 };
 
-// One session's screen. It is created when the session is first shown and kept
-// (hidden) while another session is in front, so its scrollback and cursor survive.
 function Screen({ id, active }: { id: string; active: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const term = useRef<Xterm | null>(null);
   const fit = useRef<FitAddon | null>(null);
-  const [ready, setReady] = useState(false); // its earlier output has been put back
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const t = new Xterm({ fontFamily: 'ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace', fontSize: 12.5, lineHeight: 1.25, cursorBlink: true, scrollback: 5000, theme: THEME, allowProposedApi: true });
@@ -29,9 +27,6 @@ function Screen({ id, active }: { id: string; active: boolean }) {
     term.current = t;
     fit.current = f;
     let live = true;
-    // What it printed before this view existed (the drawer was closed, or the app was showing something else).
-    // It is replayed at the size it was printed for (the output moves the cursor around
-    // by row and column), and only then fitted to the space there is now.
     api.termAttach(id).then((s) => {
       if (!live) return;
       if (s) {
@@ -44,7 +39,6 @@ function Screen({ id, active }: { id: string; active: boolean }) {
     const offExit = api.onTermExit((e) => { if (e.id === id) t.write(`\r\n\x1b[2m[process ended${e.code ? ` with code ${e.code}` : ''}]\x1b[0m\r\n`); });
     const typed = t.onData((data) => api.termWrite(id, data));
     const sized = t.onResize(({ cols, rows }) => api.termResize(id, cols, rows));
-    // Copy with Ctrl+C when text is selected (otherwise it interrupts, as usual); paste with Ctrl+V.
     t.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown' || !(e.ctrlKey || e.metaKey)) return true;
       if (e.key.toLowerCase() === 'c' && t.hasSelection()) { navigator.clipboard.writeText(t.getSelection()).catch(() => {}); t.clearSelection(); return false; }
@@ -54,10 +48,9 @@ function Screen({ id, active }: { id: string; active: boolean }) {
     return () => { live = false; offData(); offExit(); typed.dispose(); sized.dispose(); t.dispose(); term.current = null; };
   }, [id]);
 
-  // Fits the grid of characters to the space it has, whenever that changes.
   useEffect(() => {
     if (!active || !ready || !box.current) return;
-    const refit = () => { try { fit.current?.fit(); } catch { /* not laid out yet */ } };
+    const refit = () => { try { fit.current?.fit(); } catch {  } };
     const ro = new ResizeObserver(refit);
     ro.observe(box.current);
     refit();
@@ -68,13 +61,11 @@ function Screen({ id, active }: { id: string; active: boolean }) {
   return <div ref={box} className="term-screen" style={{ display: active ? 'block' : 'none' }} />;
 }
 
-// The Terminal tab of the drawer: one or more sessions, each in a shell you choose
-// from the ones installed on this computer, started in the project folder.
 export function TerminalPane({ cwd, preferred, onPrefer }: { cwd: string; preferred?: string; onPrefer(shell: string): void }) {
   const [shells, setShells] = useState<TermShell[] | null>(null);
   const [sessions, setSessions] = useState<TermSession[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
-  const [menu, setMenu] = useState<{ left: number; bottom: number } | null>(null); // where the shell list opens (above the button)
+  const [menu, setMenu] = useState<{ left: number; bottom: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -97,11 +88,10 @@ export function TerminalPane({ cwd, preferred, onPrefer }: { cwd: string; prefer
       setShells(sh);
       setSessions(open);
       if (open.length) setCurrent(open[open.length - 1].id);
-      // The first time the tab is opened there is nothing running yet: start your usual shell.
       else if (!started.current) { started.current = true; start(sh.some((s) => s.id === preferred) ? preferred : undefined); }
     }).catch((e) => setError(String(e.message || e)));
     return () => { live = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => api.onTermExit((e) => setSessions((l) => l.map((s) => (s.id === e.id ? { ...s, exited: true } : s)))), []);
   useEffect(() => {

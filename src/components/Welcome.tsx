@@ -3,19 +3,16 @@ import { Logo } from './Logo';
 
 interface Props {
   projectDir: string;
-  devCommand: string;   // saved or detected; '' when we couldn't tell
-  devLabel?: string;    // e.g. "Next.js"
+  devCommand: string;
+  devLabel?: string;
   devRunning: boolean;
-  runningUrl?: string | null; // something already answers on the expected port
+  runningUrl?: string | null;
   onOpenUrl(url: string): void;
   onOpenProject(): void;
   onStartDev(): void;
   onSketch(): void;
 }
 
-// First-run stage in the product's own language (hand markup on a page): the
-// headline gets circled, scribbled and highlighted as it appears, and a looping
-// demo plays the whole flow: point, pin, note, circle, agent, shipped.
 export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningUrl, onOpenUrl, onOpenProject, onStartDev, onSketch }: Props) {
   return (
     <div className="welcome">
@@ -66,7 +63,6 @@ export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningU
           </div>
         </div>
 
-        {/* The looping demo */}
         <div className="demo" aria-hidden="true">
           <div className="demo-window">
             <div className="demo-chrome"><i /><i /><i /><span className="demo-url">localhost:3000</span></div>

@@ -1,4 +1,3 @@
-// URLs, routes and browser tabs: small pure helpers used by the app shell.
 import { uid } from './draw';
 import type { RouteInfo } from './types';
 
@@ -7,13 +6,12 @@ export function normalizeUrl(input: string) {
   if (!s) return '';
   if (/^[a-zA-Z]:[\\/]/.test(s)) return 'file:///' + s.replace(/\\/g, '/');
   if (/^(https?|file|about|data):/i.test(s)) return s;
-  if (s.startsWith('/')) return 'file://' + s; // macOS / Linux absolute path
+  if (s.startsWith('/')) return 'file://' + s;
   if (/^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?/.test(s) || /^:\d+/.test(s)) return 'http://' + s.replace(/^:/, 'localhost:');
   if (/^\d+$/.test(s)) return `http://localhost:${s}`;
   return 'https://' + s;
 }
 
-// Route patterns ([id], :id, [...slug], *) -> regex, to find which route renders a URL.
 export function routeRegex(route: string) {
   const body = route.split('/').map((seg) => {
     if (/^\[\[?\.\.\./.test(seg) || seg === '*') return '.*';
@@ -39,12 +37,9 @@ export function matchRoute(routes: RouteInfo[], url: string, root: string): Rout
   return routes.find((r) => !r.dynamic && r.route === path) || routes.find((r) => r.dynamic && routeRegex(r.route).test(path)) || null;
 }
 
-// One page open in Pinpoint's browser.
 export interface Tab { id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean; error: string | null; initialUrl: string; profile: string }
 export const makeTab = (url: string, profile = ''): Tab => ({ id: uid(), url: '', title: '', canBack: false, canForward: false, loading: false, error: null, initialUrl: url, profile });
-// A "view as" profile is a separate browser storage partition.
 export const partitionOf = (profile: string) => (profile ? `persist:pinpoint-${profile}` : 'persist:pinpoint');
-// "key=value" / "Name: value" lines from a profile's settings.
 export const pairs = (text: string | undefined, sep: string): [string, string][] => (text || '').split('\n').map((l) => l.trim()).filter((l) => l && l.includes(sep))
   .map((l) => [l.slice(0, l.indexOf(sep)).trim(), l.slice(l.indexOf(sep) + 1).trim()] as [string, string]).filter(([k]) => k);
 export const tabLabel = (t: Tab) => {

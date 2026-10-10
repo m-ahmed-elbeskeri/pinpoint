@@ -10,13 +10,11 @@ const GAP = 18;
 
 interface Props {
   url: string;
-  onNavigate(url: string): void;         // a link was followed in one of the panes
-  onPick(w: number, h: number): void;    // open the main view at this size
+  onNavigate(url: string): void;
+  onPick(w: number, h: number): void;
   onClose(): void;
 }
 
-// The same page at phone, tablet and desktop size, live and scrolling together.
-// For looking; picking and drawing happen in the main view.
 export function MultiView({ url, onNavigate, onPick, onClose }: Props) {
   const body = useRef<HTMLDivElement>(null);
   const views = useRef<(HTMLElement | null)[]>([]);
@@ -36,7 +34,6 @@ export function MultiView({ url, onNavigate, onPick, onClose }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Scrolling one pane scrolls the others to the same relative position.
   useEffect(() => {
     const offs = views.current.map((v, i) => {
       if (!v) return () => {};

@@ -1,6 +1,3 @@
-// Other browser engines: the same page rendered by WebKit (Safari's engine) and
-// Firefox, through Playwright. The engines are a few hundred megabytes, so they
-// are not shipped with the app: they are downloaded once, when first asked for.
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,7 +10,7 @@ const env = (base) => ({ ...process.env, ELECTRON_RUN_AS_NODE: '1', PLAYWRIGHT_B
 function status(base) {
   const core = fs.existsSync(path.join(home(base), 'node_modules', 'playwright-core', 'package.json'));
   let have = [];
-  try { have = fs.readdirSync(browsersDir(base)); } catch { /* nothing downloaded */ }
+  try { have = fs.readdirSync(browsersDir(base)); } catch {  }
   const installed = ENGINES.filter((e) => have.some((d) => d.startsWith(`${e}-`)));
   return { ready: core && installed.length === ENGINES.length, installed };
 }
@@ -21,7 +18,6 @@ function status(base) {
 function run(cmd, args, opts, onLine) {
   return new Promise((resolve, reject) => {
     const child = execFile(cmd, args, { windowsHide: true, maxBuffer: 32 * 1024 * 1024, timeout: 20 * 60 * 1000, ...opts }, (err, stdout, stderr) => {
-      // First lines, without terminal colors: Playwright puts the reason first and a call log after.
       if (err) return reject(new Error(String(stderr || err.message).replace(/\u001b\[[0-9;]*m/g, '').trim().split('\n').filter(Boolean).slice(0, 2).join(' ').slice(0, 300)));
       resolve(String(stdout));
     });
@@ -29,7 +25,6 @@ function run(cmd, args, opts, onLine) {
   });
 }
 
-// Downloads Playwright and the two engines into the app's data folder.
 async function install(base, onProgress = () => {}) {
   const dir = home(base);
   fs.mkdirSync(dir, { recursive: true });
@@ -42,7 +37,6 @@ async function install(base, onProgress = () => {}) {
   return status(base);
 }
 
-// argv: engine, url, out file, width, height, cookies json
 const SHOOT = `
 const [engine, url, out, width, height, cookies] = process.argv.slice(1);
 const pw = require('playwright-core');
@@ -61,7 +55,6 @@ const pw = require('playwright-core');
 })().catch((e) => { process.stderr.write(String(e && e.message || e)); process.exit(1); });
 `;
 
-// One screenshot of `url` in the given engine. `cookies` carries the login from Pinpoint's own browser.
 async function shoot(base, engine, url, { width = 1280, height = 900, cookies = [] } = {}) {
   if (!ENGINES.includes(engine)) throw new Error(`Unknown engine: ${engine}`);
   const out = path.join(home(base), `shot-${engine}-${Date.now()}.jpg`);

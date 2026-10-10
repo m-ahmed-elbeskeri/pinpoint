@@ -13,7 +13,7 @@ const MODES: { id: Mode; label: string; icon: typeof MousePointer2; key: string;
 ];
 
 interface Props {
-  mod: string;                 // the platform's shortcut key name
+  mod: string;
   projectDir: string;
   onPickProject(): void;
   mode: Mode;
@@ -28,7 +28,7 @@ interface Props {
   onToggleDrawer(): void;
   sheet: ContextTab | null;
   setSheet(s: ContextTab | null): void;
-  design: 'on' | 'off' | 'none'; // DESIGN.md is sent, exists but is switched off, or isn't there
+  design: 'on' | 'off' | 'none';
   designChanged: boolean;
   memoryOn: number;
   onDevtools(): void;
@@ -38,7 +38,6 @@ interface Props {
   onSettings(): void;
 }
 
-// The strip across the top of the window: project, mode switch, and the app-wide buttons.
 export function TopBar(p: Props) {
   const PanelIcon = p.panelSide === 'left' ? PanelLeft : PanelRight;
   const u = p.update;

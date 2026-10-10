@@ -1,8 +1,5 @@
-// Round 6: the agent-driven flows end to end through the real UI, with a stand-in
-// agent CLI (speaks Claude Code's stream-json, edits files, costs nothing):
-// a normal run, the other-pages check, load cost, the automatic result check, and variants.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -13,7 +10,6 @@ const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'flows.out'), out.join(NL) + NL); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ---- project: two static pages sharing one stylesheet
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-e2e-'));
 const page = (title) => `<!doctype html><html lang="en"><head><title>${title}</title><link rel="stylesheet" href="/style.css"></head><body><h1>${title}</h1><p>Some text on the ${title} page.</p><a href="/about.html">About</a></body></html>`;
 fs.writeFileSync(path.join(proj, 'index.html'), page('Home'));
@@ -21,7 +17,6 @@ fs.writeFileSync(path.join(proj, 'about.html'), page('About'));
 const CSS0 = 'body { font-family: system-ui; padding: 40px; background: #ffffff; }' + NL + 'h1 { color: #111111; }' + NL;
 fs.writeFileSync(path.join(proj, 'style.css'), CSS0);
 
-// ---- stand-in agent
 const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-agent-'));
 const promptLog = path.join(agentDir, 'prompts.log');
 fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), `
@@ -77,7 +72,6 @@ server.listen(0, '127.0.0.1', () => {
   app.whenReady().then(async () => {
     await sleep(5000);
     const appWin = BrowserWindow.getAllWindows()[0];
-    // Kept in front: a covered or minimized window can't be captured or clicked.
     appWin.show(); appWin.focus();
     const host = appWin.webContents;
     const guest = webContents.getAllWebContents().find((w) => w.getType() === 'webview');
@@ -102,7 +96,6 @@ server.listen(0, '127.0.0.1', () => {
       log('app loaded the project page', /Home/.test(guest.getTitle()), guest.getTitle());
       log('stand-in agent detected', await until(`document.querySelector('.agent-seg button.on') && !document.querySelector('.agent-seg button.on.missing') && !document.querySelector('.warn-box') ? 1 : 0`, 8000) === 1);
 
-      // ---- 1. a normal run
       await send('Make the page background warmer');
       const first = await until(`document.querySelectorAll('.done-card').length >= 1 ? 1 : 0`, 30000);
       log('run finishes with a card', first === 1, (await cards()).join(' | '));
@@ -110,14 +103,12 @@ server.listen(0, '127.0.0.1', () => {
       const p1 = prompts()[0];
       log('the agent got the request and the screenshot', !!p1 && /Make the page background warmer/.test(p1.text) && /Visual change request/.test(p1.text) && p1.images >= 1, p1 && `${p1.images} image(s)`);
 
-      // ---- 2. automatic result check (on in settings)
       const checked = await until(`[...document.querySelectorAll('.done-card .done-head')].some((h) => /Checked the result/.test(h.textContent)) ? 1 : 0`, 40000);
       log('the result check ran as a second turn', checked === 1, (await cards()).join(' | '));
       const p2 = prompts().find((p) => /Automatic check from Pinpoint/.test(p.text));
       log('the check got before and after screenshots', !!p2 && p2.images === 2 && /After your changes/.test(p2.text) && /Before your changes/.test(p2.text), p2 && `${p2.images} image(s)`);
       log('it resumed the same session', prompts().length === 2);
 
-      // ---- 3. other pages + load cost on the first run's card
       const routes = await until(`document.querySelector('.done-card .where')?.innerText || ''`, 40000);
       const all = await ui(`[...document.querySelectorAll('.done-card')][0].innerText`);
       const rows = await ui(`[...document.querySelectorAll('.done-card .where-row')].map((r) => r.innerText.replace(/\\s+/g, ' '))`);
@@ -130,10 +121,9 @@ server.listen(0, '127.0.0.1', () => {
       log('the load stats open on the card', await until(`/Files requested/.test(document.querySelector('.done-card .load-stats')?.textContent || '') ? 1 : 0`, 3000) === 1);
       await shot('1-run');
 
-      // ---- 3b. point at the heading; the agent also changes the paragraph: that must be called out
       await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true })); 0`);
       await sleep(300);
-      for (let attempt = 0; attempt < 4; attempt++) { // a stray real mouse move can steal a click
+      for (let attempt = 0; attempt < 4; attempt++) {
         guest.focus();
         const hp = await guest.executeJavaScript(`(() => { const r = document.querySelector('h1').getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) }; })()`);
         for (const type of ['mouseMove', 'mouseDown', 'mouseUp']) guest.sendInputEvent({ type, x: hp.x, y: hp.y, button: 'left', clickCount: 1 });
@@ -152,7 +142,6 @@ server.listen(0, '127.0.0.1', () => {
       await until(`[...document.querySelectorAll('.done-card .done-head')].filter((h) => /Checked the result/.test(h.textContent)).length >= 2 ? 1 : 0`, 40000);
       await shot('1b-side-effect');
 
-      // ---- 3c. an edit that changes nothing on screen must say so plainly
       const before3c = (await cards()).length;
       await send('Tidy the stylesheet');
       await until(`document.querySelectorAll('.done-card').length > ${before3c} ? 1 : 0`, 30000);
@@ -165,7 +154,6 @@ server.listen(0, '127.0.0.1', () => {
       const checks = prompts().filter((p) => /Automatic check/.test(p.text));
       log('the result check is told when nothing visibly changed (and only then)', checks.length === 3 && /pixel-for-pixel identical/.test(checks[2].text) && !/pixel-for-pixel identical/.test(checks[1].text));
 
-      // ---- 4. variants: set to 2 from the menu, send, pick
       await ui(`document.querySelector('.variants-btn').click(); 0`);
       await sleep(300);
       await ui(`[...document.querySelectorAll('.variants-row .chip')].find((c) => c.textContent === '2').click(); document.querySelector('.variants-btn').click(); 0`);

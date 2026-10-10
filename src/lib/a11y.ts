@@ -1,8 +1,5 @@
-// Runs axe-core inside the page (via webview.executeJavaScript) and returns its
-// WCAG A/AA violations in a compact form for the context bar and the agent.
 async function audit() {
   const axe = (window as any).axe;
-  // The audit is heavy and runs on the page's own thread: start it when the page has a quiet moment.
   await new Promise<void>((done) => (window.requestIdleCallback ? window.requestIdleCallback(() => done(), { timeout: 4000 }) : setTimeout(done, 200)));
   const res = await axe.run(
     { exclude: [['pinpoint-overlay']] },
@@ -25,5 +22,4 @@ async function audit() {
     }));
 }
 
-// axe's source is only injected the first time; it stays on the page's window.
 export const a11yScript = (axeSource: string) => '(async () => { if (!window.axe) {\n' + axeSource + '\n}\nreturn (' + audit.toString() + ')(); })()';

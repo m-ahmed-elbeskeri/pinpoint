@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Download, FlaskConical, Layers, Loader2, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from './icons';
 import type { NetworkMode, PageEnv, Pin } from '../lib/types';
 
-// Closes a popover when the user clicks anywhere outside it.
 function useClickAway(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -10,11 +9,10 @@ function useClickAway(open: boolean, close: () => void) {
     const fn = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
     window.addEventListener('mousedown', fn);
     return () => window.removeEventListener('mousedown', fn);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
   return ref;
 }
 
-// ---------- page conditions: content stress, data states, animation speed ----------
 export interface Conditions { stress: string[]; network: NetworkMode; anim: number }
 export const NO_CONDITIONS: Conditions = { stress: [], network: 'normal', anim: 1 };
 
@@ -33,7 +31,6 @@ export const NETWORK: { id: NetworkMode; label: string; hint: string }[] = [
 ];
 const SPEEDS = [{ rate: 1, label: '100%' }, { rate: 0.25, label: '25%' }, { rate: 0.1, label: '10%' }];
 
-// Human-readable list of what is switched on, for the agent and the tooltip.
 export function describeConditions(c: Conditions) {
   return [
     ...c.stress.map((s) => STRESS.find((x) => x.id === s)?.label.toLowerCase() || s),
@@ -48,7 +45,6 @@ interface ConditionsProps {
   layout: boolean; setLayout(on: boolean): void;
 }
 
-// One row of the menu: what it is, a line saying what it does, and its control.
 function CondRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="cond-item">
@@ -57,7 +53,6 @@ function CondRow({ label, hint, children }: { label: string; hint?: string; chil
     </div>
   );
 }
-// An on/off switch. The whole row is the click target.
 function CondSwitch({ label, hint, on, set }: { label: string; hint: string; on: boolean; set(on: boolean): void }) {
   return (
     <button type="button" role="switch" aria-checked={on} className={`cond-item cond-toggle ${on ? 'on' : ''}`} onClick={() => set(!on)}>
@@ -66,7 +61,6 @@ function CondSwitch({ label, hint, on, set }: { label: string; hint: string; on:
     </button>
   );
 }
-// One choice out of a few.
 function CondSeg<T>({ options, value, set }: { options: { id: T; label: React.ReactNode; hint?: string }[]; value: T; set(v: T): void }) {
   return (
     <div className="cond-seg" role="radiogroup">
@@ -135,7 +129,6 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
   );
 }
 
-// ---------- variants: how many ways to try each request ----------
 export const MAX_VARIANTS = 8;
 const QUICK_VARIANTS = [0, 2, 3, 4];
 
@@ -144,7 +137,6 @@ export function VariantsMenu({ value, set }: { value: number; set(n: number): vo
   const [text, setText] = useState('');
   const ref = useClickAway(open, () => setOpen(false));
   useEffect(() => { if (open) setText(value >= 2 ? String(value) : ''); }, [open, value]);
-  // 0 and 1 both mean "off": one way is just a normal request.
   const commit = (raw: string) => {
     const n = Math.round(Number(raw));
     if (raw.trim() === '' || Number.isNaN(n)) return;
@@ -190,7 +182,6 @@ export function VariantsMenu({ value, set }: { value: number; set(n: number): vo
   );
 }
 
-// ---------- pinned baselines: pages that should not change ----------
 interface PinsProps {
   projectDir: string;
   url: string; title: string;
@@ -263,7 +254,6 @@ export function PinsChip({ projectDir, url, title, onCompare, flash }: PinsProps
   );
 }
 
-// ---------- hand-off: save a request for someone else to run ----------
 interface HandoffProps {
   hasRequest: boolean;
   canIssue: boolean;

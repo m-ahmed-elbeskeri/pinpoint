@@ -1,10 +1,5 @@
-// Generates the CSS for Tailwind classes the project's build hasn't emitted yet,
-// using the project's own Tailwind, so a class added in Pinpoint shows up in the
-// page straight away. Runs in a separate Node process: the project's modules
-// (some of them native) never load into the app itself.
 const { execFile } = require('node:child_process');
 
-// argv: projectDir, entry css ('' if none), config file ('' if none), ...classes
 const SCRIPT = `
 const fs = require('node:fs'), path = require('node:path');
 const [root, entry, config, ...classes] = process.argv.slice(1);
@@ -25,11 +20,8 @@ const req = require('node:module').createRequire(path.join(root, 'package.json')
 })().then((css) => process.stdout.write(css), (e) => { process.stderr.write(String(e && e.message || e)); process.exit(1); });
 `;
 
-// Tailwind 4 returns the whole stylesheet. Only the theme variables and the
-// utilities are added to the page: its base styles are already there, and
-// repeating them could override the project's own.
 function pickLayers(css, keep) {
-  if (!/@layer\s+[\w-]+\s*\{/.test(css)) return css; // v3 output: utilities only
+  if (!/@layer\s+[\w-]+\s*\{/.test(css)) return css;
   let out = '';
   const re = /@(layer|property)\s+([\w-]+)\s*\{/g;
   for (let m = re.exec(css); m; m = re.exec(css)) {

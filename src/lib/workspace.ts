@@ -1,19 +1,12 @@
-// Component workspace, page side (runs via webview.executeJavaScript). Renders a
-// component from the project on its own, over the page, using the page's own
-// React and the dev server's own modules: no Storybook, nothing to configure.
-// Needs a dev server that serves source files as modules (Vite).
-
 export interface WorkspaceSpec {
-  file: string;            // project-relative path of the component's file
+  file: string;
   name: string;
   isDefault: boolean;
   cells: { label: string; props: Record<string, unknown> }[];
-  abs?: string;            // the same file as an absolute path, for dev servers whose root is elsewhere
-  left?: number;           // page pixels covered by Pinpoint's own panel on the left
+  abs?: string;
+  left?: number;
 }
 
-// Kept as source text, not as a function: it uses dynamic import(), which the
-// app's own bundler would rewrite into helpers that don't exist inside the page.
 const RENDER = String.raw`async function render(spec) {
   const w = window;
   if (w.__pinpointWorkspace) w.__pinpointWorkspace.close();
@@ -133,12 +126,10 @@ const RENDER = String.raw`async function render(spec) {
 export const workspaceScript = (spec: WorkspaceSpec) => `(${RENDER})(${JSON.stringify(spec)})`;
 export const closeWorkspaceScript = 'window.__pinpointWorkspace ? (window.__pinpointWorkspace.close(), true) : false';
 
-// Feature flags and other per-profile storage values: set them and say whether anything changed
-// (the page is reloaded once when it did, so the app reads them at startup like a real visit).
 function setStorage(entries: [string, string][]) {
   let changed = false;
   for (const [key, value] of entries) {
-    try { if (localStorage.getItem(key) !== value) { localStorage.setItem(key, value); changed = true; } } catch { /* storage blocked */ }
+    try { if (localStorage.getItem(key) !== value) { localStorage.setItem(key, value); changed = true; } } catch {  }
   }
   return changed;
 }

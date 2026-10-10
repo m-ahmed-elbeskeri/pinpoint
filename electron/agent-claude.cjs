@@ -1,24 +1,17 @@
-// Claude Code as a live session: `claude -p` with stream-json on stdin AND
-// stdout, so messages can be sent while it works.
-//   steer(text, images)     queued; Claude reads it right after its current tool call
-//   interrupt(text, images) stops the current step, then continues with the new message
-// The process stays open until a turn ends and nothing else is pending.
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnCli, lineReader, killProc, toolDetail } = require('./cli.cjs');
 
-const GRACE_MS = 1200; // after a result, wait briefly in case a queued message starts another turn
+const GRACE_MS = 1200;
 const MAX_IMAGES = 12;
-const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024; // base64 grows it by a third; the API caps images at 5 MB
+const MAX_IMAGE_BYTES = 3.5 * 1024 * 1024;
 
-// Screenshots go inline as image blocks so Claude sees them without having to
-// open the files. Each is labeled with its path so the prompt's references line up.
 function imageBlocks(images = []) {
   const out = [];
   for (const file of images.slice(0, MAX_IMAGES)) {
     let buf;
     try { buf = fs.readFileSync(file); } catch { continue; }
-    if (buf.length > MAX_IMAGE_BYTES) continue; // too big to inline; the path in the prompt still works
+    if (buf.length > MAX_IMAGE_BYTES) continue;
     const ext = path.extname(file).toLowerCase();
     const media = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }[ext] || 'image/png';
     out.push({ type: 'text', text: `Image: ${file}` });
@@ -36,7 +29,7 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
   const proc = spawnCli(settings.claudePath || 'claude', args, cwd);
   let finished = false;
   let closeTimer = null;
-  let interruptWith = null; // { text, images } to send once the interrupted turn reports its result
+  let interruptWith = null;
   let cancelling = false;
   let reqSeq = 0;
   const totals = { cost: 0, durationMs: 0, turns: 0, sessionId };
@@ -47,17 +40,15 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
     if (finished) return;
     finished = true;
     onEvent({ type: 'done', ok, cost: totals.cost || undefined, durationMs: totals.durationMs || undefined, turns: totals.turns, sessionId: totals.sessionId });
-    try { proc.stdin.end(); } catch { /* already closed */ }
+    try { proc.stdin.end(); } catch {  }
   };
 
   lineReader(proc.stdout, (line) => {
     let m;
     try { m = JSON.parse(line); } catch { return onEvent({ type: 'log', text: line }); }
-    // Any activity after a result means a queued message started a new turn.
     if (closeTimer && m.type !== 'result') { clearTimeout(closeTimer); closeTimer = null; }
 
     if (m.type === 'stream_event') {
-      // Token-level deltas; the complete block still arrives later as 'assistant'.
       const ev = m.event;
       if (m.parent_tool_use_id || ev?.type !== 'content_block_delta') return;
       if (ev.delta?.type === 'text_delta') onEvent({ type: 'text_delta', text: ev.delta.text });
@@ -68,7 +59,7 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
       totals.sessionId = m.session_id;
       onEvent({ type: 'session', sessionId: m.session_id, model: m.model });
     } else if (m.type === 'assistant' && m.message?.content) {
-      if (m.parent_tool_use_id) return; // sub-agent chatter; keep the transcript focused
+      if (m.parent_tool_use_id) return;
       for (const b of m.message.content) {
         if (b.type === 'text' && b.text?.trim()) onEvent({ type: 'text', text: b.text });
         else if (b.type === 'thinking' && b.thinking?.trim()) onEvent({ type: 'thinking', text: b.thinking });
@@ -126,7 +117,7 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
     steerable: true,
     steer(text, imgs) {
       if (finished) return false;
-      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; } // turn just ended: this starts the next
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
       sendUser(text, imgs);
       return true;
     },
@@ -142,7 +133,6 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
       cancelling = true;
       interruptWith = null;
       write({ type: 'control_request', request_id: `pp-${++reqSeq}`, request: { subtype: 'interrupt' } });
-      // Graceful first; force it if the CLI doesn't wind down quickly.
       setTimeout(() => { if (!finished) { finish(false); killProc(proc); } }, 4000);
     },
   };

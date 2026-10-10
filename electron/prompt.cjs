@@ -1,6 +1,3 @@
-// Turns a visual request (element picks, drawings, sketches, notes) into a
-// prompt a coding agent can act on. Images are saved to disk beforehand and
-// referenced by absolute path.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -23,7 +20,6 @@ function fmtSource(src) {
   return parts.length ? parts.join('  ') : null;
 }
 
-// One entry per element a drawing touches: what it is, where it lives, how it looks.
 function describeHit(h) {
   const parts = [`\`${h.selector}\``];
   if (h.text) parts.push(`"${h.text.length > 80 ? h.text.slice(0, 80) + '…' : h.text}"`);
@@ -38,8 +34,6 @@ function describeHit(h) {
 
 const STATE_LABEL = { hover: ':hover', focus: ':focus', 'focus-visible': ':focus-visible', active: ':active', disabled: 'disabled' };
 
-// What the user set up on a picked element beyond the note: a forced state,
-// live style tweaks, design tokens behind its values, and the component it is.
 function describeElementExtras(a) {
   const el = a.element;
   const lines = [];
@@ -179,7 +173,6 @@ function fmtDiagnostics(d) {
   return out.length ? out.join('\n') : null;
 }
 
-// What Pinpoint detected about the project's styling, so edits reuse it.
 function fmtDesignSystem(ds) {
   if (!ds) return [];
   const out = ['## Design system (detected in the project)'];
@@ -192,7 +185,6 @@ function fmtDesignSystem(ds) {
   return out;
 }
 
-// Project context that rides along with every request (first turn and follow-ups).
 function contextSections({ design, memory, diagnostics, route, env, designSystem }) {
   const out = [];
   if (route?.file) out.push(`Current route: ${route.path} (rendered by ${route.file}${route.framework ? `, ${route.framework}` : ''})`, '');
@@ -224,7 +216,6 @@ function contextSections({ design, memory, diagnostics, route, env, designSystem
   return out;
 }
 
-// "Try it N ways": each variant is its own run; the previous one is reverted first.
 function variantNote(v) {
   if (!v) return [];
   const out = [`## Variant ${v.index} of ${v.total}`];
@@ -240,7 +231,6 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
   const { url, title, viewport, breakpoints, instruction, annotations, diagnostics, route, env, variant, note } = request;
   const hasAnn = annotations.length > 0;
   const empty = isEmptyProject(projectDir);
-  // DESIGN.md and the detected design system go in once per session; memory and diagnostics every turn.
   const ctx = contextSections({ design: followUp ? '' : design, memory, diagnostics, route, env, designSystem: followUp ? null : designSystem });
   const variantLines = variantNote(variant);
 
@@ -291,7 +281,6 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
     out.push('');
     for (const a of annotations) {
       out.push(describeAnnotation(a));
-      // The user can annotate several pages (browser tabs) in one request.
       if (a.pageUrl && a.pageUrl !== url) out.push(`- This annotation is on a different page than the one above: ${a.pageUrl}`);
       out.push('');
     }
@@ -311,7 +300,6 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
   return out.join('\n');
 }
 
-// Text for a message sent while the agent is working (live steering).
 function buildSteerPrompt({ request, files, mode }) {
   const lead = mode === 'now'
     ? '[The user interrupted you with this message. Follow it from here.]'
@@ -323,8 +311,6 @@ function buildSteerPrompt({ request, files, mode }) {
   return [lead, '', body, ...(diag && !request.annotations.length ? ['', diag] : [])].join('\n');
 }
 
-// The automatic check after a run: the agent looks at what its change actually
-// rendered and at errors that appeared since, and fixes what's off.
 function buildVerifyPrompt({ request }) {
   const { verify, diagnostics, url } = request;
   const out = ['[Automatic check from Pinpoint, not a message from the user.]', ''];

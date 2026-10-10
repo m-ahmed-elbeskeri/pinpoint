@@ -1,7 +1,3 @@
-// Agent-agnostic change tracking. Before a run we record every project file's
-// mtime/size (and the contents of reasonably small files); afterwards we diff.
-// This catches edits made through any tool (Edit, sed, scripts…); runs.cjs
-// persists the before/after of changed files for diffs and undo.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -10,8 +6,8 @@ const SKIP_DIRS = new Set([
   '.vercel', '.cache', '.parcel-cache', 'dist', 'build', 'out', 'coverage', '.output', 'target', '__pycache__', '.venv', 'venv',
 ]);
 const MAX_FILES = 40000;
-const MAX_CONTENT_FILE = 1024 * 1024;       // keep contents of files up to 1 MB
-const MAX_CONTENT_TOTAL = 150 * 1024 * 1024; // …up to 150 MB in total
+const MAX_CONTENT_FILE = 1024 * 1024;
+const MAX_CONTENT_TOTAL = 150 * 1024 * 1024;
 
 function walk(root) {
   const out = [];
@@ -29,7 +25,6 @@ function walk(root) {
   return out;
 }
 
-// The same list as walk(), read without blocking the app while it works.
 async function walkAsync(root) {
   const out = [];
   const stack = [''];
@@ -58,7 +53,7 @@ function take(root) {
         budget -= st.size;
       }
       files.set(rel, entry);
-    } catch { /* vanished */ }
+    } catch {  }
   }
   return { root, files };
 }
@@ -72,9 +67,8 @@ function diff(snap) {
     try { st = fs.statSync(path.join(snap.root, rel)); } catch { continue; }
     if (!before) changes.push({ path: rel, kind: 'add' });
     else if (st.mtimeMs !== before.mtime || st.size !== before.size) {
-      // mtime can change without content changing (e.g. a rewrite of identical text).
       if (before.content && st.size === before.size) {
-        try { if (fs.readFileSync(path.join(snap.root, rel)).equals(before.content)) continue; } catch { /* treat as changed */ }
+        try { if (fs.readFileSync(path.join(snap.root, rel)).equals(before.content)) continue; } catch {  }
       }
       changes.push({ path: rel, kind: 'modify' });
     }
@@ -83,8 +77,6 @@ function diff(snap) {
   return changes;
 }
 
-// take() and diff() without blocking the app: a run starts and ends while the
-// person may be using another chat or the page, and a large project takes a while to read.
 const BATCH = 64;
 async function takeAsync(root) {
   const files = new Map();
@@ -97,7 +89,7 @@ async function takeAsync(root) {
     const contents = await Promise.all(batch.map((rel, j) => (wanted[j] ? fs.promises.readFile(path.join(root, rel)).catch(() => undefined) : null)));
     batch.forEach((rel, j) => {
       const st = stats[j];
-      if (!st || contents[j] === undefined) return; // vanished
+      if (!st || contents[j] === undefined) return;
       files.set(rel, { mtime: st.mtimeMs, size: st.size, content: contents[j] });
     });
   }
@@ -116,9 +108,8 @@ async function diffAsync(snap) {
       if (!st) continue;
       if (!before) changes.push({ path: rel, kind: 'add' });
       else if (st.mtimeMs !== before.mtime || st.size !== before.size) {
-        // mtime can change without content changing (e.g. a rewrite of identical text).
         if (before.content && st.size === before.size) {
-          try { if ((await fs.promises.readFile(path.join(snap.root, rel))).equals(before.content)) continue; } catch { /* treat as changed */ }
+          try { if ((await fs.promises.readFile(path.join(snap.root, rel))).equals(before.content)) continue; } catch {  }
         }
         changes.push({ path: rel, kind: 'modify' });
       }

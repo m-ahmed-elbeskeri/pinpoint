@@ -1,7 +1,3 @@
-/* Styles for project context features: context bar, memory, design sheet,
-   route picker, chat history, reference drop zone and the diff viewer. */
-
-/* ---------- shared bits ---------- */
 .spacer { flex: 1; }
 .hex { display: inline-flex; align-items: center; gap: 4px; }
 .hex i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
@@ -13,9 +9,8 @@
 .attach-btn { width: 28px; height: 28px; flex-shrink: 0; }
 .dd-menu.down { bottom: auto; top: calc(100% + 6px); }
 
-/* ---------- per-file rows in the chat's done card ---------- */
 .chat { container: chat / inline-size; }
-.chat > * { flex-shrink: 0; } /* never squash transcript items to fit */
+.chat > * { flex-shrink: 0; }
 .done-files { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; font: inherit; }
 .file-row { border-radius: 8px; min-width: 0; }
 .done-card { min-width: 0; overflow: hidden; }
@@ -47,7 +42,6 @@
 .idiff-head { display: block; width: 100%; text-align: left; padding: 2px 10px; font: 10.5px var(--mono); color: var(--muted); background: rgba(255,255,255,.04); }
 .idiff-head:hover { color: var(--accent-2); }
 .idiff-empty { display: flex; align-items: center; gap: 6px; margin: 2px 6px 8px 30px; font-size: 11.5px; color: var(--muted); }
-/* Narrow chat: drop folder paths, keep actions visible (no hover on touch). */
 @container chat (max-width: 340px) {
   .file-name small { display: none; }
   .file-actions { opacity: 1; }
@@ -59,7 +53,6 @@
   .df-stat { display: none; }
 }
 
-/* ---------- steering ---------- */
 .msg.user.steer { border-style: dashed; border-color: rgba(255, 214, 10, .45); }
 .steer-now {
   display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 2px 7px; border-radius: 999px;
@@ -71,14 +64,12 @@
 .stop-btn { color: #ff8aa0; }
 .stop-btn:hover { background: rgba(255, 77, 109, .14) !important; color: #ff8aa0 !important; }
 
-/* ---------- toggle ---------- */
 .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); align-self: flex-start; }
 .toggle-track { width: 30px; height: 17px; border-radius: 10px; background: var(--bg-4); border: 1px solid var(--line-2); position: relative; transition: background .15s; flex-shrink: 0; }
 .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
 .toggle.on .toggle-track { background: var(--accent); border-color: transparent; }
 .toggle.on .toggle-thumb { transform: translateX(13px); background: #fff; }
 
-/* ---------- context bar (above the composer) ---------- */
 .ctx-bar { position: relative; }
 .ctx-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
@@ -109,7 +100,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .diag-tag { font: 700 9.5px/16px var(--mono); padding: 0 5px; border-radius: 4px; height: 16px; background: rgba(255, 77, 109, .16); color: #ff8aa0; white-space: nowrap; }
 .diag-list li.warning .diag-tag { background: rgba(255, 176, 32, .14); color: #ffcf73; }
 
-/* ---------- memory suggestion ---------- */
 .memory-card { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; border: 1px dashed rgba(255, 214, 10, .45); background: var(--accent-soft); }
 .memory-card > svg { color: var(--accent-2); flex-shrink: 0; }
 .memory-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -118,7 +108,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .memory-card.saved > svg { color: var(--ok); }
 .memory-card.dismissed { opacity: .5; background: none; border-color: var(--line-2); }
 
-/* ---------- drop zone ---------- */
 .drop-zone {
   position: absolute; inset: 8px; z-index: 60; border-radius: 14px; border: 2px dashed var(--accent);
   background: rgba(19, 20, 25, .92); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
@@ -128,13 +117,11 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .drop-zone b { color: var(--text); }
 .drop-zone span { font-size: 12px; color: var(--muted); }
 
-/* ---------- history ---------- */
 .history-menu { width: 300px; }
 .history-item { cursor: pointer; }
 .history-item .icon-btn { opacity: 0; }
 .history-item:hover .icon-btn { opacity: 1; }
 
-/* ---------- route picker ---------- */
 .route-picker { position: relative; display: flex; flex-shrink: 0; }
 .route-btn { display: flex; align-items: center; gap: 2px; height: 24px; padding: 0 5px 0 4px; margin-left: -6px; border-radius: 6px; color: var(--muted); }
 .route-btn:hover, .route-btn.open { color: var(--text); background: var(--bg-3); }
@@ -154,7 +141,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .route-file { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .route-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
 
-/* ---------- context sheet ---------- */
 .sheet-backdrop { position: fixed; inset: 52px 0 0 0; z-index: 90; background: rgba(0,0,0,.35); animation: fade .15s ease-out; }
 @keyframes fade { from { opacity: 0; } }
 .sheet {
@@ -203,7 +189,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .mem-list .icon-btn { opacity: .5; }
 .mem-list li:hover .icon-btn { opacity: 1; }
 
-/* ---------- diff viewer ---------- */
 .diff-modal {
   width: min(1200px, calc(100vw - 48px)); height: min(820px, calc(100vh - 80px)); display: flex; flex-direction: column;
   background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 16px; box-shadow: 0 30px 80px rgba(0,0,0,.6); overflow: hidden;
@@ -243,7 +228,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .dl.del { background: rgba(255, 77, 109, .1); }
 .dl.del code, .dl.del .sign { color: #ffb3c1; }
 
-/* ---------- streaming ---------- */
 .msg.agent.streaming .md > :last-child::after { content: ""; display: inline-block; width: 7px; height: 13px; margin-left: 3px; vertical-align: -2px; border-radius: 2px; background: var(--accent-2); animation: caret 1s steps(2) infinite; }
 @keyframes caret { 50% { opacity: 0; } }
 .thinking.live button { color: var(--accent-2); font-style: normal; animation: breathe 1.6s ease-in-out infinite; }
@@ -253,7 +237,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .steer-hint kbd { font-size: 9.5px; padding: 1px 4px; }
 @container composer (max-width: 360px) { .steer-hint { display: none; } }
 
-/* ---------- page state (theme / motion / freeze) ---------- */
 .vp-sep { width: 1px; height: 14px; align-self: center; margin: 0 3px; background: var(--line); }
 .frozen-tag {
   position: absolute; z-index: 10; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
@@ -261,7 +244,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   border-radius: 999px; padding: 5px 12px; font-size: 11.5px; white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,.35); pointer-events: none;
 }
 
-/* ---------- element tools (states, scope, live tweaks) ---------- */
 .el-tools { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .el-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .el-label { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-right: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -285,7 +267,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .el-field input[type=color]::-webkit-color-swatch { border: 1px solid var(--line-2); border-radius: 4px; }
 .el-hint { grid-column: span 2; margin: 0; }
 
-/* ---------- mockup overlay ---------- */
 .mock-img { position: absolute; z-index: 5; top: 0; left: 0; width: 100%; height: auto; pointer-events: none; user-select: none; }
 .mock-img.moving { pointer-events: auto; cursor: move; touch-action: none; outline: 1px dashed var(--accent); }
 .mock-bar {
@@ -296,12 +277,10 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .mock-bar input[type=range] { width: 90px; accent-color: var(--accent); }
 .ann-act { position: absolute; top: 5px; right: 29px; }
 
-/* ---------- accessibility list ---------- */
 .diag-list li > span:not(.diag-tag) { font-size: 11.5px; color: var(--text); }
 .a11y-node { font-size: 10.5px; color: var(--muted); text-align: left; word-break: break-all; }
 .a11y-node:hover { color: var(--accent-2); }
 
-/* ---------- other pages / variants ---------- */
 .route-check { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .route-check.moved { color: #ffcf73; }
 .route-check .chip { height: 20px; font-size: 10.5px; }
@@ -319,7 +298,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .variants-grid figcaption { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 11.5px; }
 .variants-grid figcaption small { color: var(--muted); }
 
-/* ---------- responsive mode ---------- */
 .frame-wrap { flex-direction: column; }
 .device-area { flex: 1; min-height: 0; width: 100%; display: flex; justify-content: center; align-items: flex-start; overflow: hidden; }
 .device-box { position: relative; width: 100%; height: 100%; flex-shrink: 0; }
@@ -343,7 +321,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .device-grip.xy { right: -12px; bottom: -12px; width: 10px; height: 10px; cursor: nwse-resize; }
 .device-size { position: absolute; left: 0; bottom: -18px; font: 10.5px var(--mono); color: var(--muted); white-space: nowrap; pointer-events: none; }
 
-/* ---------- element tools: sections ---------- */
 .note-pop { max-height: calc(100% - 16px); overflow-y: auto; }
 .el-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
 .el-tabs button { flex: 1; min-width: 0; height: 22px; padding: 0 4px; border-radius: 6px; font-size: 10.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -371,14 +348,12 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .el-decls { display: flex; flex-wrap: wrap; gap: 0 8px; margin-top: 2px; font: 10.5px/1.5 var(--mono); color: var(--muted); }
 .el-decls .win { color: var(--text); }
 
-/* ---------- test conditions ---------- */
 .cond-wrap { position: relative; display: flex; }
 .cond-pop {
   position: absolute; top: calc(100% + 10px); right: 0; z-index: 60; width: 340px; max-height: calc(100vh - 150px); overflow: hidden auto; padding: 0 0 8px;
   background: #17181e; border: 1px solid var(--line-2); border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.55); animation: pop .12s ease-out;
   -webkit-app-region: no-drag; user-select: none; scrollbar-width: thin;
 }
-/* Buttons in the toolbar are small squares; in here they are whatever each control needs. */
 .vp-toggles .cond-pop button { width: auto; height: auto; border-radius: 0; display: flex; place-items: initial; color: inherit; }
 .vp-toggles .cond-pop button:hover { background: none; }
 .cond-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px 10px; background: #17181e; border-bottom: 1px solid var(--line); }
@@ -414,7 +389,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .vp-toggles .cond-pop .cond-step:hover:not(:disabled) { background: var(--bg-4); }
 .vp-toggles .cond-pop .cond-step:disabled { opacity: .35; cursor: default; }
 
-/* ---------- recording / isolate tags ---------- */
 .mode-seg button:disabled { opacity: .4; cursor: default; }
 .mode-seg button.rec, .icon-btn.rec { color: #ff5d73; background: rgba(255, 77, 109, .14); animation: recpulse 1.4s ease-in-out infinite; }
 @keyframes recpulse { 50% { opacity: .55; } }
@@ -424,7 +398,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .frozen-tag button { margin-left: 4px; padding: 1px 8px; border-radius: 999px; background: var(--bg-4); color: var(--text); font-size: 11px; }
 .msg-att-empty { display: grid; place-items: center; font-size: 9px; color: var(--muted); text-align: center; }
 
-/* ---------- pins / hand-off ---------- */
 .pin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; max-height: 220px; overflow-y: auto; }
 .pin-list li { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 7px; background: var(--bg-2); font-size: 11.5px; }
 .pin-list li .mono { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
@@ -441,7 +414,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .route-check .better { color: var(--ok); }
 .route-check span + span::before { content: '· '; color: var(--muted); }
 
-/* ---------- side-by-side sizes ---------- */
 .multi { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--bg) radial-gradient(circle at 1px 1px, #1f2029 1px, transparent 0) 0 0 / 18px 18px; }
 .multi-head { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 10px; flex-shrink: 0; background: var(--bg-2); border-bottom: 1px solid var(--line); font-size: 12px; }
 .multi-body { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: flex-start; gap: 18px; padding: 14px 18px; overflow: hidden; }
@@ -453,7 +425,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .cond-wrap > button { position: relative; }
 .cond-count { position: absolute; top: 0; right: 0; min-width: 11px; height: 11px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font: 700 8.5px/11px var(--mono); font-style: normal; text-align: center; }
 
-/* ---------- variants menu ---------- */
 .git-pop.variants-pop { width: 290px; left: -82px; }
 .git-pop.handoff-pop { width: 290px; left: -52px; }
 .variants-row { display: flex; align-items: center; gap: 5px; }
@@ -464,16 +435,13 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .variants-setting { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .modal .variants-setting input { height: 30px; }
 
-/* ---------- run card actions: one tidy row at any sidebar width ---------- */
 .done-actions { flex-wrap: wrap; row-gap: 4px; }
 .done-actions .btn { white-space: nowrap; flex-shrink: 0; }
 .done-actions .spacer { min-width: 4px; }
-/* Narrow sidebar: secondary actions become icons (their tooltips still name them). */
 @container chat (max-width: 470px) {
   .done-actions .btn-text { display: none; }
   .done-actions .btn.ghost { padding: 0 7px; }
 }
-/* Variant picker: name on one line, the action on its own full-width line. */
 .variants-grid figcaption { flex-wrap: wrap; row-gap: 6px; white-space: nowrap; }
 .variants-grid figcaption .spacer { flex-basis: 100%; height: 0; }
 .variants-grid figcaption .btn, .variants-grid figcaption .df-tag { width: 100%; justify-content: center; text-align: center; }
@@ -481,7 +449,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .variants-head { flex-wrap: wrap; }
 .route-check span { min-width: 0; }
 
-/* ---------- where a run changed things ---------- */
 .where { display: grid; gap: 4px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .where.moved .where-head { color: #ffcf73; }
 .where-head { display: flex; align-items: center; gap: 5px; }
@@ -493,7 +460,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .where-row { flex-wrap: wrap; row-gap: 2px; }
 .where-row > span { flex: 1 1 190px; }
 
-/* ---------- a run that changed files but nothing on screen ---------- */
 .no-visual-tag { display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 7px; border-radius: 999px; flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #ffcf73; background: rgba(255, 176, 32, .14); border: 1px solid rgba(255, 176, 32, .4); }
 .no-visual { display: flex; gap: 9px; margin-top: 8px; padding: 9px 10px; border-radius: 9px; background: rgba(255, 176, 32, .09); border: 1px solid rgba(255, 176, 32, .35); color: #ffcf73; }
 .no-visual svg { flex-shrink: 0; margin-top: 1px; }
@@ -501,7 +467,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .no-visual b { font-size: 12.5px; }
 .no-visual span { font-size: 11.5px; line-height: 1.45; color: var(--text-2); }
 
-/* ---------- model + thinking level, one control ---------- */
 .agent-controls .mp { flex: 0 1 auto; min-width: 0; }
 .agent-controls .mp-btn { max-width: 230px; gap: 6px; }
 .mp-model { font-weight: 500; }
@@ -509,7 +474,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .mp-meter { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 11px; flex-shrink: 0; }
 .mp-meter i { width: 2.5px; border-radius: 1px; background: var(--line-2); transition: background .12s; }
 .mp-meter i.on { background: var(--accent); }
-/* The button says more when there is room, and shrinks to the essentials when there isn't. */
 @container composer (max-width: 470px) { .mp-level { display: none; } }
 @container composer (max-width: 330px) { .mp-model { display: none; } }
 @container composer (max-width: 270px) { .mp-meter { display: none; } }
@@ -539,7 +503,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .dd-menu.mp-menu { left: -72px; max-height: 470px; }
 .agent-seg button.missing { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(255, 77, 109, .6); }
 
-/* ---------- browser tabs + page tools row ---------- */
 .tabbar { position: absolute; top: 0; left: 0; right: 0; z-index: 25; height: 36px; display: flex; align-items: flex-end; gap: 8px; padding: 0 8px 0 6px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
 .frame-wrap { top: 36px; }
 .tabstrip { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 2px; height: 100%; overflow: hidden; }
@@ -561,7 +524,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .webview.bg-tab { visibility: hidden; pointer-events: none; }
 .tab-new { color: var(--text-2); }
 
-/* ---------- browser chrome: tabs, then navigation + page tools ---------- */
 .tabbar { height: 34px; padding-right: 6px; border-bottom: 0; }
 .tab.on { margin-bottom: 0; height: 30px; background: var(--bg-3); border-color: transparent; }
 .navbar { position: absolute; top: 34px; left: 0; right: 0; z-index: 24; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 8px; background: var(--bg-3); border-bottom: 1px solid var(--line); }
@@ -570,12 +532,10 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .navbar .urlbar { height: 28px; border-radius: 8px; }
 .navbar .vp-toggles { border-left: 0; padding-left: 0; margin-left: 0; }
 .topbar .spacer { -webkit-app-region: drag; align-self: stretch; }
-/* Narrow browser area: the address bar keeps its room, the size shortcuts go first. */
 .stage { container: stage / inline-size; }
 @container stage (max-width: 560px) { .navbar .vp-toggles > button:nth-of-type(-n+3) { display: none; } }
 @container stage (max-width: 420px) { .navbar .vp-toggles { display: none; } }
 
-/* ---------- design rules + memory, in the top bar ---------- */
 .top-right { align-items: center; }
 .top-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; margin-right: 2px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--bg-3); border: 1px solid var(--line); white-space: nowrap; -webkit-app-region: no-drag; }
 .top-chip:hover:not(:disabled), .top-chip.open { color: var(--text); border-color: var(--line-2); }
@@ -587,10 +547,8 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .icon-btn { position: relative; }
 .icon-count { position: absolute; top: 1px; right: 0; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px; background: var(--accent); color: var(--on-accent); font: 700 9px/13px var(--mono); text-align: center; }
 
-/* ---------- instant apply ---------- */
 .plan-why { margin: 6px 0 0; line-height: 1.4; }
 
-/* ---------- component workspace ---------- */
 .ws-panel { position: absolute; top: 0; left: 0; bottom: 0; z-index: 28; width: 270px; display: flex; flex-direction: column; background: var(--bg-2); border-right: 1px solid var(--line-2); box-shadow: 8px 0 30px rgba(0,0,0,.35); }
 .ws-head { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; flex-shrink: 0; }
 .ws-search { margin: 8px; height: 28px; padding: 0 9px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 7px; outline: 0; font-size: 12px; }
@@ -612,7 +570,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .ws-grid-toggle { display: flex; align-items: center; gap: 7px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-2); cursor: pointer; }
 .ws-error { padding: 8px 10px; border-radius: 8px; background: rgba(255, 77, 109, .1); border: 1px solid rgba(255, 77, 109, .3); color: #ff8aa0; font-size: 11.5px; line-height: 1.45; }
 
-/* ---------- "view as" profiles ---------- */
 .profile-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 7px; border-radius: 7px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 .profile-btn:hover { color: var(--text); background: var(--bg-4); }
 .profile-btn.on { color: var(--accent-2); background: var(--accent-soft); }
@@ -626,7 +583,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .profile-row small { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-row.on svg { color: var(--accent-2); flex-shrink: 0; }
 
-/* ---------- background runs ---------- */
 .bg-btn { width: 30px; height: 30px; }
 .bg-runs { display: grid; gap: 6px; max-height: 34vh; overflow-y: auto; }
 .bg-run { display: grid; gap: 6px; padding: 8px 9px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--line); }
@@ -645,7 +601,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .patch-view .del { color: #ff8aa0; }
 .patch-view .meta { color: var(--muted); }
 
-/* ---------- other browsers ---------- */
 .engines-setup { max-width: 520px; margin: 30px auto; display: grid; gap: 14px; justify-items: start; font-size: 13px; line-height: 1.55; color: var(--text-2); }
 .engines-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .engines-grid figure { margin: 0; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
@@ -653,11 +608,9 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .engines-grid img { width: 100%; border-radius: 8px; box-shadow: 0 0 0 1px var(--line-2); }
 .diff-head h3 { display: flex; align-items: center; gap: 7px; }
 
-/* ---------- update notice ---------- */
 .update-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; margin-right: 4px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--on-accent); background: var(--accent); -webkit-app-region: no-drag; }
 .update-chip.downloading { color: var(--text-2); background: var(--bg-3); border: 1px solid var(--line); font-weight: 500; }
 
-/* ---------- other chats working beside this one ---------- */
 .other-chats { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
 .other-chats::-webkit-scrollbar { display: none; }
 .other-chats button {
@@ -674,7 +627,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   background: var(--accent); color: var(--on-accent); font-size: 9.5px; font-weight: 700; line-height: 14px; text-align: center;
 }
 
-/* ---------- back to the latest message ---------- */
 .to-latest { position: sticky; bottom: 4px; height: 0; display: flex; justify-content: center; align-items: flex-end; z-index: 3; flex-shrink: 0; pointer-events: none; }
 .to-latest button {
   pointer-events: auto; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
@@ -684,7 +636,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .to-latest button:hover { border-color: var(--muted); }
 .to-latest button.fresh { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 
-/* ---------- terminal ---------- */
 .term-wrap { flex: 1; min-height: 0; }
 .term { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #131419; }
 .term-bar { display: flex; align-items: center; gap: 2px; padding: 4px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex-shrink: 0; }
@@ -715,7 +666,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .term-screen .xterm-viewport { background: transparent !important; }
 .term-msg { padding: 8px 4px; color: var(--muted); font: 11.5px/1.5 var(--mono); }
 
-/* ---------- load stats (behind the button on a run's card) ---------- */
 .load-stats { margin-top: 9px; padding: 4px 10px 8px; border-radius: 9px; background: var(--bg); border: 1px solid var(--line); font-size: 11.5px; color: var(--text-2); }
 .load-stats > div { display: grid; grid-template-columns: minmax(0, 1fr) 68px 68px; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .load-stats > div span + span { text-align: right; font: 500 11px var(--mono); font-variant-numeric: tabular-nums; }

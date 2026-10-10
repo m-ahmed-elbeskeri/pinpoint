@@ -7,17 +7,15 @@ export interface LevelChoice { value: string; label: string; desc?: string }
 interface Props {
   model: string;
   models: ModelChoice[];
-  modelLabel: string;       // what the button shows (the default's real name when nothing is picked)
+  modelLabel: string;
   onModel(value: string): void;
-  level: string;            // '' = the model's default
-  levels: LevelChoice[];    // lowest first; empty when the model has no thinking levels
-  defaultLevel?: string;    // which level "default" resolves to, when known
+  level: string;
+  levels: LevelChoice[];
+  defaultLevel?: string;
   onLevel(value: string): void;
   disabled?: boolean;
 }
 
-// Model and thinking level in one control: a compact button, and a menu with
-// the model list and a slider you click or drag to set how hard it thinks.
 export function ModelPicker({ model, models, modelLabel, onModel, level, levels, defaultLevel, onLevel, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,7 +30,6 @@ export function ModelPicker({ model, models, modelLabel, onModel, level, levels,
     return () => { window.removeEventListener('mousedown', away); window.removeEventListener('keydown', esc); };
   }, [open]);
 
-  // Where the thumb sits: the chosen level, or the one "default" stands for.
   const shown = level || defaultLevel || '';
   const index = Math.max(0, levels.findIndex((l) => l.value === shown));
   const current = levels.find((l) => l.value === shown);
@@ -47,7 +44,7 @@ export function ModelPicker({ model, models, modelLabel, onModel, level, levels,
   const drag = (e: React.PointerEvent) => {
     if (disabled) return;
     const el = e.currentTarget as HTMLElement;
-    try { el.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    try { el.setPointerCapture(e.pointerId); } catch {  }
     pick(e.clientX);
     const move = (ev: PointerEvent) => pick(ev.clientX);
     const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); };

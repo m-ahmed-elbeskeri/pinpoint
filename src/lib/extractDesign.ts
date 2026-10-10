@@ -1,5 +1,3 @@
-// Runs in the page (via webview.executeJavaScript) and drafts a DESIGN.md from
-// what is actually rendered: colors, type, radii, shadows, spacing and CSS tokens.
 function extract() {
   const hex = (c: string) => {
     const m = c.match(/rgba?\(([^)]+)\)/);
@@ -44,7 +42,6 @@ function extract() {
     }
   }
 
-  // CSS custom properties declared on :root / html (design tokens)
   const tokens: [string, string][] = [];
   const rootStyle = getComputedStyle(document.documentElement);
   for (const sheet of [...document.styleSheets]) {

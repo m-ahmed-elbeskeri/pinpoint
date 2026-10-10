@@ -6,9 +6,9 @@ interface Props {
   annotations: Annotation[];
   root: string;
   activeId: string | null;
-  overlayImage: string | null; // the reference image laid over the page, if any
-  pageMarks: number;           // shapes drawn on the page that aren't an annotation yet
-  sketchMarks: number;         // the same, on the sketch board
+  overlayImage: string | null;
+  pageMarks: number;
+  sketchMarks: number;
   onFocus(a: Annotation): void;
   onActive(id: string): void;
   onNote(id: string, note: string): void;
@@ -27,7 +27,6 @@ const PLACEHOLDER: Record<Annotation['kind'], string> = {
   drawing: 'Explain your drawing…',
 };
 
-// What rides along with the next request: each picked element, drawing, sketch, image and recording, with its note.
 export function AnnotationList(p: Props) {
   const pending = p.pageMarks + p.sketchMarks;
   if (!p.annotations.length && !pending) return null;

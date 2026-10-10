@@ -1,5 +1,3 @@
-// Discovers the app's routes from the file system (and React Router configs),
-// so the UI can list pages and the agent knows which file renders the current one.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -26,7 +24,6 @@ function readPkg(root) {
   catch { return {}; }
 }
 
-// "(group)" and "@slot" segments don't appear in URLs.
 const cleanSegs = (segs) => segs.filter((s) => s && !/^\(.*\)$/.test(s) && !s.startsWith('@'));
 const join = (segs) => '/' + cleanSegs(segs).join('/');
 
@@ -48,7 +45,6 @@ function listRoutes(root) {
     }
   }
 
-  // Next pages router, Astro and Nuxt share the "file = route" convention.
   for (const base of ['pages', 'src/pages']) {
     const dir = path.join(root, base);
     if (!isDir(dir)) continue;
@@ -57,14 +53,13 @@ function listRoutes(root) {
     for (const f of files) {
       const rel = f.slice(base.length + 1);
       if (!/\.(tsx|jsx|ts|js|astro|md|mdx|vue|html)$/.test(rel) || /^api\//.test(rel) || /(^|\/)_/.test(rel)) continue;
-      if (/\.(ts|js)$/.test(rel) && fw === 'Astro') continue; // Astro endpoints
+      if (/\.(ts|js)$/.test(rel) && fw === 'Astro') continue;
       const segs = rel.replace(/\.[^.]+$/, '').split('/');
       if (segs[segs.length - 1] === 'index') segs.pop();
       add(join(segs), f, fw);
     }
   }
 
-  // SvelteKit
   const sk = path.join(root, 'src', 'routes');
   if (isDir(sk) && (deps['@sveltejs/kit'] || fs.existsSync(path.join(root, 'svelte.config.js')))) {
     const files = []; walk(sk, root, files);
@@ -74,7 +69,6 @@ function listRoutes(root) {
     }
   }
 
-  // Remix / React Router v7 flat routes: app/routes/blog.$slug.tsx -> /blog/:slug
   const rr = path.join(root, 'app', 'routes');
   if (isDir(rr) && (deps['@remix-run/react'] || deps['@react-router/dev'])) {
     for (const f of fs.readdirSync(rr)) {
@@ -85,7 +79,6 @@ function listRoutes(root) {
     }
   }
 
-  // React Router declared in code: <Route path="/x"> or { path: '/x' }
   if (deps['react-router-dom'] || deps['react-router'] || deps['@tanstack/react-router']) {
     const files = []; walk(path.join(root, 'src'), root, files);
     for (const f of files.filter((x) => /\.(tsx|jsx|ts|js)$/.test(x)).slice(0, 1500)) {
@@ -99,7 +92,6 @@ function listRoutes(root) {
     }
   }
 
-  // Plain HTML sites
   if (!routes.length) {
     const files = []; walk(root, root, files);
     for (const f of files.filter((x) => x.endsWith('.html')).slice(0, 200)) {

@@ -1,5 +1,3 @@
-// Creates the real projects some suites run against (a Vite + React app, Tailwind 4 and 3,
-// Vue) under tests/.fixtures. Needs the network; run once: `npm run test:fixtures`.
 const { execSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');

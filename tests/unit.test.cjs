@@ -1,6 +1,5 @@
-// Unit checks for the instant-edit engine and component discovery (plain node).
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const fs = require('fs'), os = require('os'), path = require('path');
 const repo = process.cwd();
 const inst = require(path.join(repo, 'electron', 'instant.cjs'));

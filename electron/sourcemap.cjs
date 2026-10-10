@@ -1,11 +1,8 @@
-// Maps a position in served (compiled) JS back to the original source file and
-// line using the dev server's source maps. Used for React 19, whose elements only
-// carry a stack trace into compiled code.
 const path = require('node:path');
 const { SourceMapConsumer } = require('source-map-js');
 
-const cache = new Map(); // scriptUrl -> { at, consumer, mapUrl }
-const TTL = 8000;        // dev servers rebuild often; keep maps briefly
+const cache = new Map();
+const TTL = 8000;
 
 async function fetchText(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -33,12 +30,10 @@ async function consumerFor(scriptUrl) {
   return entry;
 }
 
-// Turn whatever the map calls the source into a project-relative path.
 function cleanSource(source, mapUrl, projectDir) {
   let s = source;
   s = s.replace(/^webpack:\/\/[^/]*\//, '').replace(/^webpack:\/\//, '').replace(/^turbopack:\/\/\/?(\[project\]\/)?/, '');
   if (/^https?:/.test(s)) s = decodeURIComponent(new URL(s).pathname);
-  // Relative sources ("Hero.tsx", "../lib/x.ts") are relative to the map's URL.
   else if (!path.isAbsolute(s) && !/^[a-zA-Z]:/.test(s) && /^https?:/.test(mapUrl)) {
     s = decodeURIComponent(new URL(s, mapUrl).pathname);
   }
@@ -54,9 +49,7 @@ async function resolve({ url, line, column }, projectDir) {
   if (!/^https?:/.test(url)) return null;
   try {
     const { consumer, mapUrl } = await consumerFor(url);
-    // Stack columns are 1-based; source-map columns are 0-based.
     let pos = consumer.originalPositionFor({ line, column: Math.max(0, column - 1) });
-    // Only the line is known (a console message): take the first mapping on it.
     if (!pos?.source && column <= 1) pos = consumer.originalPositionFor({ line, column: 0, bias: SourceMapConsumer.LEAST_UPPER_BOUND });
     if (!pos?.source) return null;
     return { file: cleanSource(pos.source, mapUrl, projectDir), line: pos.line || undefined, column: pos.column != null ? pos.column + 1 : undefined };

@@ -1,16 +1,3 @@
-// Headless mode for CI: the same checks the app runs after an agent's edit,
-// run from the command line against a served site.
-//
-//   electron . --ci capture --url=http://localhost:3000 --out=shots/before [--project=.] [--routes=/,/pricing] [--no-a11y]
-//   electron . --ci compare --before=shots/before --after=shots/after [--url=http://localhost:3000] [--report=report.md] [--fail-on=changes|a11y|any|none]
-//   electron . --ci build-size [--project=.] [--max-js=300] [--max-css=60]      (limits in kB, gzipped)
-//
-// Options are written --name=value: Electron itself reads the command line
-// first, and a bare URL after a flag makes it exit before this code runs.
-//
-// `capture` screenshots each route (plus accessibility and load cost) into a
-// folder. Run it on the base branch and on the pull request, then `compare`
-// writes a Markdown report of every page that changed and what changed on it.
 const { app } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -81,14 +68,12 @@ async function compare(args) {
       { jpg: fs.readFileSync(path.join(args.before, `${a.key}.jpg`)), noisy: b.noisy },
       { jpg: fs.readFileSync(path.join(args.after, `${a.key}.jpg`)), noisy: a.noisy },
     );
-    // Accessibility problems that weren't there before.
     const had = new Set((b.a11y || []).flatMap((v) => v.targets.map((t) => `${v.id}|${t}`)));
     const fresh = (a.a11y || []).map((v) => ({ ...v, targets: v.targets.filter((t) => !had.has(`${v.id}|${t}`)) })).filter((v) => v.targets.length);
     newA11y += fresh.reduce((s, v) => s + v.targets.length, 0);
     let areas = [];
     if (diff.changed) {
       changed++;
-      // Naming what changed needs the page itself; without --url the report gives the percentage only.
       if (base) areas = (await routecheck.nameAreas(base + a.route, diff.areas)).areas;
     }
     const js = a.perf && b.perf ? a.perf.js - b.perf.js : 0;
@@ -134,14 +119,11 @@ async function run(argv) {
   catch (err) { process.stderr.write(`pinpoint: ${err.message}\n`); app.exit(2); }
 }
 
-// CI machines have no GPU to speak of; pages are rendered in software.
 app.disableHardwareAcceleration();
 
-// A crash should say why, not just end with a non-zero code.
 for (const event of ['uncaughtException', 'unhandledRejection']) {
   process.on(event, (err) => { process.stderr.write(`pinpoint: ${err?.stack || err}\n`); app.exit(3); });
 }
 
-// No window is ever shown in this mode; keep the app alive until the command is done.
 app.on('window-all-closed', () => {});
 run(process.argv.slice(process.argv.indexOf('--ci') + 1));

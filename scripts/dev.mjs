@@ -1,4 +1,3 @@
-// Starts Vite, then launches Electron pointed at it. Ctrl+C stops both.
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import electron from 'electron';

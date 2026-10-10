@@ -1,12 +1,7 @@
-// Runs in the page (via webview.executeJavaScript). For a picked element, works
-// out which CSS custom properties (design tokens) its computed colors, spacing,
-// radius and type size come from, so the agent edits with tokens, not raw values.
-// Returns { 'background-color': '--primary', 'border-radius': '--radius-md', … }.
 function matchTokens(uid: string) {
   const el = document.querySelector(`[data-pinpoint="${uid}"]`);
   if (!el) return null;
 
-  // Every custom property declared anywhere in the page's own stylesheets.
   const names = new Set<string>();
   const visit = (rules: CSSRuleList, depth: number) => {
     for (const rule of [...rules]) {
@@ -18,7 +13,7 @@ function matchTokens(uid: string) {
     }
   };
   for (const sheet of [...document.styleSheets]) {
-    try { visit(sheet.cssRules, 0); } catch { /* cross-origin sheet */ }
+    try { visit(sheet.cssRules, 0); } catch {  }
   }
   if (!names.size) return null;
 
@@ -27,9 +22,8 @@ function matchTokens(uid: string) {
   const probe = document.createElement('span');
   probe.style.display = 'none';
   document.documentElement.appendChild(probe);
-  // The browser's own normal form for a color, or null when the value isn't one.
   const color = (v: string) => {
-    for (const candidate of [v, `hsl(${v})`, `rgb(${v})`]) { // "222 47% 11%"-style tokens hold only the channels
+    for (const candidate of [v, `hsl(${v})`, `rgb(${v})`]) {
       if (!CSS.supports('color', candidate)) continue;
       probe.style.color = candidate;
       return getComputedStyle(probe).color;
@@ -41,7 +35,7 @@ function matchTokens(uid: string) {
   const lengths = new Map<number, string[]>();
   const add = <K,>(m: Map<K, string[]>, k: K, name: string) => { const l = m.get(k); if (l) l.push(name); else m.set(k, [name]); };
   for (const name of names) {
-    const v = cs.getPropertyValue(name).trim(); // resolved where the element is, so scoped themes count
+    const v = cs.getPropertyValue(name).trim();
     if (!v || v.length > 80) continue;
     const len = v.match(/^(-?\d*\.?\d+)(px|rem)$/);
     if (len) { add(lengths, Math.round(parseFloat(len[1]) * (len[2] === 'rem' ? rootPx : 1) * 100) / 100, name); continue; }
@@ -56,7 +50,6 @@ function matchTokens(uid: string) {
     const hit = colors.get(cs.getPropertyValue(prop));
     if (hit && (prop !== 'border-top-color' || parseFloat(cs.borderTopWidth) > 0)) out[prop === 'border-top-color' ? 'border-color' : prop] = shortest(hit);
   }
-  // Lengths collide (16px is a space, a radius and a font size), so the token's name has to fit the property.
   const kinds: [string, string, RegExp][] = [
     ['font-size', 'font-size', /text|font|size|fs/i],
     ['border-top-left-radius', 'border-radius', /radius|round|corner/i],

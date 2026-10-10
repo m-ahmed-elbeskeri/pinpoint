@@ -1,7 +1,6 @@
 import { Hand, RotateCw, X } from './icons';
 
-// Responsive mode: the page is shown at an exact size, scaled to fit the stage.
-export interface Device { on: boolean; w: number; h: number; zoom: 'fit' | number; touch: boolean } // h 0 = fill the height
+export interface Device { on: boolean; w: number; h: number; zoom: 'fit' | number; touch: boolean }
 export interface Breakpoint { px: number; kind: 'min' | 'max'; uses: number }
 
 export const DEVICE_OFF: Device = { on: false, w: 0, h: 0, zoom: 'fit', touch: false };
@@ -23,12 +22,11 @@ const clamp = (n: number) => Math.min(3840, Math.max(240, Math.round(n) || 0));
 interface Props {
   device: Device;
   set(next: Device): void;
-  scale: number;         // the zoom actually applied (what "fit" worked out to)
-  height: number;        // the height actually shown, for when it fills the stage
+  scale: number;
+  height: number;
   breakpoints: Breakpoint[];
 }
 
-// Runs in the page: the widths its CSS switches layout at, most used first.
 function collect() {
   const seen = new Map<string, { px: number; kind: 'min' | 'max'; uses: number }>();
   const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
@@ -36,7 +34,6 @@ function collect() {
     for (const rule of [...rules]) {
       const media = (rule as CSSMediaRule).media?.mediaText;
       if (media && rule.constructor.name === 'CSSMediaRule') {
-        // Both "(min-width: 768px)" and range syntax "(width >= 48rem)".
         for (const m of media.matchAll(/(min|max)-width:\s*([\d.]+)(px|em|rem)|width\s*(>=|<=|>|<)\s*([\d.]+)(px|em|rem)/g)) {
           const kind = m[1] ? (m[1] as 'min' | 'max') : m[4].startsWith('>') ? 'min' : 'max';
           const px = Math.round(parseFloat(m[2] || m[5]) * ((m[3] || m[6]) === 'px' ? 1 : rootPx));
@@ -51,7 +48,7 @@ function collect() {
     }
   };
   for (const sheet of [...document.styleSheets]) {
-    try { visit(sheet.cssRules, 0); } catch { /* cross-origin sheet */ }
+    try { visit(sheet.cssRules, 0); } catch {  }
   }
   return [...seen.values()].sort((a, b) => b.uses - a.uses).slice(0, 8).sort((a, b) => a.px - b.px);
 }
@@ -59,7 +56,6 @@ export const breakpointsScript = `(${collect.toString()})()`;
 
 export function DeviceBar({ device, set, scale, height, breakpoints }: Props) {
   const preset = PRESETS.find((p) => (p.w === device.w && p.h === device.h) || (p.w === device.h && p.h === device.w));
-  // A width that sits just inside a breakpoint: on it for min-width, at it for max-width.
   const active = (b: Breakpoint) => (b.kind === 'min' ? device.w >= b.px : device.w <= b.px);
 
   return (

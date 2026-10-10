@@ -19,11 +19,9 @@ interface Props {
   onShowNode(selector: string): void;
 }
 
-// What rides along with the next request, visible at a glance.
 export function ContextBar(p: Props) {
   const [open, setOpen] = useState(false);
   const [a11yOpen, setA11yOpen] = useState(false);
-  // Clicking anywhere else closes the open list.
   useEffect(() => {
     if (!open && !a11yOpen) return;
     const fn = (e: MouseEvent) => {

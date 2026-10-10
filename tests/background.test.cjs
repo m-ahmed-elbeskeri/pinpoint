@@ -1,6 +1,5 @@
-// Round 10: background runs (git worktrees, a stand-in agent), CI mode, and the updater's version logic.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os'), http = require('node:http');
 const { execFileSync, execFile } = require('node:child_process');
 const repo = process.cwd();
@@ -9,7 +8,6 @@ const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 320) : ''}`); fs.writeFileSync(path.join(OUT, 'background.out'), out.join(NL) + NL); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ---- a git project: two pages sharing a stylesheet, one commit, plus uncommitted work
 const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-bg-'));
 const page = (t) => `<!doctype html><html lang="en"><head><title>${t}</title><link rel="stylesheet" href="/style.css"></head><body><h1>${t}</h1><p>Text on the ${t} page.</p></body></html>`;
 fs.writeFileSync(path.join(proj, 'index.html'), page('Home'));
@@ -17,11 +15,10 @@ fs.writeFileSync(path.join(proj, 'about.html'), page('About'));
 fs.writeFileSync(path.join(proj, 'style.css'), 'body { font-family: system-ui; padding: 40px; background: #fff; }\nh1 { color: #111; }\n');
 const git = (...a) => execFileSync('git', a, { cwd: proj, stdio: 'pipe' }).toString();
 git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't'); git('add', '-A'); git('commit', '-q', '-m', 'init');
-fs.appendFileSync(path.join(proj, 'style.css'), 'p { color: #333; }\n');          // uncommitted edit
-fs.writeFileSync(path.join(proj, 'notes.txt'), 'untracked\n');                      // untracked file
+fs.appendFileSync(path.join(proj, 'style.css'), 'p { color: #333; }\n');
+fs.writeFileSync(path.join(proj, 'notes.txt'), 'untracked\n');
 const START = fs.readFileSync(path.join(proj, 'style.css'), 'utf8');
 
-// ---- stand-in agent: edits style.css in whatever folder it is started in
 const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-agent-'));
 const seenLog = path.join(agentDir, 'seen.log');
 fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), `
@@ -83,7 +80,6 @@ server.listen(0, '127.0.0.1', () => {
 
     try {
       log('background button is available in a git project', (await until(`document.querySelector('.bg-btn') && !document.querySelector('.bg-btn').title.startsWith('Background runs need') ? 1 : 0`, 8000)) === 1);
-      // two requests at once
       await type('Make the heading blue (slow)');
       await sleep(200);
       await ui(`document.querySelector('.bg-btn').click(); 0`);
@@ -102,7 +98,6 @@ server.listen(0, '127.0.0.1', () => {
       log('the project itself is untouched so far', fs.readFileSync(path.join(proj, 'style.css'), 'utf8') === START && worktrees() === 3, `worktrees: ${worktrees()}`);
       try { fs.writeFileSync(path.join(OUT, 'bg.png'), (await host.capturePage()).toPNG()); } catch {}
 
-      // diff, then apply the green one
       await ui(`[...document.querySelectorAll('.bg-run')].find((r) => /green/.test(r.innerText)).querySelector('.bg-actions .btn:not(.primary):not(.ghost)').click(); 0`);
       const patch = await until(`document.querySelector('.patch-view')?.innerText || ''`, 5000);
       log('diff shows only what the run changed', /\+h1 \{ color: #0a0; \}/.test(patch || '') && !/notes\.txt/.test(patch || '') && !/\+p \{ color: #333/.test(patch || ''), (patch || '').slice(0, 200));
@@ -113,7 +108,6 @@ server.listen(0, '127.0.0.1', () => {
       log('apply brings the change into the project', after === START + 'h1 { color: #0a0; }\n', JSON.stringify(after.slice(-60)));
       const card = await ui(`[...document.querySelectorAll('.done-card .done-head > span:first-of-type')].map((x) => x.textContent).join(' | ')`);
       log('applied run appears in the chat, undoable', /Background run applied · 1 file/.test(card), card);
-      // the blue one now conflicts with what was just applied (same line appended)
       await ui(`[...document.querySelectorAll('.bg-run')].find((r) => /blue/.test(r.innerText)).querySelector('.btn.primary').click(); 0`);
       const conflict = await until(`document.querySelector('.toast')?.textContent || ''`, 6000);
       log('a run that no longer fits is refused, not half-applied', /no longer fit/.test(conflict || '') && fs.readFileSync(path.join(proj, 'style.css'), 'utf8') === after, conflict);
@@ -123,7 +117,6 @@ server.listen(0, '127.0.0.1', () => {
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
     } catch (e) { log('exception', false, e.stack); }
 
-    // ---- updater: version comparison
     try {
       const { newer } = require(path.join(repo, 'electron', 'updater.cjs'));
       log('update version comparison', newer('0.10.0', '0.9.9') && newer('v1.0.0', '0.9.9') && !newer('0.3.0', '0.3.0') && !newer('0.2.9', '0.3.0') && newer('0.3.1', '0.3.0'));

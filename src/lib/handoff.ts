@@ -1,4 +1,3 @@
-// A request described for people: labels for the annotation list, a Playwright test, an issue body.
 import { shortPath } from '../components/Chat';
 import type { Annotation, Handoff } from './types';
 
@@ -19,7 +18,6 @@ export const describe = (a: Annotation, root: string) => {
   return { title: 'Sketch', sub: 'wireframe' };
 };
 
-// A recorded interaction as a Playwright test.
 export function toPlaywright(a: Annotation) {
   const q = (s: string) => JSON.stringify(s);
   const lines = ["import { test } from '@playwright/test';", '', `test(${q(a.note.trim() || 'recorded interaction')}, async ({ page }) => {`];
@@ -36,7 +34,6 @@ export function toPlaywright(a: Annotation) {
   return lines.join('\n');
 }
 
-// A request written out for a person: what an issue or ticket needs.
 export function handoffMarkdown(h: Handoff, root: string) {
   const out = ['## Request', '', h.instruction || '_(see the notes below)_', '', `- Page: ${h.url}${h.viewport ? ` (${h.viewport.width}×${h.viewport.height})` : ''}`, ''];
   for (const a of h.annotations) {

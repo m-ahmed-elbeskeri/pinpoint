@@ -1,6 +1,5 @@
-// The model + thinking-level control: open it, pick a model, click and drag the slider.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os');
 const repo = process.cwd();
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-ud-'));
@@ -32,11 +31,9 @@ app.whenReady().then(async () => {
     const at = (i) => Math.round(r.x + (r.w * i) / (stops - 1));
     const NAMES = { mouseDown: 'pointerdown', mouseMove: 'pointermove', mouseUp: 'pointerup' };
     const mouse = (type, x) => ui(`document.querySelector('.mp-track').dispatchEvent(new PointerEvent('${NAMES[type]}', { clientX: ${x}, clientY: ${Math.round(r.y)}, bubbles: true, pointerId: 1 })); 0`);
-    // click the last stop
     await mouse('mouseDown', at(stops - 1)); await mouse('mouseUp', at(stops - 1));
     await sleep(400);
     log('clicking the track sets the level', saved().claudeEffort === 'max', saved().claudeEffort);
-    // drag from the last stop back to the second, passing the ones between
     await mouse('mouseDown', at(stops - 1));
     const seen = [];
     for (let i = stops - 1; i >= 1; i--) { await mouse('mouseMove', at(i)); await sleep(150); seen.push(saved().claudeEffort); }

@@ -33,8 +33,6 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): vo
   );
 }
 
-// Slide-over with the project's design rules (DESIGN.md) and memory. Edits save
-// as you type, and both are sent with every request.
 export function ContextSheet(p: Props) {
   const { onClose } = p;
   useEffect(() => {
@@ -69,7 +67,7 @@ function DesignTab({ settings, saveSettings, design, setDesign, canExtract, extr
   const [confirmReplace, setConfirmReplace] = useState<string | null>(null);
   const timer = useRef<number>();
 
-  useEffect(() => { setText(design?.content || ''); }, [design?.path]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setText(design?.content || ''); }, [design?.path]);
 
   const write = (value: string) => {
     setText(value);

@@ -21,7 +21,6 @@ function stats(f: DiffFile) {
   return { add, del };
 }
 
-// Review what a run changed, file by file, and revert any of it.
 export function DiffViewer({ runId, initialPath, onClose, onReverted, onOpen }: Props) {
   const [files, setFiles] = useState<DiffFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +31,7 @@ export function DiffViewer({ runId, initialPath, onClose, onReverted, onOpen }: 
   const load = () => window.pinpoint.runDiff(runId)
     .then((f) => { setFiles(f); setSel((s) => s && f.some((x) => x.path === s) ? s : f[0]?.path); })
     .catch((e) => setError(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')));
-  useEffect(() => { load(); }, [runId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [runId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

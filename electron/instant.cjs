@@ -1,8 +1,3 @@
-// Instant edits: small, unambiguous changes written straight into the source,
-// with no agent involved. A style tweak, a copy fix, a class change or a
-// reorder is a deterministic edit when the element's JSX (or its CSS rule) can
-// be found exactly. When it can't, prepare() throws with the reason and the
-// request goes to the agent as before.
 const fs = require('node:fs');
 const path = require('node:path');
 const parser = require('@babel/parser');
@@ -32,7 +27,6 @@ const tagName = (el) => {
   return n.type === 'JSXIdentifier' ? n.name : n.type === 'JSXMemberExpression' ? n.property.name : '';
 };
 
-// The JSX element written at file:line (the position React's dev metadata reports).
 function findElement(ast, { line, column, tag }) {
   const found = [];
   walk(ast, (n, parent) => { if (n.type === 'JSXElement') found.push({ el: n, parent }); });
@@ -45,7 +39,6 @@ function findElement(ast, { line, column, tag }) {
   return near[0] || null;
 }
 
-// ---------- Tailwind: a CSS value as a utility class ----------
 const SCALE = new Set([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96]);
 const arb = (v) => `[${v.trim().replace(/\s+/g, '_')}]`;
 function space(v) {
@@ -66,13 +59,11 @@ const WEIGHTS = { 100: 'thin', 200: 'extralight', 300: 'light', 400: 'normal', 5
 const TEXT_SIZE = /^text-(xs|sm|base|lg|[2-9]?xl|\[-?[\d.]+(px|rem|em|%)\])$/;
 const TEXT_OTHER = /^text-(left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)$/;
 
-// A theme color with this exact value, as a Tailwind name ("--color-brand" -> "brand").
 function colorName(value, tokens) {
   const hit = (tokens || []).find((t) => t.name.startsWith('--color-') && t.value.toLowerCase() === value.toLowerCase());
   return hit ? hit.name.slice('--color-'.length) : null;
 }
 
-// prop + value -> { add: classes, drop: which existing classes they replace }
 function utility(prop, value, tokens) {
   const v = value.trim();
   switch (prop) {
@@ -92,7 +83,6 @@ function utility(prop, value, tokens) {
   }
 }
 
-// ---------- JSX edits (returned as splices: { start, end, text }) ----------
 const jsxText = (s) => (/[{}<>]/.test(s) ? `{${JSON.stringify(s)}}` : s);
 const squash = (s) => s.replace(/\s+/g, ' ').trim();
 
@@ -110,7 +100,6 @@ function textSplice(code, el, from, to) {
   fail("This text isn't written in the component as plain text (it comes from a variable, a prop or a translation), so it can't be replaced directly.");
 }
 
-// String pieces that make up a className value, wherever they sit: "a b", cn('a', cond && 'b'), `a ${x}`.
 function classPieces(attrValue) {
   const pieces = [];
   walk(attrValue, (n) => {
@@ -120,7 +109,6 @@ function classPieces(attrValue) {
   return pieces;
 }
 
-// Remove and add class names on the element. `drop(name)` picks what goes; `add` is appended to the first string.
 function classSplices(code, el, drop, add) {
   const opening = el.openingElement;
   const attr = opening.attributes.find((a) => a.type === 'JSXAttribute' && (a.name.name === 'className' || a.name.name === 'class'));
@@ -135,7 +123,6 @@ function classSplices(code, el, drop, add) {
   let appended = false;
   for (const piece of pieces) {
     const names = piece.value.split(/\s+/).filter(Boolean);
-    // Variants (hover:, md:) are left alone: the edit is about the base style.
     const kept = names.filter((n) => n.includes(':') || !drop(n));
     const next = !appended ? [...kept, ...add.filter((a) => !kept.includes(a))] : kept;
     appended = true;
@@ -147,7 +134,6 @@ function classSplices(code, el, drop, add) {
   return out;
 }
 
-// Class edit made by hand in Pinpoint: the names removed must be findable as literals.
 function classEditSplices(code, el, from, to) {
   const before = from.split(/\s+/).filter(Boolean), after = to.split(/\s+/).filter(Boolean);
   const removed = new Set(before.filter((c) => !after.includes(c)));
@@ -158,7 +144,6 @@ function classEditSplices(code, el, from, to) {
     const missing = [...removed].filter((c) => !literal.has(c));
     if (missing.length) fail(`"${missing.join(' ')}" isn't written on this element (it is added in code or by the component), so it can't be removed directly.`);
   }
-  // Exact names only here; `drop` matches by name, including variants the user removed on purpose.
   const pieces = attr?.value ? classPieces(attr.value) : [];
   if (attr?.value && !pieces.length) fail('The class list is built entirely in code here, so there is no literal to edit.');
   if (!attr || !attr.value) return classSplices(code, el, () => false, added);
@@ -174,7 +159,6 @@ function classEditSplices(code, el, from, to) {
   return out;
 }
 
-// Move the element among its siblings: the children's source is permuted, the whitespace between them stays put.
 function reorderSplices(code, found, reorder) {
   const parent = found.parent;
   if (!parent || parent.type !== 'JSXElement') fail('This element is not written directly inside its parent in the source (it comes from a loop or another component), so it cannot be moved directly.');
@@ -188,7 +172,6 @@ function reorderSplices(code, found, reorder) {
   return kids.map((k, i) => ({ start: k.start, end: k.end, text: order[i] })).filter((s, i) => s.text !== code.slice(kids[i].start, kids[i].end));
 }
 
-// ---------- CSS rule edit ----------
 function cssEdit(css, rule, changes) {
   const lines = css.split('\n');
   let offset = 0;
@@ -224,8 +207,6 @@ function resolveIn(root, file) {
   return fs.existsSync(abs) ? abs : null;
 }
 
-// Works out the edits for one annotation. → { writes: Map<absolute file, new content>, summary: string[] }
-// ctx: { tailwind: boolean, tokens: [{ name, value }] }
 function prepare(root, ann, ctx = {}) {
   const el = ann.element;
   if (!el) fail('Only a picked element can be edited directly.');
@@ -254,15 +235,12 @@ function prepare(root, ann, ctx = {}) {
   if (ann.reorder) { needJsx('Moving an element'); splices.push(...reorderSplices(read(src), found, ann.reorder)); summary.push(`moved to position ${ann.reorder.to + 1}`); }
 
   if (tweaks.length) {
-    // Tailwind projects: the tweak becomes utility classes on the element.
     const asClasses = ctx.tailwind && found ? tweaks.map(([p, v]) => [p, utility(p, v, ctx.tokens)]) : null;
     if (asClasses && asClasses.every(([, u]) => u)) {
-      // One edit of the class list for all of them, so the pieces don't overlap.
       const all = asClasses.map(([, u]) => u);
       splices.push(...classSplices(read(src), found.el, (c) => all.some((u) => u.drop(c)), all.flatMap((u) => u.add)));
       summary.push(...all.map((u) => u.add.join(' ')));
     } else {
-      // Otherwise: the plain-CSS rule that currently decides each property.
       const byRule = new Map();
       for (const [prop, value] of tweaks) {
         const rule = (el.rules || []).find((r) => r.wins?.includes(prop) && r.file && r.line && !r.approx && !r.utility && /\.css$/.test(r.file))

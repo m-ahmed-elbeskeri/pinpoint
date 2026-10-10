@@ -1,6 +1,3 @@
-// Pinpoint: Electron main process.
-// Owns: the window, settings persistence, page captures, request files on disk,
-// the dev-server child process, and the coding-agent runs (Claude Code / Codex).
 const { app, BrowserWindow, ipcMain, dialog, webContents, shell, session, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -31,15 +28,14 @@ const isDev = !!process.env.VITE_DEV_SERVER_URL;
 if (process.env.PINPOINT_USER_DATA) app.setPath('userData', process.env.PINPOINT_USER_DATA);
 let win = null;
 
-// ---------- settings ----------
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const DEFAULT_SETTINGS = {
-  agent: 'claude',            // 'claude' | 'codex'
+  agent: 'claude',
   claudePath: 'claude',
   codexPath: 'codex',
-  claudePermission: 'acceptEdits', // plan | acceptEdits | bypassPermissions
-  codexSandbox: 'workspace-write', // read-only | workspace-write | danger-full-access
-  claudeModel: '',            // '' = CLI default
+  claudePermission: 'acceptEdits',
+  codexSandbox: 'workspace-write',
+  claudeModel: '',
   claudeEffort: '',
   codexModel: '',
   codexEffort: '',
@@ -51,19 +47,19 @@ const DEFAULT_SETTINGS = {
   panelWidth: 400,
   panelHidden: false,
   drawerHeight: 240,
-  useDesign: true,            // include DESIGN.md in prompts
-  useMemory: true,            // include enabled memory items in prompts
-  editorCommand: '',          // '' = auto-detect cursor / code / windsurf / zed
-  gitBranchPerChat: false,    // new chat -> new pinpoint/* branch
-  gitAutoCommit: false,       // commit each run's changed files
-  tabs: [],                   // URLs of the open browser tabs, restored with the project
+  useDesign: true,
+  useMemory: true,
+  editorCommand: '',
+  gitBranchPerChat: false,
+  gitAutoCommit: false,
+  tabs: [],
   activeTab: 0,
-  autoVerify: false,          // after a run, the agent checks the after screenshot and new errors
-  variants: 0,                // 0 = off; 2-8 = try the request that many ways and pick one
-  routeCheck: true,           // screenshot the other pages before/after a run and flag changes
-  a11yCheck: true,            // run axe-core on the page and list the violations
-  perfCheck: true,            // measure the open page's load cost before/after a run
-  layoutOverlay: true,        // box model and flex/grid overlays while picking
+  autoVerify: false,
+  variants: 0,
+  routeCheck: true,
+  a11yCheck: true,
+  perfCheck: true,
+  layoutOverlay: true,
 };
 function loadSettings() {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; }
@@ -76,9 +72,6 @@ function saveSettings(patch) {
   return next;
 }
 
-// ---------- PATH ----------
-// GUI apps on macOS (and some Linux launchers) don't inherit the login shell's
-// PATH, so `claude` / `codex` / `npm` wouldn't resolve. Ask the user's shell.
 function fixPath() {
   const home = require('node:os').homedir();
   const extra = process.platform === 'win32'
@@ -89,14 +82,13 @@ function fixPath() {
     try {
       const out = require('node:child_process').execFileSync(process.env.SHELL || '/bin/zsh', ['-ilc', 'printf "__PP__%s__PP__" "$PATH"'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
       shellPath = (out.match(/__PP__(.*)__PP__/) || [])[1] || '';
-    } catch { /* keep what we have */ }
+    } catch {  }
   }
   const parts = [...shellPath.split(path.delimiter), ...(process.env.PATH || '').split(path.delimiter), ...extra].filter(Boolean);
   process.env.PATH = [...new Set(parts)].join(path.delimiter);
 }
 fixPath();
 
-// ---------- window ----------
 const isMac = process.platform === 'darwin';
 const TITLEBAR_HEIGHT = 52;
 
@@ -109,8 +101,6 @@ function createWindow() {
     backgroundColor: '#131419',
     title: 'Pinpoint',
     icon: path.join(__dirname, 'icon.png'),
-    // The app's top bar *is* the title bar: native traffic lights on macOS,
-    // native min/max/close overlaid on the right on Windows and Linux.
     titleBarStyle: 'hidden',
     ...(isMac
       ? { trafficLightPosition: { x: 18, y: 18 } }
@@ -120,12 +110,10 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
-      sandbox: false, // our own UI; the guest <webview> stays sandboxed
+      sandbox: false,
     },
   });
 
-  // Every <webview> gets our picker preload, with isolation on: the host page
-  // never sees our code and the guest never sees Node.
   win.webContents.on('will-attach-webview', (_e, prefs) => {
     prefs.preload = path.join(__dirname, 'webview-preload.cjs');
     prefs.contextIsolation = true;
@@ -133,7 +121,6 @@ function createWindow() {
     prefs.sandbox = true;
   });
 
-  // Traffic lights disappear in macOS full screen; let the UI drop their padding.
   const sendFs = () => win?.webContents.send('window:fullscreen', win.isFullScreen());
   win.on('enter-full-screen', sendFs);
   win.on('leave-full-screen', sendFs);
@@ -143,10 +130,8 @@ function createWindow() {
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 
-// Links that try to open new windows inside the guest: load them in place.
 app.on('web-contents-created', (_e, contents) => {
   if (contents.getType() === 'webview') {
-    // Links that open a new window become a new tab in Pinpoint's browser.
     contents.setWindowOpenHandler(({ url }) => {
       if (win && !win.isDestroyed() && /^(https?|file):/.test(url)) win.webContents.send('browser:new-tab', url);
       return { action: 'deny' };
@@ -154,7 +139,6 @@ app.on('web-contents-created', (_e, contents) => {
   }
 });
 
-// ---------- IPC: settings / dialogs ----------
 ipcMain.handle('settings:get', () => loadSettings());
 ipcMain.handle('settings:set', (_e, patch) => saveSettings(patch));
 ipcMain.handle('agents:detect', () => detectAgents(loadSettings()));
@@ -166,7 +150,6 @@ ipcMain.handle('dialog:pickFolder', async () => {
   const dir = r.filePaths[0];
   const s = loadSettings();
   const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8);
-  // A new project gets its own dev server: stop the old one and re-detect the command.
   const switched = path.resolve(dir) !== path.resolve(s.projectDir || '.');
   if (switched) { killTree(devProc); devProc = null; killTree(storyProc); storyProc = null; }
   saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '', tabs: [], activeTab: 0 }) });
@@ -175,8 +158,6 @@ ipcMain.handle('dialog:pickFolder', async () => {
 
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
 
-// Opens a project file in the user's code editor (at a line when we know it),
-// falling back to the OS default app, then to revealing it in the folder.
 const whichCache = new Map();
 function which(cmd) {
   if (whichCache.has(cmd)) return Promise.resolve(whichCache.get(cmd));
@@ -203,7 +184,7 @@ ipcMain.handle('shell:openFile', async (_e, { rel, line }) => {
       child.on('error', () => {});
       child.unref();
       return { via: cmd };
-    } catch { /* try the next one */ }
+    } catch {  }
   }
   const err = await shell.openPath(abs);
   if (!err) return { via: 'system' };
@@ -211,9 +192,6 @@ ipcMain.handle('shell:openFile', async (_e, { rel, line }) => {
   return { via: 'folder' };
 });
 
-// ---------- IPC: capture ----------
-// Captures the guest page (optionally a rect in CSS px) and returns a PNG data URL,
-// or a JPEG one when asked: much quicker to make, for shots that are stored as JPEG anyway.
 ipcMain.handle('capture', async (_e, { webContentsId, rect, jpeg }) => {
   const wc = webContents.fromId(webContentsId);
   if (!wc) throw new Error('webview not found');
@@ -229,14 +207,11 @@ ipcMain.handle('capture', async (_e, { webContentsId, rect, jpeg }) => {
   return onWhite(img).toDataURL();
 });
 
-// A page that sets no background of its own is white in a browser, but its
-// screenshot is transparent there (black text on nothing, once flattened).
-// Screenshots are put on white, as the user saw the page.
 function onWhite(img) {
   const { width, height } = img.getSize();
   if (!width || !height) return img;
   const scale = img.getScaleFactors()[0] || 1;
-  const px = img.toBitmap({ scaleFactor: scale }); // BGRA, premultiplied
+  const px = img.toBitmap({ scaleFactor: scale });
   let touched = false;
   for (let i = 3; i < px.length; i += 4) {
     const a = px[i];
@@ -252,12 +227,9 @@ function onWhite(img) {
   return nativeImage.createFromBitmap(px, { width: Math.round(width * scale), height: Math.round(height * scale), scaleFactor: scale });
 }
 
-// ---------- IPC: page state (DevTools protocol) ----------
-// Forced :hover/:focus/:active and media emulation go through the guest's
-// debugger, the same channel DevTools uses.
-const cdpRoots = new Map();  // webContents id -> document node id
-const cdpSheets = new Map(); // webContents id -> Map<styleSheetId, header>
-const netModes = new Map();  // webContents id -> 'hang' | 'error' (what to do with the page's API requests)
+const cdpRoots = new Map();
+const cdpSheets = new Map();
+const netModes = new Map();
 async function cdp(wc, method, params = {}) {
   if (!wc.debugger.isAttached()) {
     try { wc.debugger.attach('1.3'); }
@@ -274,11 +246,10 @@ async function cdp(wc, method, params = {}) {
   return wc.debugger.sendCommand(method, params);
 }
 
-// Simulated data states: API calls either never answer (loading) or fail (error).
 function onRequestPaused(wc, p) {
   const mode = netModes.get(wc.id);
   const send = (method, params) => wc.debugger.sendCommand(method, params).catch(() => {});
-  if (mode === 'hang') return; // left pending: the page stays in its loading state
+  if (mode === 'hang') return;
   if (mode === 'error') {
     return send('Fetch.fulfillRequest', {
       requestId: p.requestId, responseCode: 500,
@@ -294,8 +265,6 @@ const guest = (id) => {
   return wc;
 };
 
-// Node ids for a selector. The document node is fetched once per page: asking
-// for it again would drop the states already forced.
 async function queryNodes(wc, selector) {
   for (let attempt = 0; attempt < 2; attempt++) {
     if (!cdpRoots.has(wc.id)) {
@@ -304,14 +273,14 @@ async function queryNodes(wc, selector) {
       cdpRoots.set(wc.id, (await cdp(wc, 'DOM.getDocument', { depth: 0 })).root.nodeId);
     }
     try { return (await cdp(wc, 'DOM.querySelectorAll', { nodeId: cdpRoots.get(wc.id), selector })).nodeIds; }
-    catch (err) { cdpRoots.delete(wc.id); if (attempt) throw err; } // the page navigated: fetch the new document
+    catch (err) { cdpRoots.delete(wc.id); if (attempt) throw err; }
   }
   return [];
 }
 
 ipcMain.handle('page:force', async (_e, { webContentsId, selector, classes }) => {
   const wc = guest(webContentsId);
-  if (!classes.length && !wc.debugger.isAttached()) return 0; // nothing was ever forced
+  if (!classes.length && !wc.debugger.isAttached()) return 0;
   const nodeIds = await queryNodes(wc, selector);
   for (const nodeId of nodeIds) await cdp(wc, 'CSS.forcePseudoState', { nodeId, forcedPseudoClasses: classes });
   return nodeIds.length;
@@ -324,22 +293,18 @@ ipcMain.handle('page:emulate', async (_e, { webContentsId, colorScheme, reducedM
     features: [
       { name: 'prefers-color-scheme', value: colorScheme || '' },
       { name: 'prefers-reduced-motion', value: reducedMotion ? 'reduce' : '' },
-      // A touch device: no hover, coarse pointer (what "@media (hover: hover)" rules test for).
       { name: 'hover', value: touch ? 'none' : '' },
       { name: 'pointer', value: touch ? 'coarse' : '' },
       { name: 'any-hover', value: touch ? 'none' : '' },
       { name: 'any-pointer', value: touch ? 'coarse' : '' },
     ],
   });
-  // Mouse input arrives as touch events (taps, touch scrolling), as on a phone.
   await cdp(wc, 'Emulation.setTouchEmulationEnabled', { enabled: !!touch, maxTouchPoints: touch ? 5 : 1 });
   await cdp(wc, 'Emulation.setEmitTouchEventsForMouse', { enabled: !!touch, configuration: 'mobile' });
-  // Keeps :focus styles and focus-driven UI alive while the user clicks around Pinpoint.
   await cdp(wc, 'Emulation.setFocusEmulationEnabled', { enabled: !!focus });
   return true;
 });
 
-// The CSS rules that style a picked element, with their files and lines.
 ipcMain.handle('page:rules', async (_e, { webContentsId, uid }) => {
   const wc = guest(webContentsId);
   const [nodeId] = await queryNodes(wc, `[data-pinpoint="${String(uid).replace(/[^\w-]/g, '')}"]`);
@@ -347,7 +312,6 @@ ipcMain.handle('page:rules', async (_e, { webContentsId, uid }) => {
   return cssrules.matched({ cdp: (m, p) => cdp(wc, m, p), nodeId, sheets: cdpSheets.get(wc.id) || new Map(), projectDir: loadSettings().projectDir });
 });
 
-// Animation speed for the whole page: 1 = normal, 0 = paused.
 ipcMain.handle('page:animation', async (_e, { webContentsId, rate }) => {
   const wc = guest(webContentsId);
   if (rate === 1 && !wc.debugger.isAttached()) return true;
@@ -356,7 +320,6 @@ ipcMain.handle('page:animation', async (_e, { webContentsId, rate }) => {
   return true;
 });
 
-// Network conditions and simulated data states for the page.
 const THROTTLE = {
   normal: { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
   slow: { offline: false, latency: 400, downloadThroughput: 50 * 1024, uploadThroughput: 50 * 1024 },
@@ -377,8 +340,6 @@ ipcMain.handle('page:network', async (_e, { webContentsId, mode }) => {
   return true;
 });
 
-// Plays recorded steps back with real mouse and keyboard input, so handlers that
-// only trust genuine events (form submit on Enter, focus management) behave as they did.
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 ipcMain.handle('page:replay', async (_e, { webContentsId, steps }) => {
   const wc = guest(webContentsId);
@@ -394,7 +355,7 @@ ipcMain.handle('page:replay', async (_e, { webContentsId, steps }) => {
   wc.focus();
   let done = 0;
   for (const s of steps) {
-    if (s.type === 'navigate') { await pause(700); done++; continue; } // caused by the step before it
+    if (s.type === 'navigate') { await pause(700); done++; continue; }
     if (s.type === 'key') press(s.key);
     else {
       const p = s.selector ? await find(s.selector) : null;
@@ -418,9 +379,7 @@ ipcMain.handle('page:replay', async (_e, { webContentsId, steps }) => {
   return { done, total: steps.length };
 });
 
-// ---------- IPC: agent runs ----------
 const terminal = require('./terminal.cjs');
-// The terminal in the drawer: real shells in the project folder.
 ipcMain.handle('term:shells', () => terminal.shells());
 ipcMain.handle('term:list', () => terminal.list());
 ipcMain.handle('term:open', (e, opts) => terminal.open(e.sender, { ...opts, cwd: opts?.cwd || loadSettings().projectDir }));
@@ -429,12 +388,8 @@ ipcMain.on('term:write', (_e, { id, data }) => terminal.write(id, data));
 ipcMain.on('term:resize', (_e, { id, cols, rows }) => terminal.resize(id, cols, rows));
 ipcMain.on('term:close', (_e, id) => terminal.close(id));
 
-const active = new Map(); // runId -> { kill }
-// Runs of different chats can overlap in one project. Each run's result is the difference
-// between the files before and after it, which would also pick up what another run wrote
-// meanwhile. So a run that finishes tells the ones still going which files it changed and
-// what they looked like; a file still in exactly that state isn't theirs.
-const othersWrote = new Map(); // runId -> Map<path, signature of the file as the other run left it>
+const active = new Map();
+const othersWrote = new Map();
 const fileSig = (root, rel) => {
   try { return crypto.createHash('sha1').update(fs.readFileSync(path.join(root, rel))).digest('hex'); } catch { return 'gone'; }
 };
@@ -444,7 +399,6 @@ function writeRequestFiles(projectDir, runId, request) {
   const dir = path.join(projectDir, '.pinpoint', 'requests', runId);
   fs.mkdirSync(dir, { recursive: true });
 
-  // The extension follows the data: agents pick the media type from it.
   const saveImg = (name, dataUrl) => {
     if (!dataUrl) return null;
     const [meta, b64] = dataUrl.split(',');
@@ -478,15 +432,13 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   const files = writeRequestFiles(cwd, runId, request);
   const design = settings.useDesign ? project.readDesign(cwd) : null;
   const memory = settings.useMemory ? project.readMemory(cwd).filter((m) => m.enabled !== false && m.text?.trim()) : [];
-  // The detected design system goes in once per session, like DESIGN.md.
   let designSystem = null;
-  if (!sessionId) { try { designSystem = designsystem.inspect(cwd); } catch { /* optional context */ } }
+  if (!sessionId) { try { designSystem = designsystem.inspect(cwd); } catch {  } }
   const prompt = request.verify
     ? buildVerifyPrompt({ request })
     : buildPrompt({ request, files, projectDir: cwd, followUp: !!sessionId, design: design?.exists ? design.content : '', memory, designSystem });
   const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('agent:event', { runId, ...evt }); };
 
-  // Git: a new chat can start on its own branch.
   if (active.size && !request.verify) send({ type: 'status', text: 'Another chat is also editing this project. Changes made at the same time can show up in both results.' });
   if (settings.gitBranchPerChat && !sessionId && !(request.variant?.index > 1) && !active.size) {
     try {
@@ -503,7 +455,6 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   const agentName = settings.agent === 'codex' ? 'Codex' : 'Claude Code';
   const snap = await snapshot.takeAsync(cwd);
   othersWrote.set(runId, new Map());
-  // Other pages are screenshotted now (in the background) and again afterwards.
   let routes = null;
   if (check && !request.variant && !request.verify) {
     const list = settings.routeCheck !== false ? check.routes || [] : [];
@@ -511,9 +462,6 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
     routes?.before.catch(() => {});
     routes?.perfBefore.catch(() => {});
   }
-  // The "before" screenshots have to be taken before the agent's first edit, or
-  // the comparison would see no change. Usually they are reused from the last
-  // run; otherwise wait for them, up to a limit, then go on without the check.
   if (routes) {
     const ready = Promise.all([routes.before, routes.perfBefore]).then(() => true, () => true);
     const slow = setTimeout(() => send({ type: 'status', text: 'Taking "before" screenshots of your pages…' }), 900);
@@ -521,7 +469,6 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
     clearTimeout(slow);
     if (!inTime) { send({ type: 'log', text: 'before-screenshots took too long; skipping the visual change check for this run' }); routes = null; }
   }
-  // Attach the real file diff to the final event, whatever tools the agent used.
   const onEvent = async (evt) => {
     if (evt.type !== 'done') return send(evt);
     let changes = await snapshot.diffAsync(snap);
@@ -531,7 +478,6 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
     for (const seen of othersWrote.values()) for (const c of changes) seen.set(c.path, fileSig(cwd, c.path));
     try { changes = runs.save(cwd, runId, snap, changes, { request: { instruction: request.instruction, annotations: request.annotations.map(({ n, kind, note, element }) => ({ n, kind, note, element: element && { tag: element.tag, source: element.source } })) }, agent: agentName, url: request.url }); } catch (err) { send({ type: 'log', text: `could not save run record: ${err.message}` }); }
     let commit = null;
-    // Variants are tried and reverted one after another; only the one you pick gets committed.
     if (settings.gitAutoCommit && changes.length && evt.ok && !request.variant) {
       try {
         const st = await gitx.status(cwd);
@@ -542,7 +488,6 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
       } catch (err) { send({ type: 'log', text: `git commit failed: ${err.message}` }); }
     }
     send({ ...evt, changes, commit, request: { instruction: request.instruction, notes: request.annotations.map((a) => a.note).filter(Boolean) } });
-    // A change confined to the open page's own file can't reach the other pages.
     if (routes && evt.ok && changes.length) {
       const shared = changes.some((c) => c.path !== check.currentFile);
       routecheck.finish(routes, (name, buf) => runs.saveShotBuffer(cwd, runId, name, buf), shared)
@@ -559,7 +504,6 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   return { requestDir: files.dir };
 });
 
-// Diffs and reverts read the run records on disk, so they survive restarts.
 const projectDir = () => {
   const dir = loadSettings().projectDir;
   if (!dir) throw new Error('No project open.');
@@ -568,18 +512,13 @@ const projectDir = () => {
 ipcMain.handle('run:diff', (_e, runId) => runs.diff(projectDir(), runId));
 ipcMain.handle('run:revert', (_e, { runId, paths, force }) => runs.revert(projectDir(), runId, paths || null, !!force));
 ipcMain.handle('run:apply', (_e, runId) => runs.apply(projectDir(), runId));
-// "Before" screenshots taken while idle, so the next run doesn't wait for them.
 ipcMain.handle('routes:prewarm', (_e, { list, partition }) => {
   const settings = loadSettings();
   if (settings.routeCheck === false || !settings.projectDir || active.size || !list?.length) return false;
-  routecheck.prewarm(settings.projectDir, list, partition || undefined).catch(() => { /* best effort */ });
+  routecheck.prewarm(settings.projectDir, list, partition || undefined).catch(() => {  });
   return true;
 });
 
-// A message sent while the agent is working. "queue" lands after the agent's
-// current step; "now" interrupts it first. Returns delivered:false when the run
-// can't take live input (already finished, or the one-shot Codex fallback), in
-// which case the UI sends it as a normal follow-up instead.
 ipcMain.handle('agent:steer', (_e, { runId, steerId, request, mode }) => {
   const handle = active.get(runId);
   if (!handle || !handle.steerable) return { delivered: false };
@@ -590,8 +529,6 @@ ipcMain.handle('agent:steer', (_e, { runId, steerId, request, mode }) => {
   return { delivered };
 });
 
-// A message that was queued behind the agent's current step is pushed in now:
-// the step is interrupted, and the agent goes on with what it was sent.
 ipcMain.handle('agent:nudge', (_e, runId) => {
   const handle = active.get(runId);
   if (!handle || !handle.steerable) return false;
@@ -603,7 +540,6 @@ ipcMain.handle('agent:cancel', (_e, runId) => {
   return true;
 });
 
-// ---------- IPC: project context ----------
 ipcMain.handle('chats:list', () => project.listChats(projectDir()));
 ipcMain.handle('chats:load', (_e, id) => project.loadChat(projectDir(), id));
 ipcMain.handle('chats:save', (_e, chat) => project.saveChat(projectDir(), chat));
@@ -616,7 +552,6 @@ ipcMain.handle('routes:list', () => listRoutes(projectDir()));
 ipcMain.handle('design:system', () => designsystem.inspect(projectDir()));
 ipcMain.handle('design:usage', (_e, name) => designsystem.componentUsage(projectDir(), name));
 
-// Storybook: the story file for a component, and its URL when Storybook is running.
 function storybookScript(root) {
   try {
     const script = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).scripts?.storybook || '';
@@ -633,7 +568,7 @@ async function storyUrl(root, file) {
       const base = path.basename(file);
       const hit = entries.find((e) => e.type === 'story' && String(e.importPath || '').endsWith(base));
       if (hit) return `http://localhost:${port}/iframe.html?id=${hit.id}&viewMode=story`;
-    } catch { /* not running on this port */ }
+    } catch {  }
   }
   return null;
 }
@@ -643,7 +578,6 @@ ipcMain.handle('story:find', async (_e, name) => {
   return { ...found, url: found.file ? await storyUrl(root, found.file) : null, canStart: !!storybookScript(root) };
 });
 
-// Runs the project's own "storybook" script and waits until the story is being served.
 let storyProc = null;
 ipcMain.handle('story:start', async (_e, name) => {
   const root = projectDir();
@@ -663,12 +597,9 @@ ipcMain.handle('story:start', async (_e, name) => {
   throw new Error('Storybook took too long to start.');
 });
 
-// ---------- IPC: instant edits (no agent) ----------
-// Small unambiguous changes written straight into the source. Each one is
-// recorded like a run, so it shows up in the chat with a diff and can be undone.
 const instantContext = (root) => {
   let ds = null;
-  try { ds = designsystem.inspect(root); } catch { /* optional */ }
+  try { ds = designsystem.inspect(root); } catch {  }
   return { tailwind: !!ds?.tailwind, tokens: ds?.tokens || [] };
 };
 ipcMain.handle('instant:plan', (_e, annotation) => {
@@ -687,20 +618,16 @@ ipcMain.handle('instant:apply', (_e, { runId, annotation }) => {
   return { changes, summary };
 });
 
-// ---------- IPC: component workspace ----------
 ipcMain.handle('components:list', () => components.scan(projectDir()));
 
-// ---------- IPC: "view as" profiles ----------
 ipcMain.handle('profiles:read', () => project.readProfiles(projectDir()));
 ipcMain.handle('profiles:write', (_e, list) => project.writeProfiles(projectDir(), list));
-// Language, time zone and extra request headers for a page shown under a profile.
 ipcMain.handle('page:profile', async (_e, { webContentsId, locale, timezone, headers }) => {
   const wc = guest(webContentsId);
   watchNetwork(wc.session);
   const extra = { ...(locale && { 'Accept-Language': locale }), ...(headers || {}) };
   if (!locale && !timezone && !Object.keys(extra).length && !wc.debugger.isAttached()) return true;
   await cdp(wc, 'Emulation.setLocaleOverride', { locale: locale || '' }).catch(() => {});
-  // navigator.language follows the user-agent override, not the locale override.
   await cdp(wc, 'Emulation.setUserAgentOverride', { userAgent: wc.getUserAgent(), acceptLanguage: locale || undefined }).catch(() => {});
   await cdp(wc, 'Emulation.setTimezoneOverride', { timezoneId: timezone || '' }).catch(() => {});
   await cdp(wc, 'Network.enable');
@@ -708,10 +635,8 @@ ipcMain.handle('page:profile', async (_e, { webContentsId, locale, timezone, hea
   return true;
 });
 
-// ---------- IPC: other browser engines ----------
 ipcMain.handle('engines:status', () => engines.status(app.getPath('userData')));
 ipcMain.handle('engines:install', (e) => engines.install(app.getPath('userData'), (text) => { if (!e.sender.isDestroyed()) e.sender.send('engines:progress', text); }));
-// The page as WebKit and Firefox render it, logged in as the tab is.
 ipcMain.handle('engines:shoot', async (_e, { webContentsId, url, width, height }) => {
   const wc = guest(webContentsId);
   let cookies = [];
@@ -721,7 +646,7 @@ ipcMain.handle('engines:shoot', async (_e, { webContentsId, url, width, height }
       ...(c.expirationDate && { expires: c.expirationDate }),
       ...(c.sameSite && c.sameSite !== 'unspecified' && { sameSite: c.sameSite === 'no_restriction' ? 'None' : c.sameSite === 'strict' ? 'Strict' : 'Lax' }),
     }));
-  } catch { /* shown logged out */ }
+  } catch {  }
   const base = app.getPath('userData');
   const out = {};
   await Promise.all(engines.ENGINES.map(async (engine) => {
@@ -731,9 +656,7 @@ ipcMain.handle('engines:shoot', async (_e, { webContentsId, url, width, height }
   return out;
 });
 
-// ---------- IPC: background runs ----------
-// A request handled in a separate copy of the project, so several can run at once.
-const bgRuns = new Map(); // id -> { run, handle, text, files, patch }
+const bgRuns = new Map();
 const bgSend = (sender, evt) => { if (!sender.isDestroyed()) sender.send('bg:event', evt); };
 ipcMain.handle('bg:blocker', () => background.blocker(projectDir()));
 ipcMain.handle('bg:start', async (e, { id, request }) => {
@@ -743,7 +666,6 @@ ipcMain.handle('bg:start', async (e, { id, request }) => {
   const entry = { run, handle: null, text: '', files: [], patch: '' };
   bgRuns.set(id, entry);
   try {
-    // Screenshots stay in the real project; every other path in the request points into the copy.
     const files = writeRequestFiles(root, `bg-${id}`, request);
     const norm = (p) => p.replace(/\\/g, '/');
     const swap = (v, key) => {
@@ -756,7 +678,7 @@ ipcMain.handle('bg:start', async (e, { id, request }) => {
     const design = settings.useDesign ? project.readDesign(root) : null;
     const memory = settings.useMemory ? project.readMemory(root).filter((m) => m.enabled !== false && m.text?.trim()) : [];
     let designSystem = null;
-    try { designSystem = designsystem.inspect(root); } catch { /* optional context */ }
+    try { designSystem = designsystem.inspect(root); } catch {  }
     const prompt = buildPrompt({ request: moved, files, projectDir: run.cwd, followUp: false, design: design?.exists ? design.content : '', memory, designSystem });
     entry.handle = runAgent({
       settings, cwd: run.cwd, prompt, images: files.images, sessionId: null,
@@ -770,7 +692,6 @@ ipcMain.handle('bg:start', async (e, { id, request }) => {
           const res = await background.result(run);
           entry.files = res.files;
           entry.patch = res.patch;
-          // A look at the result, when the project's dev server can be started in the copy.
           let shot = false;
           if (evt.ok && res.files.length && settings.devCommand && /^https?:/.test(request.url || '')) {
             bgSend(e.sender, { id, type: 'step', text: 'Taking a screenshot of the result…' });
@@ -796,7 +717,6 @@ ipcMain.handle('bg:start', async (e, { id, request }) => {
 });
 ipcMain.handle('bg:diff', (_e, id) => bgRuns.get(id)?.patch || '');
 ipcMain.handle('bg:shot', (_e, id) => runs.shots(projectDir(), `bg-${id}`).after || null);
-// Bring a finished background run's changes into the project, as an undoable run.
 ipcMain.handle('bg:apply', async (_e, { id, runId, instruction }) => {
   const entry = bgRuns.get(id);
   if (!entry) throw new Error('That background run is gone.');
@@ -804,7 +724,7 @@ ipcMain.handle('bg:apply', async (_e, { id, runId, instruction }) => {
   const inProject = (p) => path.relative(root, path.join(entry.run.top, p)).split(path.sep).join('/');
   const touched = entry.files.map((f) => ({ ...f, path: inProject(f.path) })).filter((f) => !f.path.startsWith('..'));
   const snap = { root, files: new Map() };
-  for (const f of touched) { try { snap.files.set(f.path, { content: fs.readFileSync(path.join(root, f.path)) }); } catch { /* a new file */ } }
+  for (const f of touched) { try { snap.files.set(f.path, { content: fs.readFileSync(path.join(root, f.path)) }); } catch {  } }
   await background.apply(entry.run, entry.files);
   const changes = runs.save(root, runId, snap, touched.map(({ path: p, kind }) => ({ path: p, kind })), { request: { instruction: instruction || 'Background run', annotations: [] }, agent: 'Background run' });
   bgRuns.delete(id);
@@ -816,15 +736,13 @@ ipcMain.handle('bg:discard', async (_e, id) => {
   if (!entry) return true;
   entry.handle?.kill();
   bgRuns.delete(id);
-  setTimeout(() => background.remove(entry.run).catch(() => {}), entry.finished ? 0 : 4500); // a running agent gets a moment to stop first
+  setTimeout(() => background.remove(entry.run).catch(() => {}), entry.finished ? 0 : 4500);
   return true;
 });
 
-// ---------- IPC: updates ----------
 ipcMain.handle('update:state', () => updater.current());
 ipcMain.handle('update:install', () => updater.install());
 
-// ---------- IPC: pinned baselines ----------
 ipcMain.handle('pins:list', () => pins.list(projectDir()));
 ipcMain.handle('pins:add', (_e, pin) => pins.add(projectDir(), pin));
 ipcMain.handle('pins:check', () => pins.check(projectDir()));
@@ -832,8 +750,6 @@ ipcMain.handle('pins:images', (_e, id) => pins.images(projectDir(), id));
 ipcMain.handle('pins:accept', (_e, id) => pins.accept(projectDir(), id));
 ipcMain.handle('pins:remove', (_e, id) => pins.remove(projectDir(), id));
 
-// ---------- IPC: hand-off ----------
-// A request someone annotated (a designer, a PM) saved as one file a developer can open and run.
 ipcMain.handle('handoff:save', async (_e, { name, data }) => {
   const r = await dialog.showSaveDialog(win, { defaultPath: `${name}.pinpoint.json`, filters: [{ name: 'Pinpoint hand-off', extensions: ['json'] }] });
   if (r.canceled || !r.filePath) return null;
@@ -853,7 +769,6 @@ ipcMain.handle('handoff:issue', async (_e, args) => {
   return r;
 });
 
-// CSS for Tailwind classes added in Pinpoint that the dev build hasn't generated yet.
 ipcMain.handle('tailwind:css', async (_e, classes) => {
   const root = projectDir();
   const ds = designsystem.inspect(root);
@@ -862,18 +777,14 @@ ipcMain.handle('tailwind:css', async (_e, classes) => {
   return tailwind.generate(root, { entry: abs(ds.tailwind.entry), config: abs(ds.tailwind.configFile) }, classes);
 });
 
-// Runs the project's build and reports the size of the JS and CSS it emits.
-// A Next.js build shares the .next folder with the dev server, so the dev server
-// is stopped for the build and started again afterwards (when Pinpoint runs it).
 ipcMain.handle('build:measure', async (e, pageUrl) => {
   const root = projectDir();
   if (!buildsize.sharesDevFolder(root)) return buildsize.measure(root);
   const ours = !!devProc && devProc.exitCode === null;
   if (!ours) {
-    // Something else is serving the page: a dev server started outside Pinpoint. It can't be stopped from here.
     let live = false;
     if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/.test(pageUrl || '')) {
-      try { await fetch(pageUrl, { signal: AbortSignal.timeout(1500) }); live = true; } catch { /* nothing is listening */ }
+      try { await fetch(pageUrl, { signal: AbortSignal.timeout(1500) }); live = true; } catch {  }
     }
     if (live) throw new Error("A Next.js dev server that Pinpoint didn't start is running. Stop it first: a build and the dev server share the .next folder.");
     return buildsize.measure(root);
@@ -886,10 +797,8 @@ ipcMain.handle('build:measure', async (e, pageUrl) => {
   finally { if (command) startDevServer(e.sender, command); }
 });
 
-// axe-core's source, which the UI runs inside the page to list accessibility violations.
 let axeSource = null;
 ipcMain.handle('a11y:source', () => (axeSource ??= fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')));
-// ---------- IPC: git ----------
 ipcMain.handle('git:status', () => gitx.status(projectDir()));
 ipcMain.handle('git:init', () => gitx.initRepo(projectDir()));
 ipcMain.handle('git:branch', async (_e, hint) => ({ branch: await gitx.createBranch(projectDir(), hint || 'visual-edit') }));
@@ -911,7 +820,6 @@ ipcMain.handle('git:pr', async (_e, args) => {
   return r;
 });
 
-// ---------- IPC: before / after screenshots ----------
 ipcMain.handle('run:saveShot', (_e, { runId, name, dataUrl }) => {
   runs.saveShot(projectDir(), runId, name, dataUrl);
   return true;
@@ -920,7 +828,6 @@ ipcMain.handle('run:shots', (_e, runId) => runs.shots(projectDir(), runId));
 
 ipcMain.handle('sourcemap:resolve', (_e, frame) => sourcemap.resolve(frame, loadSettings().projectDir));
 
-// ---------- IPC: dev server ----------
 let devProc = null;
 function killTree(proc) {
   if (!proc || proc.exitCode !== null) return;
@@ -937,10 +844,8 @@ function startDevServer(sender, command) {
   devProc = spawn(command, { cwd: projectDir, shell: true, detached: process.platform !== 'win32', env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', BROWSER: 'none' } });
   const proc = devProc;
   const onData = (d) => {
-    // Strip ANSI colors: Vite & co. color the port number, which would split the URL.
     const text = d.toString().replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '');
     send({ type: 'log', text });
-    // Surface the first local URL the dev server prints so the UI can jump to it.
     const m = text.match(/https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?[^\s)'"\u001b]*/);
     if (m) send({ type: 'url', url: m[0].replace('0.0.0.0', 'localhost') });
   };
@@ -954,7 +859,6 @@ ipcMain.handle('dev:start', (e, { command }) => startDevServer(e.sender, command
 ipcMain.handle('dev:detect', () => devserver.inspect(loadSettings().projectDir));
 ipcMain.handle('dev:stop', () => { killTree(devProc); devProc = null; return true; });
 
-// ---------- lifecycle ----------
 app.setName('Pinpoint');
 app.whenReady().then(() => {
   if (isMac && isDev) app.dock?.setIcon(path.join(__dirname, 'icon.png'));
@@ -963,21 +867,18 @@ app.whenReady().then(() => {
   updater.start((state) => { if (win && !win.isDestroyed()) win.webContents.send('update:state', state); });
 });
 
-// Failed requests made by the page (4xx/5xx, DNS, CORS…) are forwarded to the
-// UI so they can be handed to the agent along with console errors.
-const watched = new WeakSet(); // sessions (browser profiles) already being listened to
+const watched = new WeakSet();
 function watchNetwork(ses = session.fromPartition('persist:pinpoint')) {
   if (watched.has(ses)) return;
   watched.add(ses);
   const report = (d, extra) => {
-    if (routecheck.captureIds.has(d.webContentsId)) return; // our own hidden route screenshots
+    if (routecheck.captureIds.has(d.webContentsId)) return;
     if (!win || win.isDestroyed() || /favicon\.ico($|\?)/.test(d.url) || /^(devtools|chrome-extension):/.test(d.url)) return;
     win.webContents.send('page:network', { url: d.url, method: d.method, resourceType: d.resourceType, at: Date.now(), ...extra });
   };
   ses.webRequest.onCompleted((d) => { if (d.statusCode >= 400) report(d, { status: d.statusCode }); });
   ses.webRequest.onErrorOccurred((d) => { if (d.error !== 'net::ERR_ABORTED') report(d, { error: d.error }); });
 }
-// macOS: clicking the dock icon with no windows open reopens one.
 app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 app.on('window-all-closed', () => {
   killTree(devProc);

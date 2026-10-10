@@ -1,13 +1,3 @@
-// Test runner. Each suite is a script that prints/writes PASS and FAIL lines;
-// most of them start the real app (or its main process) under Electron.
-//
-//   npm test                 everything that can run here
-//   npm test -- --quick      no windows on screen: units, CI mode, page tools, main-process tools
-//   npm test -- --only ui    one suite (or several, comma-separated)
-//   npm test -- --engines    also download WebKit and Firefox (about 300 MB) and test them
-//
-// Suites that need a real project (Vite, Tailwind, Vue) use tests/.fixtures,
-// created once with `npm run test:fixtures`; without it they are skipped.
 const { execFileSync, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -20,7 +10,6 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',') : null;
 
-// name, how it runs, whether it puts the app window on screen, and the fixture it needs
 const SUITES = [
   { name: 'unit', runner: 'node', about: 'instant edits and component discovery' },
   { name: 'ci-mode', runner: 'node', about: 'headless capture / compare' },
@@ -40,7 +29,6 @@ const SUITES = [
 
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'pinpoint-tests-'));
 
-// Page-side helpers are TypeScript; the suites load them as plain scripts.
 async function helpers() {
   const vite = await import('vite');
   for (const [name, src] of [['tokens', 'src/lib/tokens.ts'], ['a11y', 'src/lib/a11y.ts'], ['pagetools', 'src/lib/pagetools.ts'], ['inspect', 'src/lib/inspect.ts'], ['DeviceBar', 'src/components/DeviceBar.tsx']]) {
@@ -58,13 +46,12 @@ function run(suite) {
     const r = spawnSync(process.execPath, [file], { cwd: repo, env, encoding: 'utf8', timeout: 5 * 60 * 1000 });
     text = `${r.stdout || ''}${r.status === null ? '\nFAIL  timed out' : ''}`;
   } else {
-    try { fs.rmSync(path.join(out, `${suite.name}.out`), { force: true }); } catch { /* first run */ }
+    try { fs.rmSync(path.join(out, `${suite.name}.out`), { force: true }); } catch {  }
     spawnSync(electron, [file], { cwd: repo, env, timeout: 6 * 60 * 1000, stdio: 'ignore' });
     try { text = fs.readFileSync(path.join(out, `${suite.name}.out`), 'utf8'); } catch { text = 'FAIL  the suite produced no results (it crashed or was closed)'; }
   }
   const lines = text.split('\n').filter((l) => /^(PASS|FAIL)/.test(l));
   const fails = lines.filter((l) => l.startsWith('FAIL'));
-  // A suite that stopped without failing anything didn't finish: it stalled or was closed.
   if (suite.runner === 'electron' && !fails.length && !text.includes('[done]')) fails.push('FAIL  the suite did not run to the end');
   return { pass: lines.filter((l) => l.startsWith('PASS')).length, fails };
 }
@@ -84,7 +71,6 @@ function run(suite) {
     if (skip) { if (!only) console.log(`skip  ${suite.name.padEnd(11)} ${skip}`); continue; }
     const started = Date.now();
     let r = run(suite);
-    // Suites that drive the window can be thrown off by other activity on the machine: one retry.
     let retried = false;
     if (r.fails.length && suite.runner === 'electron') { retried = true; r = run(suite); }
     passed += r.pass; failed += r.fails.length;

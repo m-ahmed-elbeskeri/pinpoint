@@ -1,6 +1,3 @@
-// Works out how to start a project's dev server: which package manager, which
-// script, which folder (monorepos and frontend/ subfolders), and the port it
-// will likely serve on. Also checks whether that server is already up.
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -9,7 +6,6 @@ const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
 const exists = (...p) => fs.existsSync(path.join(...p));
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
-// Known dev-server invocations, with the port they default to.
 const TOOLS = [
   [/\bnext\s+dev\b/, 3000, 'Next.js'],
   [/\bnuxi?\s+dev\b/, 3000, 'Nuxt'],
@@ -31,10 +27,8 @@ const TOOLS = [
   [/\bstorybook\s+dev\b|start-storybook/, 6006, 'Storybook'],
   [/\bserve\b|\bhttp-server\b|\blive-server\b/, 3000, 'static server'],
 ];
-// Script names in order of preference; storybook & co. rank below the app.
 const NAME_RANK = ['dev', 'start', 'serve', 'develop', 'dev:web', 'web', 'dev:client', 'dev:app', 'preview', 'watch'];
 const SKIP_NAME = /build|dist|release|deploy|publish|test|lint|typecheck|format|clean|icons|prepare|install|storybook:build/;
-// Port fallback when a script's body doesn't name the tool (e.g. `node scripts/dev.mjs`).
 const DEP_PORTS = [['next', 3000], ['nuxt', 3000], ['astro', 4321], ['@angular/core', 4200], ['gatsby', 8000], ['react-scripts', 3000], ['vite', 5173]];
 const SUBDIRS = ['frontend', 'client', 'web', 'ui', 'app', 'site', 'www'];
 const WORKSPACE_DIRS = ['apps', 'packages'];
@@ -53,7 +47,6 @@ function packageManager(dir, root, pkg) {
 
 const runCmd = (pm, name) => (pm === 'npm' ? (name === 'start' ? 'npm start' : `npm run ${name}`) : `${pm} ${name === 'start' ? 'start' : `run ${name}`}`);
 
-// Native separators so cmd.exe's `cd` is happy too; quoted if it has spaces.
 const cdPath = (rel) => { const p = rel.split('/').join(path.sep); return /\s/.test(p) ? `"${p}"` : p; };
 
 function portFrom(body, fallback) {
@@ -61,14 +54,12 @@ function portFrom(body, fallback) {
   return m ? Number(m[1]) : fallback;
 }
 
-// Ranks one package.json's scripts; returns the candidates it offers.
 function scriptCandidates(dir, root) {
   const pkg = readJson(path.join(dir, 'package.json'));
   const scripts = pkg?.scripts || {};
   const pm = packageManager(dir, root, pkg);
   const rel = path.relative(root, dir).split(path.sep).join('/');
   const needsInstall = !exists(dir, 'node_modules') && !exists(root, 'node_modules');
-  // Workspaces install from the root; a standalone subfolder app installs in place.
   const rootPkg = readJson(path.join(root, 'package.json'));
   const installAtRoot = !!rootPkg && (!!rootPkg.workspaces || ['pnpm-workspace.yaml', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'bun.lock', 'bun.lockb'].some((f) => exists(root, f)));
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
@@ -76,19 +67,15 @@ function scriptCandidates(dir, root) {
   const out = [];
   for (const [name, body] of Object.entries(scripts)) {
     if (typeof body !== 'string' || SKIP_NAME.test(name)) continue;
-    // Production servers (`next start`) need a build first; not what we want here.
     if (/\b(next|nuxt|remix-serve|react-router-serve)\s+start\b|\bnuxt\s+preview\b/.test(body)) continue;
-    // Judge each step of `a && b` on its own, so `vite build && electron .` isn't a dev server.
     const steps = body.split(/&&|\|\||;|\|/).filter((s) => !/\b(build|preview|export|generate|install)\b/.test(s));
     const tool = TOOLS.find(([re]) => steps.some((s) => re.test(s)));
     const rank = NAME_RANK.indexOf(name);
-    // Only scripts that look like they serve something.
     if (!tool && rank < 0) continue;
     let score = (rank >= 0 ? 40 - rank * 3 : 10) + (tool ? 30 : 0);
     if (tool && tool[2] === 'Storybook') score -= 35;
     if (tool && tool[2] === 'static server') score -= 10;
     if (/preview|watch/.test(name)) score -= 15;
-    // A root script that fans out to workspaces (turbo, concurrently...) is fine, but prefer a direct server.
     if (/\b(turbo|nx|lerna|concurrently|npm-run-all|run-p)\b/.test(body)) score -= 5;
     if (rel) score -= 8;
     const install = needsInstall ? `${pm} install && ` : '';
@@ -127,7 +114,6 @@ function detect(root) {
   return { command: candidates[0]?.command || '', candidates };
 }
 
-// True when something answers HTTP on the port (any status counts).
 function probe(port, timeout = 700) {
   return new Promise((resolve) => {
     const req = http.get({ host: 'localhost', port, path: '/', timeout }, (res) => { res.resume(); resolve(true); });
@@ -136,7 +122,6 @@ function probe(port, timeout = 700) {
   });
 }
 
-// Detects the command and, if its server is already running, where.
 async function inspect(root) {
   const d = detect(root);
   const ports = [...new Set(d.candidates.map((c) => c.port).filter(Boolean))].slice(0, 3);

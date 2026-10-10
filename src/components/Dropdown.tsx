@@ -14,14 +14,13 @@ interface Props {
   items: DropdownItem[];
   onChange(value: string): void;
   icon?: ReactNode;
-  title?: string;         // tooltip + menu header
-  display?: string;       // override the button label
+  title?: string;
+  display?: string;
   disabled?: boolean;
   align?: 'left' | 'right';
   className?: string;
 }
 
-// Compact pill button that opens an upward menu (it lives in the composer footer).
 export function Dropdown({ value, items, onChange, icon, title, display, disabled, align = 'left', className = '' }: Props) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
@@ -34,7 +33,7 @@ export function Dropdown({ value, items, onChange, icon, title, display, disable
     const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const pick = (i: DropdownItem) => { if (!i.disabled) { onChange(i.value); setOpen(false); } };
 

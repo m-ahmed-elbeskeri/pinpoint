@@ -1,5 +1,3 @@
-// Git workflow for Pinpoint: branch per chat, commit after each run, open a PR.
-// Uses the user's own `git` and `gh` CLIs.
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -19,7 +17,7 @@ function run(cmd, args, cwd, { timeout = 60000 } = {}) {
 const git = (cwd, args, opts) => run('git', args, cwd, opts);
 const quiet = (p) => p.catch(() => null);
 
-let ghState = null; // cached: { installed, authed, user }
+let ghState = null;
 async function ghStatus() {
   if (ghState) return ghState;
   const installed = !!(await quiet(run('gh', ['--version'], os.homedir(), { timeout: 8000 })));
@@ -59,7 +57,6 @@ async function createBranch(cwd, hint) {
   return name;
 }
 
-// Commit exactly the files a run changed (never the user's other work).
 async function commitPaths(cwd, paths, message) {
   if (!paths.length) return null;
   await git(cwd, ['add', '-A', '--', ...paths]);
@@ -89,7 +86,6 @@ async function initRepo(cwd) {
   return status(cwd);
 }
 
-// Push the current branch and open (or find) its pull request.
 async function openPR(cwd, { title, body, draft }) {
   const st = await status(cwd);
   if (!st.repo) throw new Error('This project is not a git repository.');
@@ -109,9 +105,6 @@ async function openPR(cwd, { title, body, draft }) {
   } finally { fs.rmSync(file, { force: true }); }
 }
 
-// Opens a GitHub issue from a hand-off (a request someone annotated for a developer to run).
-// With `attach`, the hand-off file (screenshots included) goes up as a secret
-// gist linked from the issue: issues can't carry files through the CLI.
 async function createIssue(cwd, { title, body, attach }) {
   const gh = await ghStatus();
   if (!gh.installed) throw new Error('The GitHub CLI (gh) is not installed.');
@@ -124,7 +117,7 @@ async function createIssue(cwd, { title, body, attach }) {
     try {
       const out = await run('gh', ['gist', 'create', file, '--desc', `Pinpoint hand-off: ${title}`], cwd, { timeout: 120000 });
       gist = (out.match(/https:\/\/gist\.github\.com\/\S+/) || [])[0] || null;
-    } catch { /* the issue still goes out, without the file */ } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+    } catch {  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
   const full = gist
     ? `${body}\n\n**Hand-off file with screenshots:** ${gist}\nDownload it and open it in Pinpoint (share menu → Open hand-off file).`
@@ -137,7 +130,6 @@ async function createIssue(cwd, { title, body, attach }) {
   } finally { fs.rmSync(file, { force: true }); }
 }
 
-// Commit message for a run, built from what the user asked for.
 function commitMessage(request, changes, agentName) {
   const firstNote = request.annotations.map((a) => a.note?.trim()).find(Boolean);
   let subject = (request.instruction?.trim() || firstNote || 'Visual edit').split('\n')[0].trim();

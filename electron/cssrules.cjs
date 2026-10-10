@@ -1,6 +1,3 @@
-// Which CSS rules style an element, and where they live in the project. Built on
-// the DevTools protocol's matched-styles data, so the agent can be pointed at
-// the exact rule to edit instead of searching for it.
 const fs = require('node:fs');
 const path = require('node:path');
 const { SourceMapConsumer } = require('source-map-js');
@@ -8,10 +5,9 @@ const { cleanSource } = require('./sourcemap.cjs');
 
 const MAX_RULES = 10;
 const MAX_DECLS = 14;
-// Properties whose winning rule is worth naming (the ones the tweak panel edits).
 const TRACKED = ['padding', 'margin', 'gap', 'border-radius', 'font-size', 'font-weight', 'line-height', 'opacity', 'color', 'background-color'];
 
-const maps = new Map(); // styleSheetId -> SourceMapConsumer | null
+const maps = new Map();
 
 function covers(name, prop) {
   if (name === prop || name.startsWith(prop + '-') || prop.startsWith(name + '-')) return true;
@@ -34,7 +30,7 @@ async function mapFor(header) {
       if (res.ok) raw = await res.text();
     }
     if (raw) consumer = new SourceMapConsumer(JSON.parse(raw));
-  } catch { /* no usable map */ }
+  } catch {  }
   maps.set(header.styleSheetId, consumer);
   if (maps.size > 80) maps.delete(maps.keys().next().value);
   return consumer;
@@ -45,8 +41,6 @@ const rel = (abs, root) => {
   return r && a.toLowerCase().startsWith(r.toLowerCase() + '/') ? a.slice(r.length + 1) : null;
 };
 
-// File and line of a rule: via the sheet's source map, Vite's dev id on the
-// <style> tag, or the sheet's URL when it is a file in the project.
 async function locate(rule, header, { cdp, projectDir, ownerFiles }) {
   if (!header) return {};
   const range = rule.selectorList?.selectors?.[0]?.range || rule.style?.range;
@@ -63,11 +57,10 @@ async function locate(rule, header, { cdp, projectDir, ownerFiles }) {
         const attrs = (await cdp('DOM.describeNode', { backendNodeId: header.ownerNode })).node.attributes || [];
         const i = attrs.indexOf('data-vite-dev-id');
         if (i >= 0) file = rel(attrs[i + 1].replace(/[?#].*$/, ''), projectDir) || attrs[i + 1];
-      } catch { /* node is gone */ }
+      } catch {  }
       ownerFiles.set(header.styleSheetId, file);
     }
     const file = ownerFiles.get(header.styleSheetId);
-    // Plain CSS is injected as written, so lines match; preprocessed files only roughly.
     return file ? { file, line: line0 != null && /\.css$/.test(file) ? line0 + 1 : undefined } : { file: 'inline <style>' };
   }
   if (/^https?:/.test(header.sourceURL || '')) {
@@ -80,9 +73,6 @@ async function locate(rule, header, { cdp, projectDir, ownerFiles }) {
   return {};
 }
 
-// No source map: look the selector up in the source file. Handles nested Sass
-// ("&.big") and CSS-module names ("_card_1x2y3_4", "Button_card__a1B2c") by
-// searching for the last class or id the selector names.
 function guessLine(abs, selector) {
   let text;
   try { if (fs.statSync(abs).size > 600 * 1024) return null; text = fs.readFileSync(abs, 'utf8'); } catch { return null; }
@@ -102,14 +92,13 @@ const authored = (style) => (style?.cssProperties || [])
   .filter((p) => p.range && !p.disabled && p.parsedOk !== false && p.value)
   .map((p) => ({ name: p.name, value: p.value.length > 80 ? p.value.slice(0, 80) + '…' : p.value, important: !!p.important }));
 
-// → [{ selector, media?, file?, line?, declarations, wins }] most specific first.
 async function matched({ cdp, nodeId, sheets, projectDir }) {
   const res = await cdp('CSS.getMatchedStylesForNode', { nodeId });
   const ownerFiles = new Map();
-  const cascade = []; // lowest priority first, as the protocol returns them
+  const cascade = [];
   for (const m of res.matchedCSSRules || []) {
     const r = m.rule;
-    if (r.origin !== 'regular') continue; // skip the browser's own sheet
+    if (r.origin !== 'regular') continue;
     const declarations = authored(r.style);
     if (!declarations.length) continue;
     cascade.push({ rule: r, selector: r.selectorList?.text || '', media: (r.media || []).map((x) => x.text).filter(Boolean).join(' and ') || undefined, declarations });
@@ -117,7 +106,6 @@ async function matched({ cdp, nodeId, sheets, projectDir }) {
   const inline = authored(res.inlineStyle);
   if (inline.length) cascade.push({ rule: null, selector: 'style attribute', declarations: inline });
 
-  // Which rule wins each tracked property: the last one in the cascade, unless an earlier one is !important.
   const winner = {};
   cascade.forEach((c, i) => {
     for (const d of c.declarations) {
@@ -136,7 +124,6 @@ async function matched({ cdp, nodeId, sheets, projectDir }) {
     if (where.file && !where.line && projectDir && !/^(inline|https?:)/.test(where.file)) {
       const line = guessLine(path.resolve(projectDir, where.file), c.selector);
       if (line) { where.line = line; where.approx = true; }
-      // A lone class that isn't written in its sheet is generated (Tailwind and friends): edit the class list instead.
       else if (/^\.[^\s.#:>+~,[]+$/.test(c.selector.replace(/\\./g, 'x'))) where.utility = true;
     }
     out.push({

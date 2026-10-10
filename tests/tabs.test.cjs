@@ -1,6 +1,5 @@
-// Browser tabs: open, switch, annotate on two pages, close, and reopen with the project.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os'), http = require('node:http');
 const repo = process.cwd();
 const NL = String.fromCharCode(10);
@@ -62,7 +61,7 @@ server.listen(0, '127.0.0.1', () => {
       const thumbs = await ui(`Promise.all([...document.querySelectorAll('.ann-thumb')].map(async (t) => { const img = t.querySelector('img'); if (!img) return 'no image'; const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; const x = c.getContext('2d'); x.drawImage(img, 0, 0); const d = x.getImageData(0, 0, c.width, c.height).data; let light = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200) light++; return img.naturalWidth + 'x' + img.naturalHeight + ' light=' + Math.round(100 * light / (d.length / 4)) + '%'; }))`);
       log('annotation close-ups show the page', thumbs.length === 2 && thumbs.every((t) => /light=([5-9]\d|100)%/.test(t)), thumbs.join(' | '));
       log('tabs with annotations are marked', (await ui(`document.querySelectorAll('.tab .tab-pin').length`)) === 2);
-      try { fs.writeFileSync(path.join(OUT, 'tabs.png'), (await host.capturePage()).toPNG()); } catch { /* window covered */ }
+      try { fs.writeFileSync(path.join(OUT, 'tabs.png'), (await host.capturePage()).toPNG()); } catch {  }
       await ui(`document.querySelector('.ann-list .ann').click(); 0`);
       await sleep(700);
       log('clicking an annotation switches to its tab', (await ui(`document.querySelector('.tab.on > span').textContent`)) === 'Home');

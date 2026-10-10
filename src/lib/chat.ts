@@ -1,4 +1,3 @@
-// The shapes a request and a conversation take, and the pure steps that build a transcript.
 import type { Breakpoint } from '../components/DeviceBar';
 import type { FrameTarget } from '../components/BrowserView';
 import { uid } from './draw';
@@ -14,14 +13,11 @@ export interface AgentRequest {
   env?: PageEnv & { frozen: boolean; states?: string[]; profile?: { name: string; detail: string } };
   variant?: { index: number; total: number };
   verify?: { before?: string; after: string; same?: boolean };
-  note?: string; // something Pinpoint did that the agent should know (e.g. which variant was picked)
+  note?: string;
 }
 
-// What kind of run an id is: a normal request, one of several variants, or the automatic check.
-// frame: what the "before" screenshot was aimed at, so the "after" one shows the same place.
 export interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number } }
 
-// Several queued messages become one follow-up, renumbering their annotations.
 export function mergeRequests(reqs: AgentRequest[]): AgentRequest {
   const last = reqs[reqs.length - 1];
   let n = 0;
@@ -34,7 +30,6 @@ export function mergeRequests(reqs: AgentRequest[]): AgentRequest {
 }
 
 export type Delta = { kind: 'text' | 'thinking'; text: string };
-// Streamed tokens are appended to the draft block of the same kind, or start one.
 export function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
   if (!buf.length) return items;
   const next = [...items];
@@ -45,7 +40,6 @@ export function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
   }
   return next;
 }
-// A complete block replaces the streamed draft of the same kind (or is added).
 export function finalizeItems(c: ChatItem[], kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []): ChatItem[] {
   let i = -1;
   for (let j = c.length - 1; j >= 0; j--) { const it = c[j]; if (it.kind === kind && it.streaming) { i = j; break; } }
@@ -53,7 +47,6 @@ export function finalizeItems(c: ChatItem[], kind: 'text' | 'thinking', text: st
   if (i >= 0) return [...c.slice(0, i), ...done, ...c.slice(i + 1), ...extra];
   return [...c, ...done, ...extra];
 }
-// The agent proposes memories with a trailing "REMEMBER: …" line.
 export function splitMemory(text: string): { text: string; extra: ChatItem[] } {
   const m = text.match(/^\s*`?REMEMBER:\s*(.+?)`?\s*$/m);
   return m ? { text: text.replace(m[0], '').trim(), extra: [{ kind: 'memory', id: uid(), text: m[1].trim(), status: 'pending' }] } : { text, extra: [] };
@@ -62,14 +55,11 @@ export function chatTitle(items: ChatItem[]) {
   const first = items.find((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }> | undefined;
   return (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || `${first?.annotations.length || 0} annotation(s)`).slice(0, 80);
 }
-// A chat that isn't on screen but is still alive: its agent is working, and its messages keep arriving.
 export interface ParkedChat {
   id: string; createdAt: number; items: ChatItem[]; session: { id: string; agent: AgentId } | null;
   designAtStart: string | null; runId: string | null; agent: AgentId;
 }
 
-// A saved chat whose last request never finished (app closed mid-run) gets an
-// explicit note instead of hanging on "Starting…" forever.
 export function healChat(items: ChatItem[]): ChatItem[] {
   let lastUser = -1;
   items.forEach((it, i) => { if (it.kind === 'user') lastUser = i; });

@@ -32,7 +32,6 @@ interface Props {
   disabled?: boolean;
 }
 
-// Model + thinking level (one control) and access pickers for the selected agent.
 export function AgentControls({ settings, catalog, onChange, disabled }: Props) {
   const agent = settings.agent;
   const cat = catalog?.[agent];
@@ -43,7 +42,6 @@ export function AgentControls({ settings, catalog, onChange, disabled }: Props) 
 
   const models = cat?.models || [];
   const selectedModel = models.find((m) => m.id === model);
-  // With no explicit model, show the efforts of the model the CLI will use by default.
   const effectiveModel = selectedModel || models.find((m) => m.id === cat?.defaultModel) || models[0];
   const efforts = effectiveModel?.efforts ?? [];
 
@@ -51,7 +49,6 @@ export function AgentControls({ settings, catalog, onChange, disabled }: Props) 
     { value: '', label: 'Default', desc: cat?.defaultLabel },
     ...models.map((m) => ({ value: m.id, label: m.label, desc: m.desc })),
   ];
-  // A model typed in older settings that isn't in the catalog still shows up.
   if (model && !selectedModel) modelItems.push({ value: model, label: model, desc: 'Custom model' });
 
   const defaultEffort = cat?.defaultEffort || effectiveModel?.defaultEffort;
@@ -63,7 +60,6 @@ export function AgentControls({ settings, catalog, onChange, disabled }: Props) 
   const setModel = (id: string) => {
     const next = models.find((m) => m.id === id) || (id ? undefined : effectiveModel);
     const patch: Partial<Settings> = { [modelKey]: id };
-    // Drop a thinking level the new model doesn't support.
     if (effort && next && !next.efforts.includes(effort)) patch[effortKey] = '';
     onChange(patch);
   };

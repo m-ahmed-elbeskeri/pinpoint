@@ -12,13 +12,10 @@ function useClickAway(open: boolean, close: () => void) {
     const fn = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
     window.addEventListener('mousedown', fn);
     return () => window.removeEventListener('mousedown', fn);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
   return ref;
 }
 
-// ---------- component workspace ----------
-// Any component in the project, rendered alone in the page with controls for
-// its props and a grid of its variants.
 interface ComponentsProps {
   render(spec: Omit<WorkspaceSpec, 'left'>): Promise<{ ok: boolean; error?: string } | null>;
   close(): void;
@@ -47,7 +44,6 @@ export function ComponentsPanel({ render, close, onClose }: ComponentsProps) {
   const shown = useMemo(() => (list || []).filter((c) => !query || c.name.toLowerCase().includes(query.toLowerCase())), [list, query]);
   const variantProps = picked?.props.filter((p) => p.type === 'enum' || p.type === 'boolean') || [];
 
-  // Every combination of the first two variant props, or the single current state.
   const cells = (c: ComponentEntry, v: Record<string, unknown>, all: boolean): WorkspaceSpec['cells'] => {
     const clean = Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined && x !== ''));
     const axes = all ? c.props.filter((p) => p.type === 'enum' || p.type === 'boolean').slice(0, 2) : [];
@@ -134,12 +130,9 @@ export function ComponentsPanel({ render, close, onClose }: ComponentsProps) {
   );
 }
 
-// ---------- "view as" profiles ----------
-// A profile is its own browser storage: log in once and that tab stays that
-// user. It can also set the language, time zone, feature flags and headers.
 interface ProfileMenuProps {
   profiles: Profile[];
-  current: string; // '' = the default browser
+  current: string;
   onPick(id: string): void;
   onSave(list: Profile[]): void;
 }
@@ -209,7 +202,6 @@ export function ProfileMenu({ profiles, current, onPick, onSave }: ProfileMenuPr
   );
 }
 
-// ---------- background runs ----------
 interface BgProps {
   runs: BgRun[];
   onApply(run: BgRun): void;
@@ -223,7 +215,7 @@ export function BackgroundRuns({ runs, onApply, onDiscard, onDiff }: BgProps) {
     for (const r of runs) {
       if (r.shot && !shots[r.id]) window.pinpoint.bgShot(r.id).then((s) => { if (s) setShots((prev) => ({ ...prev, [r.id]: s })); }).catch(() => {});
     }
-  }, [runs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runs]);
   if (!runs.length) return null;
   return (
     <div className="bg-runs">
@@ -248,10 +240,9 @@ export function BackgroundRuns({ runs, onApply, onDiscard, onDiff }: BgProps) {
   );
 }
 
-// ---------- other browser engines ----------
 interface EnginesProps {
   url: string;
-  capture(): Promise<string | null>;                 // this page as Pinpoint's own browser (Chromium) shows it
+  capture(): Promise<string | null>;
   shoot(): Promise<Record<string, string | { error: string }>>;
   onCompare(images: { before: string; after: string }, labels: [string, string], title: string): void;
   onClose(): void;
@@ -276,7 +267,7 @@ export function EnginesView({ url, capture, shoot, onCompare, onClose }: Engines
   useEffect(() => {
     window.pinpoint.enginesStatus().then((s) => { setReady(s.ready); if (s.ready) run(); }).catch(() => setReady(false));
     return window.pinpoint.onEnginesProgress(setProgress);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const install = async () => {
     setProgress('Starting…'); setError(null);

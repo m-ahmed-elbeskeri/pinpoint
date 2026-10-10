@@ -1,5 +1,3 @@
-// Renders build/icon.svg to PNGs + a Windows .ico using Electron's offscreen renderer.
-// Run: npx electron scripts/make-icons.cjs
 const { app, BrowserWindow, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -7,7 +5,6 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const svg = fs.readFileSync(path.join(root, 'build', 'icon.svg'), 'utf8');
 
-// ICO containing PNG entries (supported since Windows Vista).
 function toIco(pngs) {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0); header.writeUInt16LE(1, 2); header.writeUInt16LE(pngs.length, 4);

@@ -1,5 +1,3 @@
-// Per-project state: chat history (.pinpoint/chats), personal memory
-// (.pinpoint/memory.json) and shared design rules (DESIGN.md at the root).
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -9,11 +7,9 @@ const safeId = (id) => String(id).replace(/[^\w-]/g, '');
 function ensureDir(root) {
   fs.mkdirSync(pp(root), { recursive: true });
   const gi = pp(root, '.gitignore');
-  // Self-ignoring folder, so we never touch the user's own .gitignore.
   if (!fs.existsSync(gi)) fs.writeFileSync(gi, '*\n');
 }
 
-// ---------- chats ----------
 function listChats(root) {
   const dir = pp(root, 'chats');
   let files = [];
@@ -23,7 +19,7 @@ function listChats(root) {
     try {
       const c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
       out.push({ id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent });
-    } catch { /* skip corrupt */ }
+    } catch {  }
   }
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -46,7 +42,6 @@ function deleteChat(root, id) {
   return true;
 }
 
-// ---------- design rules ----------
 const designPath = (root) => path.join(root, 'DESIGN.md');
 
 function readDesign(root) {
@@ -62,7 +57,6 @@ function writeDesign(root, content) {
   return { path: p, exists: true, content };
 }
 
-// ---------- memory ----------
 function readMemory(root) {
   try { return JSON.parse(fs.readFileSync(pp(root, 'memory.json'), 'utf8')); }
   catch { return []; }
@@ -74,9 +68,6 @@ function writeMemory(root, items) {
   return items;
 }
 
-// ---------- "view as" profiles ----------
-// Each profile is its own browser storage (so its login persists) plus a
-// language, a time zone, flags and headers. Logins live in the app's data, not here.
 function readProfiles(root) {
   try { return JSON.parse(fs.readFileSync(pp(root, 'profiles.json'), 'utf8')); }
   catch { return []; }

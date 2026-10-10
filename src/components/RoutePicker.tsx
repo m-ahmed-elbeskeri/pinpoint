@@ -5,13 +5,12 @@ import type { RouteInfo } from '../lib/types';
 interface Props {
   routes: RouteInfo[];
   current: RouteInfo | null;
-  baseUrl: string;              // origin (http) or project root file URL
+  baseUrl: string;
   getLinks(): Promise<{ href: string; text: string }[]>;
   onGo(url: string): void;
-  onEdit(url: string): void;    // dynamic routes go to the URL bar for filling in
+  onEdit(url: string): void;
 }
 
-// Lists the app's pages (from the file system) and the links on the current page.
 export function RoutePicker({ routes, current, baseUrl, getLinks, onGo, onEdit }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -25,11 +24,11 @@ export function RoutePicker({ routes, current, baseUrl, getLinks, onGo, onEdit }
     const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const match = (s: string) => s.toLowerCase().includes(q.toLowerCase());
-  const shownRoutes = useMemo(() => routes.filter((r) => match(r.route) || match(r.file)), [routes, q]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shownLinks = useMemo(() => links.filter((l) => match(l.href) || match(l.text)).slice(0, 40), [links, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownRoutes = useMemo(() => routes.filter((r) => match(r.route) || match(r.file)), [routes, q]);
+  const shownLinks = useMemo(() => links.filter((l) => match(l.href) || match(l.text)).slice(0, 40), [links, q]);
 
   const toUrl = (route: string) => baseUrl.replace(/\/$/, '') + (route.startsWith('/') ? route : '/' + route);
   const pick = (r: RouteInfo) => {

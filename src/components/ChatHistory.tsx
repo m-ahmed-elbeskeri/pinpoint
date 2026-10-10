@@ -5,7 +5,7 @@ import type { ChatMeta, OtherChat } from '../lib/types';
 interface Props {
   currentId: string | null;
   disabled: boolean;
-  others: OtherChat[];   // chats that are working, or finished since you last looked
+  others: OtherChat[];
   onOpen(id: string): void;
   onDelete(id: string): void;
 }
@@ -19,7 +19,6 @@ function ago(t: number) {
   return new Date(t).toLocaleDateString();
 }
 
-// Past conversations for this project (saved under .pinpoint/chats).
 export function ChatHistory({ currentId, disabled, others, onOpen, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const [chats, setChats] = useState<ChatMeta[]>([]);

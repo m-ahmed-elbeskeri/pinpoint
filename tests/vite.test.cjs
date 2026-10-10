@@ -1,8 +1,5 @@
-// Round 9: a real Vite + React project in the real app.
-// Instant edits (text, CSS rule, reorder), drag to resize and reorder, the
-// component workspace, and "view as" profiles.
-const OUT = process.env.PP_OUT || __dirname;         // where results, screenshots and built helpers go
-const FIX = process.env.PP_FIXTURES || __dirname;    // real projects some suites run against
+const OUT = process.env.PP_OUT || __dirname;
+const FIX = process.env.PP_FIXTURES || __dirname;
 const path = require('node:path'), fs = require('node:fs'), os = require('node:os');
 const { spawn, execSync } = require('node:child_process');
 const repo = process.cwd();
@@ -11,7 +8,6 @@ const out = [];
 const log = (name, ok, extra = '') => { out.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + String(extra).slice(0, 300) : ''}`); fs.writeFileSync(path.join(OUT, 'vite.out'), out.join(NL) + NL); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ---- the project (fresh sources each run; node_modules stays)
 const proj = path.join(FIX, 'viteapp');
 const w = (rel, text) => { fs.mkdirSync(path.dirname(path.join(proj, rel)), { recursive: true }); fs.writeFileSync(path.join(proj, rel), text); };
 fs.rmSync(path.join(proj, '.pinpoint'), { recursive: true, force: true });
@@ -92,7 +88,6 @@ app.whenReady().then(async () => {
     const g = guests()[0];
     log('vite app loaded', /Vite demo/.test(g.getTitle()), g.getTitle());
 
-    // ---- instant text edit
     log('picked the heading', await pick(g, 'h1'));
     await tabBtn('Content');
     await sleep(200);
@@ -105,12 +100,10 @@ app.whenReady().then(async () => {
     log('hot reload shows it', (await until(() => g.executeJavaScript(`document.querySelector('h1').textContent === 'Winter sale'`), 5000)) === true);
     const card = await ui(`[...document.querySelectorAll('.done-card .done-head > span:first-of-type')].map((s) => s.textContent).join(' | ')`);
     log('shown in the chat as an instant edit', /Applied instantly · 1 file/.test(card), card);
-    // undo it from the card
     await ui(`[...document.querySelectorAll('.done-card .done-actions .btn')].find((b) => b.title.startsWith('Restore')).click(); 0`);
     await sleep(1200);
     log('undo restores the source', read('src/App.jsx') === APP);
 
-    // ---- instant style tweak -> the CSS rule
     log('picked the heading again', await pick(g, 'h1'));
     await tabBtn('Styles');
     await sleep(200);
@@ -121,10 +114,9 @@ app.whenReady().then(async () => {
     await sleep(1500);
     log('css rule edited in place', read('src/app.css').includes('.title {\n  margin: 0;\n  padding: 20px;\n  color: #222;\n}'), JSON.stringify(read('src/app.css').slice(120, 200)));
 
-    // ---- drag: resize by the right edge, then reorder by dragging the body
     log('picked the paragraph', await pick(g, 'p.lead'));
     await key('Escape'); await sleep(200);
-    await ui(`document.querySelector('.ann-list .ann').click(); 0`); // make it the selected one again
+    await ui(`document.querySelector('.ann-list .ann').click(); 0`);
     await key('s'); await sleep(300);
     g.focus();
     let r = await rectOf(g, 'p.lead');
@@ -145,20 +137,16 @@ app.whenReady().then(async () => {
     const order = await g.executeJavaScript(`[...document.querySelector('main').children].map((c) => c.tagName).join()`);
     const sub2 = await ui(`document.querySelector('.ann-list .ann-sub').textContent`);
     log('dragging the body moves it among its siblings', order === 'H1,BUTTON,FOOTER,P' && /moved to 4/.test(sub2), `${order} / ${sub2}`);
-    // apply the reorder (and the width) straight to the source
     await ui(`document.querySelector('.ann-list .ann').click(); 0`);
     await key('Escape'); await sleep(200);
-    // reopen its note: pick again would create a second pin, so reset the width tweak and apply from a fresh pick of the moved element
     log('picked the moved paragraph', await pick(g, 'p.lead'));
     await sleep(400);
-    await ui(`document.querySelector('.note-pop .note-pop-foot .btn.ghost').click(); 0`); // remove the second pin
+    await ui(`document.querySelector('.note-pop .note-pop-foot .btn.ghost').click(); 0`);
     await sleep(300);
     const src0 = read('src/App.jsx');
-    // drive the apply through the same API the button uses, for the first annotation
     const plan = await ui(`(async () => { const lines = [...document.querySelectorAll('.ann-list .ann-sub')].map((s) => s.textContent); return lines.join(' | '); })()`);
     log('annotation still carries the move', /moved to 4/.test(plan), plan);
 
-    // ---- component workspace
     await key('Escape');
     await ui(`[...document.querySelectorAll('.vp-toggles > button')].find((b) => b.title.startsWith('Components')).click(); 0`);
     const names = await until(() => ui(`(() => { const l = [...document.querySelectorAll('.ws-list li b')].map((b) => b.textContent); return l.length ? l.join() : ''; })()`), 8000);
@@ -179,7 +167,6 @@ app.whenReady().then(async () => {
     await sleep(400);
     log('closing the workspace gives the page back', (await g.executeJavaScript(`!document.getElementById('pinpoint-workspace')`)) === true);
 
-    // ---- view as: its own storage, flags, language, time zone
     await g.executeJavaScript(`document.cookie = 'who=default; path=/'; localStorage.setItem('mine', '1'); 0`);
     await ui(`document.querySelector('.profile-btn').click(); 0`);
     await sleep(300);

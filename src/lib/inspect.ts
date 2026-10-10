@@ -1,12 +1,8 @@
-// Runs in the page's main world (via webview.executeJavaScript) so it can read
-// the framework's dev-only metadata that the isolated preload cannot see.
-// Returns { file, line, column, components, framework } for [data-pinpoint=uid].
 function locate(uid: string) {
   const el = document.querySelector(`[data-pinpoint="${uid}"]`) as any;
   if (!el) return null;
   const out: { file?: string; line?: number; column?: number; components: string[]; framework?: string; frame?: { url: string; line: number; column: number }; owner?: string; props?: Record<string, string> } = { components: [] };
 
-  // Props as short strings: enough to tell which variant of a component this is.
   const summarize = (props: any) => {
     const o: Record<string, string> = {};
     if (!props || typeof props !== 'object') return o;
@@ -31,12 +27,11 @@ function locate(uid: string) {
         f = decodeURIComponent(new URL(f).pathname);
         f = f.replace(/^\/@fs\//, '').replace(/^\/_next\/static\/chunks\//, '');
       }
-    } catch { /* keep raw */ }
+    } catch {  }
     return f.replace(/[?#].*$/, '');
   };
   const vendor = /node_modules|react-dom|react-server|scheduler|\/chunks\/|jsx-dev-runtime|\.vite\/deps/;
 
-  // Attributes some toolchains add in dev (Astro, react-dev-inspector, babel plugins).
   for (let c = el; c && c.nodeType === 1 && !out.file; c = c.parentElement) {
     const astroFile = c.getAttribute('data-astro-source-file');
     if (astroFile) {
@@ -60,7 +55,6 @@ function locate(uid: string) {
     }
   }
 
-  // React (fiber). React ≤18 has _debugSource; React 19 only has _debugStack.
   const fiberKey = Object.keys(el).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
   if (fiberKey) {
     out.framework = out.framework || 'React';
@@ -74,7 +68,6 @@ function locate(uid: string) {
         for (const fr of frames) {
           const m = fr.match(/\(?((?:https?|webpack-internal|file):\/\/?[^\s)]+?):(\d+):(\d+)\)?\s*$/);
           if (m && !vendor.test(m[1])) {
-            // Line numbers here are in compiled code; the host resolves them via source maps.
             out.file = cleanFile(m[1]);
             out.frame = { url: m[1], line: +m[2], column: +m[3] };
             break;
@@ -93,7 +86,6 @@ function locate(uid: string) {
     out.components = names.slice(0, 6).reverse();
   }
 
-  // Vue 3 / Vue 2
   if (!fiberKey) {
     let inst = el.__vueParentComponent;
     if (!inst) for (let c = el; c && !inst; c = c.parentElement) inst = c.__vueParentComponent;
@@ -116,19 +108,17 @@ function locate(uid: string) {
     }
   }
 
-  // Svelte (dev builds attach __svelte_meta)
   for (let c = el; c && !out.file; c = c.parentElement) {
     const meta = c.__svelte_meta;
     if (meta?.loc) { out.file = meta.loc.file; out.line = meta.loc.line + (meta.loc.line === 0 ? 1 : 0); out.column = meta.loc.column; out.framework = 'Svelte'; }
   }
 
-  // Angular (dev mode exposes window.ng)
   const ng = (window as any).ng;
   if (ng?.getOwningComponent) {
     try {
       const comp = ng.getOwningComponent(el) || ng.getComponent(el);
       if (comp) { out.framework = 'Angular'; out.components = [comp.constructor.name.replace(/^_/, '')]; }
-    } catch { /* not in dev mode */ }
+    } catch {  }
   }
 
   if (out.file) out.file = cleanFile(out.file);
