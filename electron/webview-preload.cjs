@@ -436,7 +436,17 @@ function onKey(e) {
 let manip = null;
 let suppressClick = false;
 const EDGE = 7;
-const activeEl = () => { const m = markers.find((x) => x.active); return m ? byUid(m.uid) : null; };
+let activeHit = null;
+const activeEl = () => {
+  const m = markers.find((x) => x.active);
+  if (!m) return null;
+  if (activeHit && activeHit.uid === m.uid && activeHit.el.isConnected && activeHit.el.getAttribute('data-pinpoint') === m.uid) return activeHit.el;
+  const el = byUid(m.uid);
+  activeHit = el ? { uid: m.uid, el } : null;
+  return el;
+};
+let cursorNow = null;
+const setCursor = (c) => { if (c !== cursorNow) { cursorNow = c; document.documentElement.style.cursor = c; } };
 
 function zoneAt(el, x, y) {
   const r = el.getBoundingClientRect();
@@ -482,7 +492,7 @@ function manipMove(e) {
   if (!manip) {
     const el = activeEl();
     const z = el && zoneAt(el, e.clientX, e.clientY);
-    document.documentElement.style.cursor = z === 'x' ? 'ew-resize' : z === 'y' ? 'ns-resize' : z === 'xy' ? 'nwse-resize' : z === 'move' ? 'grab' : 'crosshair';
+    setCursor(z === 'x' ? 'ew-resize' : z === 'y' ? 'ns-resize' : z === 'xy' ? 'nwse-resize' : z === 'move' ? 'grab' : 'crosshair');
     return;
   }
   const dx = e.clientX - manip.x, dy = e.clientY - manip.y;
@@ -776,9 +786,11 @@ ipcRenderer.on('injectCss', (_e, css) => {
 
 let syncedAt = 0;
 let scrollQueued = false;
+let scrollShared = false;
+ipcRenderer.on('scrollSync', (_e, on) => { scrollShared = !!on; });
 const scrollRoom = () => Math.max(1, document.documentElement.scrollHeight - innerHeight);
 window.addEventListener('scroll', () => {
-  if (scrollQueued || Date.now() - syncedAt < 250) return;
+  if (!scrollShared || scrollQueued || Date.now() - syncedAt < 250) return;
   scrollQueued = true;
   requestAnimationFrame(() => { scrollQueued = false; ipcRenderer.sendToHost('scroll', scrollY / scrollRoom()); });
 }, { capture: true, passive: true });

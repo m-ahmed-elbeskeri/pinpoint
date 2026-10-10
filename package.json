@@ -1,7 +1,7 @@
 {
   "name": "pinpoint",
   "productName": "Pinpoint",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Point at it. Draw on it. Ship it. A desktop visual editor that lets Claude Code or Codex change your web app from clicks, drawings and sketches.",
   "keywords": [
     "electron",

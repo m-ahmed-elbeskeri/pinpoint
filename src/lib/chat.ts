@@ -60,12 +60,18 @@ export interface ParkedChat {
   designAtStart: string | null; runId: string | null; agent: AgentId;
 }
 
+const INTERRUPTED = 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.';
+
 export function healChat(items: ChatItem[]): ChatItem[] {
+  const noted = (it: ChatItem) => it.kind === 'error' && it.text === INTERRUPTED;
+  let seen = false;
+  const once = items.filter((it) => { if (!noted(it)) { seen = false; return true; } const keep = !seen; seen = true; return keep; });
+  const list = once.length === items.length ? items : once;
   let lastUser = -1;
-  items.forEach((it, i) => { if (it.kind === 'user') lastUser = i; });
-  if (lastUser < 0 || items.slice(lastUser).some((it) => it.kind === 'done')) return items;
+  list.forEach((it, i) => { if (it.kind === 'user') lastUser = i; });
+  if (lastUser < 0 || list.slice(lastUser).some((it) => it.kind === 'done' || noted(it))) return list;
   return [
-    ...items.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
-    { kind: 'error', id: uid(), text: 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.' },
+    ...list.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
+    { kind: 'error', id: uid(), text: INTERRUPTED },
   ];
 }

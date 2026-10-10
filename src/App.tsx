@@ -39,6 +39,7 @@ import { chatTitle, finalizeItems, healChat, mergeDeltas, mergeRequests, splitMe
 import { describe, handoffMarkdown, toPlaywright } from './lib/handoff';
 import { clampRect, errText, readImage, stripAnsi } from './lib/util';
 import { useShapes } from './lib/useShapes';
+import { layoutReport } from './lib/layoutReport';
 import { useChatScroll, useLogs, usePageProblems, useRequests, useStableActions } from './lib/hooks';
 import { NetworkPanel, failed as requestFailed, pathOf } from './components/NetworkPanel';
 import { TopBar } from './components/TopBar';
@@ -1218,7 +1219,7 @@ export default function App() {
     if (meta.verify || !e.ok || !settingsRef.current?.autoVerify) return;
     if (verifyPending.current !== e.runId || runRef.current || queuedRef.current.length) return;
     verifyPending.current = null;
-    const shots = await api.runShots(e.runId).catch(() => ({} as Record<string, string>));
+    const shots = await api.runShots(e.runId, ['before', 'after']).catch(() => ({} as Record<string, string>));
     if (!shots.after) return;
     const flow = runFlowRef.current[e.runId];
     if (flow) {
@@ -1605,6 +1606,7 @@ export default function App() {
       const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
       const m = modeRef.current;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { togglePanel(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') { navigator.clipboard?.writeText(layoutReport()); flash('Layout report copied. Paste it wherever you report the problem.'); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') { newTab(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing && (m === 'draw' || m === 'sketch')) {
         const target = m === 'sketch' ? sketch : page;

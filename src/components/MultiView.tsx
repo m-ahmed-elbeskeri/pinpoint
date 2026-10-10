@@ -38,13 +38,17 @@ export function MultiView({ url, onNavigate, onPick, onClose }: Props) {
     const offs = views.current.map((v, i) => {
       if (!v) return () => {};
       const onMsg = (e: any) => {
+        if (e.channel === 'ready') { (v as any).send('scrollSync', true); return; }
         if (e.channel !== 'scroll') return;
         views.current.forEach((o, j) => { if (o && j !== i) (o as any).send('syncScroll', e.args?.[0] ?? 0); });
       };
       const onNav = (e: any) => { if (e.url && e.url !== url) cb.current(e.url); };
+      const share = () => { try { (v as any).send('scrollSync', true); } catch { return; } };
+      v.addEventListener('dom-ready', share);
+      share();
       v.addEventListener('ipc-message', onMsg);
       v.addEventListener('did-navigate', onNav);
-      return () => { v.removeEventListener('ipc-message', onMsg); v.removeEventListener('did-navigate', onNav); };
+      return () => { v.removeEventListener('dom-ready', share); v.removeEventListener('ipc-message', onMsg); v.removeEventListener('did-navigate', onNav); };
     });
     return () => offs.forEach((off) => off());
   }, [url]);

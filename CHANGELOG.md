@@ -4,6 +4,21 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-10
+
+### Faster
+
+- **The app starts lighter.** Only the icon weights the app draws are bundled, which takes the main script from 671 kB to 481 kB.
+- **Settings are read once**, not from disk on every request to the main process; a run's card loads only the two screenshots it shows; the page stops reporting scroll position unless the side-by-side sizes view is open.
+
+### Fixed
+
+- **"This run was interrupted" appeared again each time the app opened that chat.** It is shown once, and chats that collected several are cleaned up when opened.
+
+### Added
+
+- **Layout report.** Ctrl/Cmd+Shift+L copies the sizes of the side panel's parts, for reporting a layout that looks wrong.
+
 ## [0.5.0] - 2026-10-10
 
 ### Added
@@ -197,7 +212,8 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.2...v0.4.3

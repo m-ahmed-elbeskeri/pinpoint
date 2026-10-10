@@ -99,7 +99,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   gitCommitAll: (message) => ipcRenderer.invoke('git:commitAll', message),
   gitOpenPR: (args) => ipcRenderer.invoke('git:pr', args),
   saveShot: (runId, name, dataUrl) => ipcRenderer.invoke('run:saveShot', { runId, name, dataUrl }),
-  runShots: (runId) => ipcRenderer.invoke('run:shots', runId),
+  runShots: (runId, names) => ipcRenderer.invoke('run:shots', runId, names),
   onAgentEvent: on('agent:event'),
   startDev: (command) => ipcRenderer.invoke('dev:start', { command }),
   detectDev: () => ipcRenderer.invoke('dev:detect'),

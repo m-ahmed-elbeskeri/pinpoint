@@ -151,16 +151,17 @@ function saveShotBuffer(root, runId, name, buf, ext = 'jpg') {
   fs.writeFileSync(path.join(dir, `shot-${name.replace(/[^\w-]/g, '')}.${ext}`), buf);
 }
 
-function shots(root, runId) {
+async function shots(root, runId, names) {
   const dir = runDir(root, runId);
   let files = [];
-  try { files = fs.readdirSync(dir).filter((f) => /^shot-/.test(f)); } catch { return {}; }
+  try { files = (await fs.promises.readdir(dir)).filter((f) => /^shot-/.test(f)); } catch { return {}; }
   const out = {};
-  for (const f of files) {
+  await Promise.all(files.map(async (f) => {
     const name = f.replace(/^shot-/, '').replace(/\.\w+$/, '');
+    if (names && !names.includes(name)) return;
     const mime = f.endsWith('.jpg') ? 'image/jpeg' : 'image/png';
-    out[name] = `data:${mime};base64,${fs.readFileSync(path.join(dir, f)).toString('base64')}`;
-  }
+    try { out[name] = `data:${mime};base64,${(await fs.promises.readFile(path.join(dir, f))).toString('base64')}`; } catch { return; }
+  }));
   return out;
 }
 

@@ -355,7 +355,7 @@ export interface PinpointAPI {
   gitCommitAll(message: string): Promise<GitCommit>;
   gitOpenPR(args: { title: string; body: string; draft?: boolean }): Promise<{ url: string; existed: boolean }>;
   saveShot(runId: string, name: string, dataUrl: string): Promise<boolean>;
-  runShots(runId: string): Promise<Record<string, string>>;
+  runShots(runId: string, names?: string[]): Promise<Record<string, string>>;
   onAgentEvent(cb: (e: AgentEvent) => void): () => void;
   startDev(command: string): Promise<boolean>;
   detectDev(): Promise<DevDetection>;

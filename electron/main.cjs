@@ -62,14 +62,22 @@ const DEFAULT_SETTINGS = {
   perfCheck: true,
   layoutOverlay: true,
 };
+let settingsNow = null;
+let settingsStamp = '';
+const stampOf = () => { try { const st = fs.statSync(settingsFile()); return `${st.mtimeMs}:${st.size}`; } catch { return ''; } };
 function loadSettings() {
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; }
-  catch { return { ...DEFAULT_SETTINGS }; }
+  const stamp = stampOf();
+  if (settingsNow && stamp === settingsStamp) return { ...settingsNow };
+  try { settingsNow = { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }; settingsStamp = stamp; }
+  catch { settingsNow = null; return { ...DEFAULT_SETTINGS }; }
+  return { ...settingsNow };
 }
 function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
   fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
   fs.writeFileSync(settingsFile(), JSON.stringify(next, null, 2));
+  settingsNow = next;
+  settingsStamp = stampOf();
   return next;
 }
 
@@ -777,7 +785,7 @@ ipcMain.handle('bg:start', async (e, { id, request }) => {
   return true;
 });
 ipcMain.handle('bg:diff', (_e, id) => bgRuns.get(id)?.patch || '');
-ipcMain.handle('bg:shot', (_e, id) => runs.shots(projectDir(), `bg-${id}`).after || null);
+ipcMain.handle('bg:shot', async (_e, id) => (await runs.shots(projectDir(), `bg-${id}`, ['after'])).after || null);
 ipcMain.handle('bg:apply', async (_e, { id, runId, instruction }) => {
   const entry = bgRuns.get(id);
   if (!entry) throw new Error('That background run is gone.');
@@ -885,7 +893,7 @@ ipcMain.handle('run:saveShot', (_e, { runId, name, dataUrl }) => {
   runs.saveShot(projectDir(), runId, name, dataUrl);
   return true;
 });
-ipcMain.handle('run:shots', (_e, runId) => runs.shots(projectDir(), runId));
+ipcMain.handle('run:shots', (_e, runId, names) => runs.shots(projectDir(), runId, Array.isArray(names) ? names : undefined));
 
 ipcMain.handle('sourcemap:resolve', (_e, frame) => sourcemap.resolve(frame, loadSettings().projectDir));
 

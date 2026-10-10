@@ -19,7 +19,7 @@ function ShotStrip({ runId, onOpen }: { runId: string; onOpen(): void }) {
   const [shots, setShots] = useState<Record<string, string> | null>(null);
   useEffect(() => {
     let live = true;
-    if (!shotCache.has(runId)) shotCache.set(runId, window.pinpoint.runShots(runId).catch(() => ({})));
+    if (!shotCache.has(runId)) shotCache.set(runId, window.pinpoint.runShots(runId, ['before', 'after']).catch(() => ({})));
     shotCache.get(runId)!.then((s) => { if (live) setShots(s); });
     return () => { live = false; };
   }, [runId]);
@@ -108,7 +108,7 @@ function VariantPicker({ item, busy, onPick, onCompare }: {
   useEffect(() => {
     let live = true;
     for (const o of item.options) {
-      window.pinpoint.runShots(o.runId).then((s) => { if (live) setShots((prev) => ({ ...prev, [o.runId]: s.after })); }).catch(() => {});
+      window.pinpoint.runShots(o.runId, ['after']).then((s) => { if (live) setShots((prev) => ({ ...prev, [o.runId]: s.after })); }).catch(() => {});
     }
     return () => { live = false; };
   }, [item.options]);
