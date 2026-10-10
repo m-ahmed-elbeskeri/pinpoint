@@ -3,9 +3,10 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, CornerDownRight, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+  ExternalLink, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
 } from './icons';
-import type { BuildSize, ChatItem, DiffFile, FileChange, PerfMetrics, RevertResult } from '../lib/types';
+import { flowVerdict } from '../lib/flow';
+import type { BuildSize, ChatItem, DiffFile, FileChange, FlowResult, PerfMetrics, RevertResult } from '../lib/types';
 
 const diffCache = new Map<string, Promise<DiffFile[]>>();
 const loadDiff = (runId: string) => {
@@ -60,6 +61,21 @@ function PerfLine({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } 
   );
 }
 
+function FlowLine({ flow, onFix }: { flow: FlowResult; onFix(): void }) {
+  const v = flowVerdict(flow);
+  const detail = [...flow.errors, ...flow.failed];
+  return (
+    <div className={`flow-check ${v.ok ? 'ok' : 'bad'}`}>
+      <div className="flow-head">
+        {v.ok ? <SealCheck size={13} weight="fill" /> : <AlertTriangle size={13} />}
+        <span>{v.text}</span>
+        {!v.ok && <button className="link-btn" onClick={onFix}>Ask to fix</button>}
+      </div>
+      {detail.length > 0 && <ul>{detail.slice(0, 4).map((d) => <li key={d}>{d}</li>)}</ul>}
+    </div>
+  );
+}
+
 function PerfStats({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } }) {
   const { before: b, after: a } = perf;
   const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
@@ -100,9 +116,9 @@ function BuildLine({ build }: { build: { now: BuildSize; previous: BuildSize | n
   );
 }
 
-function VariantPicker({ item, busy, onPick, onCompare }: {
+function VariantPicker({ item, busy, onPick, onCompare, onLive }: {
   item: Extract<ChatItem, { kind: 'variants' }>; busy: boolean;
-  onPick(runId: string): void; onCompare(runId: string): void;
+  onPick(runId: string): void; onCompare(runId: string): void; onLive(): void;
 }) {
   const [shots, setShots] = useState<Record<string, string | undefined>>({});
   useEffect(() => {
@@ -131,6 +147,7 @@ function VariantPicker({ item, busy, onPick, onCompare }: {
           </figure>
         ))}
       </div>
+      <button className="btn xs variants-live-btn" disabled={busy} onClick={onLive} title="Run each variant in its own copy of the project and show them next to each other, live"><Columns2 size={12} /> See them live, side by side</button>
     </div>
   );
 }
@@ -354,6 +371,9 @@ interface ItemProps {
   onCompare(runId: string, pair?: string): void;
   onPickVariant(itemId: string, runId: string): void;
   onMeasureBuild(runId: string): void;
+  onOpenLocal(): void;
+  onFlowFix(runId: string): void;
+  onVariantsLive(itemId: string): void;
   gitRepo: boolean;
 }
 
@@ -365,7 +385,7 @@ const STEER_TAG = {
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
 
-export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, gitRepo }: ItemProps) {
+export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
   const [loadStats, setLoadStats] = useState(false);
   switch (item.kind) {
     case 'user': {
@@ -428,13 +448,13 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
         </div>
       );
     case 'variants':
-      return <VariantPicker item={item} busy={busy} onPick={(runId) => onPickVariant(item.id, runId)} onCompare={(runId) => onCompare(runId)} />;
+      return <VariantPicker item={item} busy={busy} onPick={(runId) => onPickVariant(item.id, runId)} onCompare={(runId) => onCompare(runId)} onLive={() => onVariantsLive(item.id)} />;
     case 'done': {
       const n = item.changes.length;
       const files = `${n} file${n > 1 ? 's' : ''}`;
       const moved = item.routeCheck?.filter((r) => r.changed) || [];
       const here = item.routeCheck?.find((r) => r.current);
-      const noVisual = n > 0 && item.ok && !item.undone && !item.variant && !item.verify && (here ? !here.changed : item.visual === 'none');
+      const noVisual = n > 0 && item.ok && !item.undone && !item.variant && !item.verify && !item.unseen && (here ? !here.changed : item.visual === 'none');
       const elsewhere = moved.filter((r) => !r.current);
       const sideEffects = moved.some((r) => r.current && r.asked?.length && r.areas?.length);
       const others = (item.routeCheck?.filter((r) => !r.current) || []).length;
@@ -488,6 +508,15 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
               </div>
             </div>
           )}
+          {item.unseen && n > 0 && !item.undone && (
+            <div className="no-visual unseen">
+              <EyeOff size={14} />
+              <div>
+                <b>{item.unseen === 'live' ? "Not visible here yet: you're on the live site" : 'Not visible here yet: this is a built copy'}</b>
+                <span>{item.unseen === 'live' ? 'The files in your project were edited. The deployed page will show the change once you deploy it.' : 'The files were edited, but this page is served from a build made earlier. It shows the change once it is rebuilt.'} <button className="link-btn" onClick={onOpenLocal}>See it locally</button></span>
+              </div>
+            </div>
+          )}
           {item.shots && !noVisual && <ShotStrip runId={item.runId} onOpen={() => onCompare(item.runId)} />}
           {item.routeCheck && (
             <div className={`where ${elsewhere.length || sideEffects ? 'moved' : ''}`}>
@@ -509,6 +538,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
               ))}
             </div>
           )}
+          {item.flow && <FlowLine flow={item.flow} onFix={() => onFlowFix(item.runId)} />}
           {item.perf && <PerfLine perf={item.perf} />}
           {item.perf && loadStats && <PerfStats perf={item.perf} />}
           {item.build && <BuildLine build={item.build} />}

@@ -24,6 +24,7 @@ const SUITES = [
   { name: 'terminal', runner: 'electron', window: true, about: 'the terminal in the drawer' },
   { name: 'background', runner: 'electron', window: true, about: 'background runs in git worktrees' },
   { name: 'network', runner: 'electron', window: true, about: 'API requests: list, handler, send again, mocks' },
+  { name: 'reach', runner: 'electron', window: true, about: 'local or live, page sweep, review link, replayed steps, PR screenshots' },
   { name: 'vite', runner: 'electron', window: true, needs: 'viteapp', about: 'instant edits, drag, workspace, profiles on a Vite project' },
   { name: 'engines', runner: 'electron', optIn: 'engines', about: 'WebKit and Firefox rendering' },
 ];
@@ -32,9 +33,9 @@ const out = fs.mkdtempSync(path.join(os.tmpdir(), 'pinpoint-tests-'));
 
 async function helpers() {
   const vite = await import('vite');
-  for (const [name, src] of [['tokens', 'src/lib/tokens.ts'], ['a11y', 'src/lib/a11y.ts'], ['pagetools', 'src/lib/pagetools.ts'], ['inspect', 'src/lib/inspect.ts'], ['DeviceBar', 'src/components/DeviceBar.tsx']]) {
+  for (const [name, src] of [['tokens', 'src/lib/tokens.ts'], ['a11y', 'src/lib/a11y.ts'], ['pagetools', 'src/lib/pagetools.ts'], ['inspect', 'src/lib/inspect.ts'], ['DeviceBar', 'src/components/DeviceBar.tsx'], ['site', 'src/lib/site.ts'], ['sweep', 'src/lib/sweep.ts'], ['flow', 'src/lib/flow.ts']]) {
     const r = await vite.transformWithOxc(fs.readFileSync(path.join(repo, src), 'utf8'), src);
-    fs.writeFileSync(path.join(out, `${name}.cjs`), r.code.replace(/^import .*$/gm, '').replace(/export const (\w+) =/g, 'exports.$1 =').replace(/export function (\w+)/g, 'exports.$1 = function $1'));
+    fs.writeFileSync(path.join(out, `${name}.cjs`), r.code.replace(/^import .*$/gm, '').replace(/export const (\w+) =/g, 'exports.$1 =').replace(/export function (\w+)/g, 'exports.$1 = $1; function $1'));
   }
 }
 

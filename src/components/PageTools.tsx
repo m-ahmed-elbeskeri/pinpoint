@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Download, FlaskConical, Layers, Loader2, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from './icons';
+import { Check, Download, FlaskConical, Layers, Loader2, MessageSquare, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from './icons';
 import type { NetworkMode, PageEnv, Pin } from '../lib/types';
 
 function useClickAway(open: boolean, close: () => void) {
@@ -257,18 +257,20 @@ export function PinsChip({ projectDir, url, title, onCompare, flash }: PinsProps
 interface HandoffProps {
   hasRequest: boolean;
   canIssue: boolean;
-  onExport(): void; onCopy(): void; onIssue(): void; onImport(): void;
+  onExport(): void; onCopy(): void; onIssue(): void; onImport(): void; onReview(): void;
+  reviewCount: number; reviewing: boolean;
 }
 
-export function HandoffMenu({ hasRequest, canIssue, onExport, onCopy, onIssue, onImport }: HandoffProps) {
+export function HandoffMenu({ hasRequest, canIssue, onExport, onCopy, onIssue, onImport, onReview, reviewCount, reviewing }: HandoffProps) {
   const [open, setOpen] = useState(false);
   const ref = useClickAway(open, () => setOpen(false));
   const pick = (fn: () => void) => () => { setOpen(false); fn(); };
   return (
     <div className="git-wrap" ref={ref}>
-      <button className={`icon-btn attach-btn ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} title="Hand off: save this request for someone else to run, or open one"><Share2 size={15} /></button>
+      <button className={`icon-btn attach-btn ${open ? 'on' : ''}`} onClick={() => setOpen(!open)} title={reviewCount ? `${reviewCount} review comment${reviewCount > 1 ? 's' : ''} waiting` : 'Share: get comments from someone else, or hand a request to whoever will run it'}><Share2 size={15} />{reviewCount > 0 ? <b>{reviewCount}</b> : reviewing ? <i className="live-dot abs" /> : null}</button>
       {open && (
         <div className="git-pop handoff-pop">
+          <button onClick={pick(onReview)}><MessageSquare size={13} /><span><b>Get comments on this site…</b><small>{reviewCount ? `${reviewCount} comment${reviewCount > 1 ? 's' : ''} waiting` : reviewing ? 'Sharing now. Open to see the link and comments' : 'A link for someone on your network: they click and comment, it lands here'}</small></span></button>
           <button disabled={!hasRequest} onClick={pick(onExport)}><Download size={13} /><span><b>Save hand-off file…</b><small>Your notes, picks and screenshots in one file</small></span></button>
           <button disabled={!hasRequest} onClick={pick(onCopy)}><Share2 size={13} /><span><b>Copy as Markdown</b><small>Paste into an issue, a ticket or chat</small></span></button>
           <button disabled={!hasRequest || !canIssue} onClick={pick(onIssue)}><Share2 size={13} /><span><b>Create GitHub issue</b><small>{canIssue ? 'Screenshots go in a secret gist linked from the issue' : 'Needs the GitHub CLI, signed in'}</small></span></button>

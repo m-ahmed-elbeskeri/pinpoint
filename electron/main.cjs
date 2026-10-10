@@ -24,6 +24,8 @@ const components = require('./components.cjs');
 const background = require('./background.cjs');
 const engines = require('./engines.cjs');
 const updater = require('./updater.cjs');
+const sweep = require('./sweep.cjs');
+const review = require('./review.cjs');
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 if (process.env.PINPOINT_USER_DATA) app.setPath('userData', process.env.PINPOINT_USER_DATA);
@@ -61,6 +63,7 @@ const DEFAULT_SETTINGS = {
   a11yCheck: true,
   perfCheck: true,
   layoutOverlay: true,
+  liveUrl: '',
 };
 let settingsNow = null;
 let settingsStamp = '';
@@ -99,6 +102,8 @@ function fixPath() {
 fixPath();
 
 const isMac = process.platform === 'darwin';
+const APP_ICON = path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+if (process.platform === 'win32') app.setAppUserModelId('dev.pinpoint.app');
 const TITLEBAR_HEIGHT = 52;
 
 function createWindow() {
@@ -109,7 +114,7 @@ function createWindow() {
     minHeight: 640,
     backgroundColor: '#131419',
     title: 'Pinpoint',
-    icon: path.join(__dirname, 'icon.png'),
+    icon: APP_ICON,
     titleBarStyle: 'hidden',
     ...(isMac
       ? { trafficLightPosition: { x: 18, y: 18 } }
@@ -161,11 +166,19 @@ ipcMain.handle('dialog:pickFolder', async () => {
   const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8);
   const switched = path.resolve(dir) !== path.resolve(s.projectDir || '.');
   if (switched) { killTree(devProc); devProc = null; killTree(storyProc); storyProc = null; }
-  saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '', tabs: [], activeTab: 0 }) });
+  saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '', tabs: [], activeTab: 0, liveUrl: '' }) });
   return dir;
 });
 
 ipcMain.handle('shell:openPath', (_e, p) => shell.openPath(p));
+ipcMain.handle('site:hints', () => {
+  let homepage = null;
+  try {
+    const h = JSON.parse(fs.readFileSync(path.join(loadSettings().projectDir, 'package.json'), 'utf8')).homepage;
+    if (typeof h === 'string' && /^https?:\/\//.test(h) && !/github\.com\/[^/]+\/[^/]+(#|$)/.test(h)) homepage = new URL(h).origin;
+  } catch {  }
+  return { homepage };
+});
 
 const whichCache = new Map();
 function which(cmd) {
@@ -486,7 +499,8 @@ function writeRequestFiles(projectDir, runId, request) {
   }
   delete request.overview;
   if (request.verify) {
-    request.verify = { beforeFile: saveImg('before.png', request.verify.before), afterFile: saveImg('after.png', request.verify.after), same: !!request.verify.same };
+    const { before, after, ...rest } = request.verify;
+    request.verify = { ...rest, beforeFile: saveImg('before.png', before), afterFile: saveImg('after.png', after), same: !!rest.same };
     images.push(...[request.verify.beforeFile, request.verify.afterFile].filter(Boolean));
   }
   fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
@@ -809,6 +823,57 @@ ipcMain.handle('bg:discard', async (_e, id) => {
   return true;
 });
 
+const variantViews = new Map();
+async function closeVariantViews() {
+  const open = [...variantViews.values()];
+  variantViews.clear();
+  for (const v of open) killTree(v.proc);
+  if (open.length) await pause(1200);
+  await Promise.all(open.map((v) => background.remove(v.run).catch(() => {})));
+}
+ipcMain.handle('variants:live', async (e, { runIds, page }) => {
+  const root = projectDir();
+  const { devCommand } = loadSettings();
+  if (!devCommand) throw new Error('Start the dev server from Pinpoint once, so it knows the command to preview each variant with.');
+  await closeVariantViews();
+  const ids = runIds.slice(0, 4);
+  const send = (text) => { if (!e.sender.isDestroyed()) e.sender.send('variants:progress', text); };
+  const made = [];
+  for (const runId of ids) {
+    send(`Making a copy of the project for variant ${made.length + 1} of ${ids.length}…`);
+    const run = await background.create(app.getPath('userData'), root, `live-${String(runId).replace(/[^\w-]/g, '')}-${Date.now().toString(36)}`);
+    for (const other of ids) runs.writeInto(root, other, run.cwd, 'before');
+    runs.writeInto(root, runId, run.cwd, 'after');
+    made.push({ runId, run });
+    variantViews.set(runId, { run, proc: null });
+  }
+  send('Starting a dev server for each variant…');
+  const base = 5400 + Math.floor(Math.random() * 400);
+  return Promise.all(made.map(async ({ runId, run }, i) => {
+    const { url, proc } = await background.preview(run, devCommand, base + i * 3);
+    const view = variantViews.get(runId);
+    if (view) view.proc = proc; else killTree(proc);
+    return { runId, url: url ? url.replace(/\/$/, '') + (page || '/') : null };
+  }));
+});
+ipcMain.handle('variants:close', async () => { await closeVariantViews(); return true; });
+
+ipcMain.handle('sweep:start', (e, { pages, partition, crawl }) => {
+  const root = projectDir();
+  const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('sweep:event', evt); };
+  try { fs.rmSync(path.join(root, '.pinpoint', 'runs', 'sweep'), { recursive: true, force: true }); } catch {  }
+  sweep.run({
+    pages, partition: partition || undefined, crawl: !!crawl, a11y: loadSettings().a11yCheck !== false,
+    save: (name, buf) => runs.saveShotBuffer(root, 'sweep', name, buf), onEvent: send,
+  }).catch((err) => send({ type: 'done', stopped: true, error: err.message }));
+  return true;
+});
+ipcMain.handle('sweep:stop', () => { sweep.stop(); return true; });
+
+ipcMain.handle('review:start', (e, url) => review.start({ url, onComment: (c) => { if (!e.sender.isDestroyed()) e.sender.send('review:comment', c); } }));
+ipcMain.handle('review:stop', () => review.stop());
+ipcMain.handle('review:state', () => review.status());
+
 ipcMain.handle('update:state', () => updater.current());
 ipcMain.handle('update:install', () => updater.install());
 
@@ -883,8 +948,13 @@ ipcMain.handle('git:commitRun', async (_e, runId) => {
   return commit;
 });
 ipcMain.handle('git:commitAll', (_e, message) => gitx.commitAll(projectDir(), message));
-ipcMain.handle('git:pr', async (_e, args) => {
-  const r = await gitx.openPR(projectDir(), args);
+ipcMain.handle('git:pr', async (_e, { shots, ...args }) => {
+  const root = projectDir();
+  const pairs = (shots || []).slice(-4).flatMap((s) => {
+    const pair = runs.shotPair(root, s.runId);
+    return pair ? [{ id: String(s.runId).replace(/[^\w-]/g, ''), label: s.label || '', ...pair }] : [];
+  });
+  const r = await gitx.openPR(root, { ...args, shots: pairs });
   shell.openExternal(r.url);
   return r;
 });
@@ -953,6 +1023,9 @@ app.on('window-all-closed', () => {
   killTree(devProc);
   killTree(storyProc);
   terminal.closeAll();
+  review.stop();
+  sweep.stop();
+  for (const v of variantViews.values()) { killTree(v.proc); background.remove(v.run).catch(() => {}); }
   for (const r of active.values()) r.kill();
   for (const b of bgRuns.values()) { b.handle?.kill(); background.remove(b.run).catch(() => {}); }
   app.quit();

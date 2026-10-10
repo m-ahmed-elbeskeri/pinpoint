@@ -82,7 +82,7 @@ Click the branch chip above the composer:
 
 - **New branch for each chat:** every new conversation starts on its own `pinpoint/...` branch.
 - **Commit after each run:** Pinpoint commits exactly the files the agent changed, never your other work, with a message written from what you asked for.
-- **Open PR:** pushes the branch and opens a pull request with your GitHub CLI login. The description is drafted from the chat: what you asked for, which files changed and the commits.
+- **Open PR:** pushes the branch and opens a pull request with your GitHub CLI login. The description is drafted from the chat: what you asked for, which files changed and the commits, with before and after screenshots if you want them.
 
 Not a git repo yet? The same menu can initialize one. Runs that weren't auto-committed get a **Commit** button on their card.
 
@@ -109,7 +109,7 @@ While you select, the hovered element shows its margin and padding, and flex and
 
 The flask button next to the address bar controls how the page is shown: light or dark color scheme, reduced motion, the layout overlay, and conditions that break layouts: long text, pseudo-localized text, right-to-left, empty lists, a slow or offline network, API requests that hang (loading state) or fail (error state), and slowed, paused or stepped animations. Whatever is on is told to the agent with your request.
 
-Press the record button to capture an interaction as steps ("click Menu, type in Search, press Enter") when the problem only shows up after you do something. Steps can be copied as a Playwright test.
+Press the record button to capture an interaction as steps ("click Menu, type in Search, press Enter") when the problem only shows up after you do something. Steps can be copied as a Playwright test. After the run Pinpoint replays them and the card says whether they still run and whether errors come up.
 
 <br />
 
@@ -148,6 +148,8 @@ The tablet and phone buttons next to the address bar open a device toolbar like 
 | | |
 |---|---|
 | **Page problems** | Console errors, failed network requests and dev-server errors show up as a chip. Send them along or hit **Ask to fix**. |
+| **Local or live** | The address bar says whether you are on your local server, a built copy or the deployed site, and switches between them. On the live site the agent is told so, and the result card says the change shows once deployed. |
+| **Check every page** | Loads every page at phone, tablet and desktop widths and lists sideways scrolling, spilling text, broken images, tiny tap targets, errors and failed requests, with **Fix all**. |
 | **API requests** | The Network tab lists the page's API calls with what was sent and returned, and the file that handles each one. Attach a request to your message, send it again, or mock its response. |
 | **Accessibility** | axe-core checks the open page against WCAG A/AA. Violations show up as a chip with **Ask to fix**. |
 | **No visible change** | When a run edits files but the page looks the same, its card says so in plain sight, and the result check is told to find out why. |
@@ -155,9 +157,10 @@ The tablet and phone buttons next to the address bar open a device toolbar like 
 | **Load cost** | Each run shows what it did to the open page's JS and CSS size, requests, DOM size, layout shift and largest paint. **Build size** on a run card runs your real build and reports its gzipped JS and CSS against the last measurement. |
 | **Pinned pages** | Pin a page as a baseline that should not change, then check all pins whenever you like. |
 | **Hand-off** | Save a request as one file for someone else to open and run, copy it as Markdown, or create a GitHub issue from it. |
-| **Reference images** | Paste, drag in or attach mockups and screenshots, each with its own note. Lay one over the page with an opacity slider, or diff it against the page. |
+| **Comments from others** | Share your local site on your network with a comment button. What a reviewer clicks and writes arrives in Pinpoint attached to that element. |
+| **Reference images** | Paste, drag in or attach mockups and screenshots, each with its own note. Lay one over the page with an opacity slider, diff it against the page, or hit **Match** to have the agent close the gap over up to three rounds. |
 | **Check the result** | Optional (Settings): after each run the agent looks at the after screenshot and new errors, and fixes what's off. |
-| **Variants** | Optional (Settings, or the layers button in the composer): try a request 2 to 8 ways (click a number or type one) and pick one from the screenshots. |
+| **Variants** | Optional (Settings, or the layers button in the composer): try a request 2 to 8 ways (click a number or type one) and pick one from the screenshots, or run them live side by side. |
 | **View as** | Show a tab as a saved profile: its own login, language, time zone, feature flags and headers. Two tabs can show two users at once. |
 | **Background runs** | Send a request to run in a separate copy of the project while you keep working. Review its diff and screenshot, then apply or discard. |
 | **Other browsers** | See the page in Safari's engine (WebKit) and Firefox next to Chromium, with a pixel diff. Downloaded once, on request. |

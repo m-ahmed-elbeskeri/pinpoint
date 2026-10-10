@@ -8,7 +8,7 @@ interface Props {
   settings: Settings;
   saveSettings(p: Partial<Settings>): void;
   busy: boolean;
-  prDefaults(): { title: string; body: string };
+  prDefaults(): { title: string; body: string; shots: { runId: string; label: string }[] };
   flash(msg: string): void;
 }
 
@@ -26,7 +26,7 @@ function Toggle({ on, onChange, label, hint }: { on: boolean; onChange(v: boolea
 export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefaults, flash }: Props) {
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
-  const [pr, setPr] = useState<{ title: string; body: string; draft: boolean } | null>(null);
+  const [pr, setPr] = useState<{ title: string; body: string; draft: boolean; shots: { runId: string; label: string }[]; withShots: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,13 +82,20 @@ export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefa
               <label className="git-field">Title<input value={pr.title} onChange={(e) => setPr({ ...pr, title: e.target.value })} /></label>
               <label className="git-field">Description<textarea rows={7} value={pr.body} onChange={(e) => setPr({ ...pr, body: e.target.value })} /></label>
               <label className="git-check"><input type="checkbox" checked={pr.draft} onChange={(e) => setPr({ ...pr, draft: e.target.checked })} /> Open as draft</label>
+              {pr.shots.length > 0 && (
+                <label className="git-check" title="The screenshots are pushed to a pinpoint-shots branch of this repository so GitHub can show them in the description.">
+                  <input type="checkbox" checked={pr.withShots} onChange={(e) => setPr({ ...pr, withShots: e.target.checked })} /> Add before and after screenshots ({Math.min(4, pr.shots.length)})
+                </label>
+              )}
               <div className="git-actions">
                 <button className="btn sm ghost" onClick={() => setPr(null)}>Back</button>
                 <div className="spacer" />
                 <button className="btn sm primary" disabled={!!working || !pr.title.trim()} onClick={() => act('pr', async () => {
-                  const r = await window.pinpoint.gitOpenPR(pr);
+                  const r = await window.pinpoint.gitOpenPR({ title: pr.title, body: pr.body, draft: pr.draft, shots: pr.withShots ? pr.shots : [] });
+                  const wanted = pr.withShots && pr.shots.length > 0;
                   setPr(null);
-                  return r.existed ? 'Pushed. The pull request already existed; opened it.' : 'Pull request opened in your browser.';
+                  return r.existed ? 'Pushed. The pull request already existed; opened it.'
+                    : wanted && !r.shots ? "Pull request opened, but the screenshots couldn't be uploaded." : 'Pull request opened in your browser.';
                 })}>
                   {working === 'pr' ? <Loader2 size={13} className="spin" /> : <GitPullRequestArrow size={13} />} Push & open PR
                 </button>
@@ -109,7 +116,7 @@ export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefa
                   {working === 'commit' ? <Loader2 size={12} className="spin" /> : <GitCommitHorizontal size={12} />} Commit all
                 </button>
                 <div className="spacer" />
-                <button className="btn xs primary" disabled={!!working || busy || !!prBlocker} title={prBlocker || 'Push this branch and open a pull request'} onClick={() => setPr({ ...prDefaults(), draft: false })}>
+                <button className="btn xs primary" disabled={!!working || busy || !!prBlocker} title={prBlocker || 'Push this branch and open a pull request'} onClick={() => { const d = prDefaults(); setPr({ ...d, draft: false, withShots: d.shots.length > 0 }); }}>
                   <GitPullRequestArrow size={12} /> Open PR
                 </button>
               </div>

@@ -110,6 +110,7 @@ function describeAnnotation(a) {
     if (src) lines.push(`- Source hint (from the framework's dev metadata): ${src}`);
     if (el.text) lines.push(`- Visible text: "${el.text}"`);
     lines.push(`- Rendered size: ${Math.round(el.rect.width)}×${Math.round(el.rect.height)}px at (${Math.round(el.rect.x)}, ${Math.round(el.rect.y)}) in the viewport`);
+    if (!el.uid) lines.push(`- This was picked by a reviewer in their own browser${a.viewport?.width ? `, ${a.viewport.width}px wide` : ''}, so there is no source hint or close-up and the selector was built from the page structure. Find the element from its text and HTML.`);
     if (el.styles) lines.push(`- Computed styles: ${fmtStyles(el.styles)}`);
     lines.push(...describeElementExtras(a));
     if (el.html) lines.push('- Rendered HTML (truncated):\n```html\n' + el.html + '\n```');
@@ -126,7 +127,10 @@ function describeAnnotation(a) {
     lines.push(`### [${a.n}] Recorded interaction: ${note}`);
     lines.push(`- The user did this in the page${a.startUrl ? ` (starting at ${a.startUrl})` : ''}:`);
     (a.steps || []).forEach((s, i) => lines.push(`  ${i + 1}. ${fmtStep(s)}`));
+    if (a.seen?.errors?.length) lines.push('- Console errors while the user did this:', ...a.seen.errors.map((x) => `  - ${x}`));
+    if (a.seen?.failed?.length) lines.push('- Requests that failed while the user did this:', ...a.seen.failed.map((x) => `  - ${x}`));
     lines.push('- The request is about what happens during or after these steps. Follow the same path through the code to find it.');
+    lines.push('- Pinpoint replays these exact steps once you finish and shows the user whether they still run and whether errors come up, so keep the elements they click reachable the same way unless the request is to change them.');
   } else if (a.kind === 'request' && a.request) {
     const r = a.request;
     lines.push(`### [${a.n}] API request the page made: ${note}`);
@@ -137,6 +141,9 @@ function describeAnnotation(a) {
     if (r.reqBody) lines.push('- Body sent:\n```\n' + clipBody(r.reqBody) + '\n```');
     lines.push('- Response body:\n```\n' + (clipBody(r.resBody) || '(empty)') + '\n```');
     lines.push('- The request is about this endpoint or how the page uses its answer. Read the handler and the code that calls it before changing either.');
+  } else if (a.kind === 'note') {
+    lines.push(`### [${a.n}] Comment about the page as a whole: ${note}`);
+    if (a.viewport?.width) lines.push(`- Written while looking at the page ${a.viewport.width}px wide.`);
   } else if (a.kind === 'reference') {
     lines.push(`### [${a.n}] Reference image: ${note}`);
     lines.push(`- Image: ${a.imageFile}`);
@@ -248,10 +255,16 @@ function variantNote(v) {
   return out;
 }
 
+function siteNote(site) {
+  const local = site.local ? ` The same page on their machine is ${site.local}.` : '';
+  if (site.kind === 'live') return `This is the DEPLOYED site, not a local dev build. A deployed build carries no source hints, and its class names may be hashed or minified, so find the code from the visible text and structure. The project on disk may already be ahead of what is deployed: read the current code before deciding what to change. Your edits go to the local files and will not appear on this page until they are deployed, so the page looking the same afterwards does not mean the change failed.${local}`;
+  return `This page is served from a built copy of the project running locally, with no hot reload. There are no source hints, and your edits will not show on it until the project is rebuilt; do not run the build yourself unless asked.${local}`;
+}
+
 const REMEMBER_RULE = 'If the user states a lasting preference for this project ("always…", "never…", "from now on…", a brand rule), end your reply with one line exactly like `REMEMBER: <the rule in one short sentence>`. Otherwise don\'t add that line.';
 
 function buildPrompt({ request, files, projectDir, followUp, design, memory, designSystem }) {
-  const { url, title, viewport, breakpoints, instruction, annotations, diagnostics, route, env, variant, note } = request;
+  const { url, title, viewport, breakpoints, instruction, annotations, diagnostics, route, env, variant, note, site } = request;
   const hasAnn = annotations.length > 0;
   const empty = isEmptyProject(projectDir);
   const ctx = contextSections({ design: followUp ? '' : design, memory, diagnostics, route, env, designSystem: followUp ? null : designSystem });
@@ -263,7 +276,7 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
       ...(variantLines.length ? [...variantLines, ''] : []),
       instruction?.trim() || (variant ? '(Same request as before.)' : 'Continue.'),
       '',
-      `(The user is still looking at ${url} in the Pinpoint visual editor. The dev server hot-reloads; do not start it.)`,
+      site ? `(The user is still looking at ${url} in the Pinpoint visual editor. ${siteNote(site)})` : `(The user is still looking at ${url} in the Pinpoint visual editor. The dev server hot-reloads; do not start it.)`,
       ...(ctx.length ? ['', ...ctx] : []),
       '',
       REMEMBER_RULE,
@@ -278,6 +291,7 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
   out.push(`The user is looking at their web app in Pinpoint, a visual editor with an embedded browser. They picked elements, drew on the page and/or sketched ideas, and want you to change the code in this project (${projectDir}) so the page matches what they asked for.`);
   out.push('');
   out.push(`- Page: ${url}${title ? ` ("${title}")` : ''}`);
+  if (site) out.push(`- ${siteNote(site)}`);
   if (viewport) out.push(`- Viewport: ${viewport.width}×${viewport.height} CSS px${viewport.width < 800 ? ' (mobile/tablet width: the request may be about responsive layout)' : ''}`);
   if (viewport?.responsive) {
     out.push(`- The user is in responsive mode at ${viewport.width}px wide, so this request (including any live tweaks) is about the layout at this width. Put the change in the breakpoint / responsive variant that applies here and leave other widths as they are, unless they ask for it everywhere.`);
@@ -316,7 +330,9 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
   out.push('4. Make focused edits that do exactly what was asked. Follow the conventions already in the codebase (styling approach, design tokens, component patterns). Don\'t refactor unrelated code.');
   out.push(request.background
     ? '5. You are working in a separate copy of the project so the user can keep working in theirs. No dev server is running here; don\'t start one or run builds. Make the edits and finish.'
-    : '5. The dev server is already running with hot reload, so don\'t start servers or run production builds. Run a quick type check or lint only if it is cheap.');
+    : site
+      ? '5. Your edits will not show on the page the user has open, so you cannot check the result by looking at it. Don\'t start servers, run production builds or deploy. Run a quick type check or lint only if it is cheap, and say in your summary what the user should look for once the change is live.'
+      : '5. The dev server is already running with hot reload, so don\'t start servers or run production builds. Run a quick type check or lint only if it is cheap.');
   out.push('6. Finish with a short summary: what you changed, with file paths, and anything you could not do or had to guess.');
   out.push('');
   out.push(REMEMBER_RULE);
@@ -351,6 +367,15 @@ function buildVerifyPrompt({ request }) {
       out.push('  Response now:', '```', clipBody(r.after.body, 2500) || '(empty)', '```');
     }
     out.push('Is that the answer the user asked for? If the endpoint still fails or returns the wrong shape, fix it.', '');
+  }
+  if (verify.flow) {
+    const f = verify.flow;
+    out.push("The steps the user recorded were replayed after your changes (the \"after\" screenshot is the page at the end of them):");
+    out.push(f.done < f.total ? `- It stopped at step ${f.done + 1} of ${f.total}: the element that step uses was not on the page.` : `- All ${f.total} steps ran.`);
+    for (const x of f.errors || []) out.push(`- Console error during the replay: ${x}`);
+    for (const x of f.failed || []) out.push(`- Request that failed during the replay: ${x}`);
+    if (f.done >= f.total && !f.errors?.length && !f.failed?.length) out.push('- No errors came up.');
+    out.push('');
   }
   out.push('Check your work against what the user asked for:');
   out.push('1. Does the "after" screenshot show the change they wanted, in the place they pointed at?');

@@ -165,4 +165,26 @@ async function shots(root, runId, names) {
   return out;
 }
 
-module.exports = { save, diff, revert, apply, readMeta, setMeta, saveShot, saveShotBuffer, shots };
+function writeInto(root, runId, dest, side) {
+  const run = load(root, runId);
+  const dir = runDir(root, runId);
+  for (const c of run.changes) {
+    const to = path.join(dest, c.path);
+    const gone = side === 'before' ? c.kind === 'add' : c.kind === 'delete';
+    const has = side === 'before' ? c.hasBefore : c.hasAfter;
+    if (gone) fs.rmSync(to, { force: true });
+    else if (has) {
+      fs.mkdirSync(path.dirname(to), { recursive: true });
+      fs.copyFileSync(path.join(dir, `${c.i}.${side}`), to);
+    }
+  }
+}
+
+function shotPair(root, runId) {
+  const dir = runDir(root, runId);
+  const find = (name) => ['jpg', 'png'].map((ext) => path.join(dir, `shot-${name}.${ext}`)).find((f) => fs.existsSync(f)) || null;
+  const before = find('before'), after = find('after');
+  return before && after ? { before, after } : null;
+}
+
+module.exports = { shotPair, writeInto, save, diff, revert, apply, readMeta, setMeta, saveShot, saveShotBuffer, shots };

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Move, RotateCcw, ScanEye, X } from './icons';
+import { Move, RotateCcw, ScanEye, Wand2, X } from './icons';
 
 export interface Overlay { image: string; name: string; opacity: number; x: number; y: number; moving: boolean }
 
@@ -7,10 +7,12 @@ interface Props {
   overlay: Overlay;
   onChange(next: Overlay): void;
   onDiff(): void;
+  onMatch(): void;
+  canMatch: boolean;
   onClose(): void;
 }
 
-export function MockupOverlay({ overlay, onChange, onDiff, onClose }: Props) {
+export function MockupOverlay({ overlay, onChange, onDiff, onMatch, canMatch, onClose }: Props) {
   const start = useRef<{ px: number; py: number; x: number; y: number; k: number } | null>(null);
 
   const down = (e: React.PointerEvent) => {
@@ -39,6 +41,7 @@ export function MockupOverlay({ overlay, onChange, onDiff, onClose }: Props) {
         <button className={`icon-btn xs ${overlay.moving ? 'on' : ''}`} onClick={() => onChange({ ...overlay, moving: !overlay.moving })} title="Drag the mockup to line it up (the page stops taking clicks while this is on)"><Move size={13} /></button>
         {(overlay.x !== 0 || overlay.y !== 0) && <button className="icon-btn xs" onClick={() => onChange({ ...overlay, x: 0, y: 0 })} title="Reset position"><RotateCcw size={12} /></button>}
         <button className="btn xs" onClick={onDiff} title="Compare the mockup with the page pixel by pixel"><ScanEye size={12} /> Diff</button>
+        <button className="btn xs primary" disabled={!canMatch} onClick={onMatch} title="Ask the agent to make the page match this mockup. Pinpoint compares the result with the mockup and sends back what still differs, for up to 3 rounds."><Wand2 size={12} /> Match</button>
         <button className="icon-btn xs" onClick={onClose} title="Remove the overlay"><X size={13} /></button>
       </div>
     </>

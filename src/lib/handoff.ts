@@ -17,6 +17,7 @@ export const describe = (a: Annotation, root: string) => {
   if (a.kind === 'drawing') return { title: 'Drawing on page', sub: a.hits?.length ? `over ${a.hits.length} element${a.hits.length > 1 ? 's' : ''}` : 'markup' };
   if (a.kind === 'reference') return { title: 'Reference image', sub: a.name || 'image' };
   if (a.kind === 'request' && a.request) return { title: `${a.request.method} ${pathOnly(a.request.url)}`, sub: `${a.request.error && !a.request.status ? 'no response' : a.request.status}${a.request.handler ? ` · ${shortPath(a.request.handler.file, root)}:${a.request.handler.line}` : ''}` };
+  if (a.kind === 'note') return { title: 'Comment on the page', sub: a.pageUrl ? pathOnly(a.pageUrl) : 'whole page' };
   if (a.kind === 'flow') return { title: 'Recorded interaction', sub: `${a.steps?.length || 0} step${a.steps?.length === 1 ? '' : 's'}` };
   return { title: 'Sketch', sub: 'wireframe' };
 };

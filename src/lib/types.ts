@@ -59,6 +59,23 @@ export interface CssRuleInfo {
 
 export interface FlowStep { type: 'click' | 'fill' | 'check' | 'key' | 'navigate'; selector?: string; tag?: string; text?: string; value?: string; key?: string; url?: string; secret?: boolean }
 
+export interface FlowResult { done: number; total: number; errors: string[]; failed: string[]; before?: { errors: number; failed: number } }
+
+export interface ReviewComment {
+  id: string; at: number; name: string; text: string; path: string; viewport: { width: number; height: number };
+  selector?: string; tag?: string; classes?: string[]; elText?: string; html?: string; rect?: Rect;
+}
+export interface ReviewState { running: boolean; target?: string; port?: number; urls: string[]; comments: ReviewComment[] }
+
+export interface SweepIssue { type: 'overflow' | 'image' | 'text' | 'tap' | 'a11y' | 'console' | 'request' | 'load'; text: string; nodes?: string[] }
+export interface SweepShot { size: 'phone' | 'tablet' | 'desktop'; label: string; width: number; thumb?: string; issues: SweepIssue[] }
+export interface SweepPage { route: string; url: string; key: string; title?: string; shots: SweepShot[] }
+export type SweepEvent =
+  | { type: 'start'; total: number; pages: SweepPage[] }
+  | { type: 'page'; total: number; page: SweepPage }
+  | { type: 'shot'; done: number; total: number; key: string; title?: string; shot: SweepShot }
+  | { type: 'done'; stopped: boolean; error?: string };
+
 export interface PerfMetrics { js: number; css: number; requests: number; nodes: number; lcp: number; cls: number }
 
 export interface BuildSize { js: number; css: number; jsGzip: number; cssGzip: number; files: number; at: number }
@@ -104,9 +121,10 @@ export interface ElementInfo {
 export interface Annotation {
   id: string;
   n: number;
-  kind: 'element' | 'drawing' | 'sketch' | 'reference' | 'flow' | 'request';
+  kind: 'element' | 'drawing' | 'sketch' | 'reference' | 'flow' | 'request' | 'note';
   request?: RequestNote;
   steps?: FlowStep[];
+  seen?: { errors: string[]; failed: string[] };
   startUrl?: string;
   name?: string;
   note: string;
@@ -144,6 +162,8 @@ export type ChatItem =
     visual?: 'none' | 'changed';
     instant?: boolean;
     background?: boolean;
+    unseen?: 'live' | 'built';
+    flow?: FlowResult;
   }
   | { kind: 'variants'; id: string; options: { runId: string; index: number; files: number }[]; chosen?: string | null }
   | { kind: 'memory'; id: string; text: string; status: 'pending' | 'saved' | 'dismissed' };
@@ -235,6 +255,7 @@ export interface Settings {
   a11yCheck: boolean;
   perfCheck: boolean;
   layoutOverlay: boolean;
+  liveUrl?: string;
 }
 
 export type AgentEvent =
@@ -271,6 +292,7 @@ export interface PinpointAPI {
   modelCatalog(): Promise<ModelCatalog>;
   pickFolder(): Promise<string | null>;
   openPath(p: string): Promise<string>;
+  siteHints(): Promise<{ homepage: string | null }>;
   capture(webContentsId: number, rect?: Rect, jpeg?: boolean): Promise<string>;
   runAgent(args: { runId: string; request: unknown; sessionId?: string | null; check?: { routes: { route: string; url: string; current?: boolean }[]; currentFile?: string; perfUrl?: string; targets?: string[]; partition?: string } }): Promise<{ requestDir: string }>;
   cancelAgent(runId: string): Promise<boolean>;
@@ -314,6 +336,16 @@ export interface PinpointAPI {
   bgApply(args: { id: string; runId: string; instruction: string }): Promise<{ changes: FileChange[] }>;
   bgDiscard(id: string): Promise<boolean>;
   onBgEvent(cb: (e: { id: string; type: 'step' | 'done'; text?: string; ok?: boolean; files?: FileChange[]; summary?: string; shot?: boolean }) => void): () => void;
+  reviewStart(url: string): Promise<ReviewState>;
+  reviewStop(): Promise<ReviewState>;
+  reviewState(): Promise<ReviewState>;
+  onReviewComment(cb: (c: ReviewComment) => void): () => void;
+  variantsLive(args: { runIds: string[]; page: string }): Promise<{ runId: string; url: string | null }[]>;
+  variantsClose(): Promise<boolean>;
+  onVariantsProgress(cb: (text: string) => void): () => void;
+  sweepStart(args: { pages: { route: string; url: string }[]; partition?: string; crawl?: boolean }): Promise<boolean>;
+  sweepStop(): Promise<boolean>;
+  onSweepEvent(cb: (e: SweepEvent) => void): () => void;
   updateState(): Promise<UpdateState>;
   updateInstall(): Promise<boolean>;
   nudgeAgent(runId: string): Promise<boolean>;
@@ -353,7 +385,7 @@ export interface PinpointAPI {
   gitBranch(hint?: string): Promise<{ branch: string }>;
   gitCommitRun(runId: string): Promise<GitCommit>;
   gitCommitAll(message: string): Promise<GitCommit>;
-  gitOpenPR(args: { title: string; body: string; draft?: boolean }): Promise<{ url: string; existed: boolean }>;
+  gitOpenPR(args: { title: string; body: string; draft?: boolean; shots?: { runId: string; label: string }[] }): Promise<{ url: string; existed: boolean; shots?: number }>;
   saveShot(runId: string, name: string, dataUrl: string): Promise<boolean>;
   runShots(runId: string, names?: string[]): Promise<Record<string, string>>;
   onAgentEvent(cb: (e: AgentEvent) => void): () => void;

@@ -4,6 +4,23 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-11
+
+### Added
+
+- **Local or live.** The address bar shows whether the page is running on your machine, is a built copy served locally, or is the deployed site, and offers the same page on the other side. On the live site the agent is told it is looking at a deployed build, and the run's card says the change will show once deployed instead of warning that nothing changed.
+- **Check every page.** The shield button loads each page of the project at phone, tablet and desktop widths in the background and lists what it finds: sideways scrolling, text spilling out of its box, images that don't load, controls too small to tap, console errors, failed requests and serious accessibility problems. **Fix all** drafts the request with screenshots of the worst pages.
+- **Comments from other people.** The share menu can serve your local site on your network with a **Leave a comment** button. A reviewer clicks what they mean and types; the comment arrives in Pinpoint attached to that element, ready to send.
+- **Match a mockup.** With a reference image laid over the page, **Match** asks the agent to make the page match it, compares the result with the mockup and sends back what still differs, for up to three rounds.
+- **Recorded steps prove the fix.** A recording now keeps the console errors and failed requests seen while you recorded. After the run Pinpoint replays the steps and the card says whether they all ran and whether errors still come up.
+- **Variants, live.** After a variants run, **See them live, side by side** runs each variant in its own copy of the project with its own dev server, scroll-synced, so you can try them before choosing.
+- **Screenshots in pull requests.** Open PR can add each run's before and after screenshots to the description. They are pushed to a `pinpoint-shots` branch without touching your files.
+
+### Fixed
+
+- **The result check never saw the request it was meant to re-check.** When a request was part of what you asked for, its new answer was dropped before the check was written.
+- **The app's own icon** is used in the Windows taskbar when running from source.
+
 ## [0.5.1] - 2026-10-10
 
 ### Faster
@@ -212,7 +229,8 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.3...v0.4.4

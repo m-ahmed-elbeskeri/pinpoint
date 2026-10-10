@@ -3,9 +3,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-function run(cmd, args, cwd, { timeout = 60000 } = {}) {
+function run(cmd, args, cwd, { timeout = 60000, env } = {}) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { cwd, timeout, windowsHide: true, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, timeout, windowsHide: true, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env } }, (err, stdout, stderr) => {
       if (err) {
         const msg = String(stderr || err.message).trim().split('\n').filter(Boolean).slice(-3).join(' ');
         return reject(Object.assign(new Error(msg || err.message), { code: err.code }));
@@ -86,7 +86,49 @@ async function initRepo(cwd) {
   return status(cwd);
 }
 
-async function openPR(cwd, { title, body, draft }) {
+const SHOT_BRANCH = 'pinpoint-shots';
+const SHOT_REF = 'refs/pinpoint/shots';
+
+function repoSlug(remote) {
+  const m = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(remote || '');
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+async function pushShots(cwd, remote, branch, shots) {
+  const slug = repoSlug(remote);
+  if (!slug) return null;
+  const env = { GIT_INDEX_FILE: path.join(os.tmpdir(), `pinpoint-index-${Date.now()}`) };
+  try {
+    await quiet(git(cwd, ['fetch', '--quiet', 'origin', `+refs/heads/${SHOT_BRANCH}:${SHOT_REF}`], { timeout: 60000 }));
+    const parent = await quiet(git(cwd, ['rev-parse', '--verify', '--quiet', SHOT_REF]));
+    if (parent) await git(cwd, ['read-tree', parent], { env });
+    const dir = `${slugify(branch.replace(/^pinpoint\//, ''))}-${Date.now().toString(36)}`;
+    const placed = [];
+    for (const s of shots) {
+      const names = {};
+      for (const side of ['before', 'after']) {
+        const blob = await git(cwd, ['hash-object', '-w', s[side]]);
+        names[side] = `${dir}/${s.id}-${side}${path.extname(s[side]) || '.jpg'}`;
+        await git(cwd, ['update-index', '--add', '--cacheinfo', `100644,${blob},${names[side]}`], { env });
+      }
+      placed.push({ label: s.label, ...names });
+    }
+    const tree = await git(cwd, ['write-tree'], { env });
+    const commit = await git(cwd, ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', `Screenshots for ${branch}`]);
+    await git(cwd, ['push', '--quiet', 'origin', `${commit}:refs/heads/${SHOT_BRANCH}`], { timeout: 120000 });
+    const link = (name) => `https://github.com/${slug}/blob/${commit}/${name}?raw=true`;
+    return placed.map((p) => ({ label: p.label, before: link(p.before), after: link(p.after) }));
+  } finally { fs.rmSync(env.GIT_INDEX_FILE, { force: true }); }
+}
+
+function withShots(body, pictures) {
+  const rows = pictures.map((p) => `${p.label ? `**${p.label.replace(/\|/g, '/')}**\n\n` : ''}| Before | After |\n|---|---|\n| ![Before](${p.before}) | ![After](${p.after}) |`);
+  const section = ['## Before and after', '', rows.join('\n\n'), ''].join('\n');
+  const cut = body.lastIndexOf('\n---\n');
+  return cut >= 0 ? `${body.slice(0, cut)}\n\n${section}${body.slice(cut)}` : `${body}\n\n${section}`;
+}
+
+async function openPR(cwd,{ title, body, draft, shots }) {
   const st = await status(cwd);
   if (!st.repo) throw new Error('This project is not a git repository.');
   if (!st.remote) throw new Error('No "origin" remote. Add one (for example with `gh repo create`) first.');
@@ -96,12 +138,13 @@ async function openPR(cwd, { title, body, draft }) {
   await git(cwd, ['push', '-u', 'origin', st.branch], { timeout: 120000 });
   const existing = await quiet(run('gh', ['pr', 'view', st.branch, '--json', 'url', '--jq', '.url'], cwd));
   if (existing) return { url: existing, existed: true };
+  const pictures = shots?.length ? await quiet(pushShots(cwd, st.remote, st.branch, shots)) : null;
   const file = path.join(os.tmpdir(), `pinpoint-pr-${Date.now()}.md`);
-  fs.writeFileSync(file, body);
+  fs.writeFileSync(file, pictures ? withShots(body, pictures) : body);
   try {
     const out = await run('gh', ['pr', 'create', '--title', title, '--body-file', file, '--head', st.branch, '--base', st.defaultBranch, ...(draft ? ['--draft'] : [])], cwd, { timeout: 120000 });
     const url = (out.match(/https:\/\/\S+/) || [out])[0];
-    return { url, existed: false };
+    return { url, existed: false, shots: pictures ? pictures.length : 0 };
   } finally { fs.rmSync(file, { force: true }); }
 }
 
@@ -150,4 +193,4 @@ function commitMessage(request, changes, agentName) {
   return lines.join('\n');
 }
 
-module.exports = { status, createBranch, commitPaths, commitAll, initRepo, openPR, commitMessage, createIssue };
+module.exports = { status, createBranch, commitPaths, commitAll, initRepo, openPR, commitMessage, createIssue, repoSlug, withShots, pushShots };

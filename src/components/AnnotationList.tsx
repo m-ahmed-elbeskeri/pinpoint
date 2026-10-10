@@ -26,6 +26,7 @@ const PLACEHOLDER: Record<Annotation['kind'], string> = {
   reference: 'What should we take from this image?',
   drawing: 'Explain your drawing…',
   request: 'What is wrong with this request, or what should it return?',
+  note: 'The comment',
 };
 
 export function AnnotationList(p: Props) {

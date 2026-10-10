@@ -3,8 +3,12 @@ import {
   ArrowDown, ArrowLeft, ArrowRight, Check, Globe, Loader2, Monitor,
   Plus, RotateCw, Send, Smartphone, Square, Tablet,
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight,
-  AppWindow, Boxes, CircleDot, Columns3, Snowflake, SquareStack,
+  AppWindow, Boxes, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
 } from './components/icons';
+import { SweepView } from './components/SweepView';
+import { ReviewPanel } from './components/ReviewPanel';
+import { VariantsLive } from './components/VariantsLive';
+import { sweepInstruction, worstShots } from './lib/sweep';
 import { BrowserView, sleep, type BrowserHandle, type FrameTarget, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
 import { DrawToolbar, TOOL_KEYS } from './components/DrawToolbar';
@@ -20,7 +24,7 @@ import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
 import { GitPanel } from './components/GitPanel';
 import { CompareView, type CompareTarget } from './components/CompareView';
-import { looksSame } from './lib/pixeldiff';
+import { diffOverlay, looksSame } from './lib/pixeldiff';
 import { ElementTools, type ToolSection } from './components/ElementTools';
 import { ConditionsMenu, HandoffMenu, MAX_VARIANTS, NO_CONDITIONS, PinsChip, VariantsMenu, describeConditions, type Conditions } from './components/PageTools';
 import { MultiView } from './components/MultiView';
@@ -30,8 +34,8 @@ import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './component
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
   OtherChat,
-  A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
-  GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, SourceInfo, Tool,
+  A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowResult, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
+  GitStatus, PageEnv, Rect, RevertResult, ReviewComment, RouteInfo, Settings, SourceInfo, SweepPage, Tool,
 } from './lib/types';
 
 import { makeTab, matchRoute, normalizeUrl, pairs, partitionOf, tabLabel, type Tab } from './lib/urls';
@@ -43,6 +47,8 @@ import { layoutReport } from './lib/layoutReport';
 import { useChatScroll, useLogs, usePageProblems, useRequests, useStableActions } from './lib/hooks';
 import { NetworkPanel, failed as requestFailed, pathOf } from './components/NetworkPanel';
 import { TopBar } from './components/TopBar';
+import { SiteChip } from './components/SiteChip';
+import { originOf, siteKind, twinUrl, type BuildKind } from './lib/site';
 import { EmptyChat } from './components/EmptyChat';
 import { AnnotationList } from './components/AnnotationList';
 
@@ -51,6 +57,9 @@ export const isMac = api.platform === 'darwin';
 export const MOD = isMac ? '⌘' : 'Ctrl';
 document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
+
+const MATCH_ROUNDS = 3;
+const MATCH_GOAL = 3;
 
 const QUICK_SIZES = [
   { icon: Monitor, label: 'Fill the window', w: 0, h: 0 },
@@ -153,7 +162,9 @@ export default function App() {
   recRef.current = rec;
   const condRef = useRef(cond);
   condRef.current = cond;
-  const runFlowRef = useRef<Record<string, { steps: FlowStep[]; startUrl: string }>>({});
+  const runFlowRef = useRef<Record<string, { steps: FlowStep[]; startUrl: string; seen?: { errors: string[]; failed: string[] } }>>({});
+  const tapRef = useRef<{ errors: string[]; failed: string[] } | null>(null);
+  useEffect(() => api.onNetworkError((n) => { tapRef.current?.failed.push(`${n.method} ${pathOf(n.url)} (${n.status || n.error})`); }), []);
   const [designSystem, setDesignSystem] = useState<DesignSystem | null>(null);
   const [a11y, setA11y] = useState<A11yIssue[]>([]);
   const [includeA11y, setIncludeA11y] = useState(false);
@@ -167,6 +178,11 @@ export default function App() {
   const [plan, setPlan] = useState<{ ok: boolean; summary?: string[]; reason?: string } | null>(null);
   const [wsOpen, setWsOpen] = useState(false);
   const [enginesOpen, setEnginesOpen] = useState(false);
+  const [sweepOpen, setSweepOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [liveVariants, setLiveVariants] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [bgRuns, setBgRuns] = useState<BgRun[]>([]);
   const [bgBlocked, setBgBlocked] = useState<string | null>(null);
   const [patchView, setPatchView] = useState<{ title: string; text: string } | null>(null);
@@ -175,6 +191,7 @@ export default function App() {
   const beforeShotRef = useRef<{ id: string; shot: string } | null>(null);
   const variantJob = useRef<{ base: AgentRequest; total: number; index: number; done: { runId: string; index: number; files: number }[] } | null>(null);
   const verifyPending = useRef<string | null>(null);
+  const matchRef = useRef<{ image: string; x: number; y: number; round: number; last: number } | null>(null);
   const pendingNote = useRef<string | null>(null);
   const axeRef = useRef<string | null>(null);
   const runPageRef = useRef<Record<string, string>>({});
@@ -196,6 +213,8 @@ export default function App() {
   frozenRef.current = frozen;
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500); };
+  const flashRef = useRef(flash);
+  flashRef.current = flash;
 
   useEffect(() => {
     api.getSettings().then((s) => {
@@ -420,29 +439,37 @@ export default function App() {
     if (!rec) {
       setMode('browse');
       setRec({ steps: [], startUrl: navRef.current.url });
+      tapRef.current = { errors: [], failed: [] };
       b?.send('record', true);
       return;
     }
     b?.send('record', false);
     setRec(null);
+    const seen = tapRef.current;
+    tapRef.current = null;
     if (!rec.steps.length) { flash('Nothing was recorded.'); return; }
     const n = nextN();
-    const ann: Annotation = { id: uid(), n, kind: 'flow', note: '', color: colorFor(n), steps: rec.steps, startUrl: rec.startUrl };
+    const ann: Annotation = { id: uid(), n, kind: 'flow', note: '', color: colorFor(n), steps: rec.steps, startUrl: rec.startUrl, ...(seen && (seen.errors.length || seen.failed.length) && { seen: { errors: seen.errors.slice(-6), failed: seen.failed.slice(-6) } }) };
     setAnnotations((prev) => [...prev, ann]);
     setActiveId(ann.id);
     setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
   };
-  const replayFlow = async (flow: { steps: FlowStep[]; startUrl: string }) => {
+  const replayFlow = async (flow: { steps: FlowStep[]; startUrl: string }): Promise<FlowResult | null> => {
     const b = browser.current;
-    if (!b) return;
+    if (!b) return null;
     setMode('browse');
-    if (navRef.current.url === flow.startUrl) b.reload(); else b.load(flow.startUrl);
-    await sleep(600);
-    for (let i = 0; i < 50 && loadingRef.current; i++) await sleep(200);
-    await sleep(900);
-    const id = b.id();
-    if (id != null) await api.replay(id, flow.steps).catch(() => null);
-    await sleep(500);
+    const tap = { errors: [] as string[], failed: [] as string[] };
+    tapRef.current = tap;
+    try {
+      if (navRef.current.url === flow.startUrl) b.reload(); else b.load(flow.startUrl);
+      await sleep(600);
+      for (let i = 0; i < 50 && loadingRef.current; i++) await sleep(200);
+      await sleep(900);
+      const id = b.id();
+      const ran = id != null ? await api.replay(id, flow.steps).catch(() => null) : null;
+      await sleep(700);
+      return ran ? { done: ran.done, total: ran.total, errors: [...new Set(tap.errors)].slice(0, 6), failed: [...new Set(tap.failed)].slice(0, 6) } : null;
+    } finally { if (tapRef.current === tap) tapRef.current = null; }
   };
 
   const buildHandoff = (): Handoff => ({
@@ -512,6 +539,36 @@ export default function App() {
     setInstruction((t) => (t.trim() ? t : 'Fix the accessibility problems listed in the diagnostics.'));
     setTimeout(() => composerRef.current?.focus(), 50);
   };
+
+  const [measured, setMeasured] = useState<{ origin: string; tab: string; build: BuildKind } | null>(null);
+  const [twins, setTwins] = useState({ local: '', live: '', homepage: '' });
+  const siteOrigin = originOf(nav.url);
+  const build = measured && measured.origin === siteOrigin && measured.tab === activeTab ? measured.build : null;
+  const kind = siteKind(nav.url, build);
+  useEffect(() => {
+    if (loading || !siteOrigin) return;
+    let live = true;
+    const t = setTimeout(() => { browser.current?.buildKind().then((b) => { if (live) setMeasured({ origin: siteOrigin, tab: activeTab, build: b }); }); }, 350);
+    return () => { live = false; clearTimeout(t); };
+  }, [nav.url, loading, siteOrigin, activeTab]);
+  useEffect(() => {
+    if (!projectDir) return;
+    api.siteHints().then((h) => setTwins((t) => ({ ...t, homepage: h.homepage || '' }))).catch(() => {});
+  }, [projectDir]);
+  const ownSite = !routes.length || !!matchRoute(routes, nav.url, projectDir) || siteOrigin === twins.homepage;
+  useEffect(() => {
+    if (!siteOrigin || build === null) return;
+    if (kind === 'dev') setTwins((t) => (t.local === siteOrigin ? t : { ...t, local: siteOrigin }));
+    else if (kind === 'live' && ownSite) {
+      setTwins((t) => (t.live === siteOrigin ? t : { ...t, live: siteOrigin }));
+      if (settingsRef.current?.liveUrl !== siteOrigin) saveSettings({ liveUrl: siteOrigin });
+    }
+  }, [kind, siteOrigin, build, ownSite]);
+  const localOrigin = [twins.local, devInfo?.runningUrl || ''].find((o) => o && o !== siteOrigin) || '';
+  const liveOrigin = [twins.live, settings?.liveUrl || '', twins.homepage].find((o) => o && o !== siteOrigin) || '';
+  const localTwin = kind === 'live' || kind === 'built' ? twinUrl(nav.url, localOrigin) : '';
+  const siteRef = useRef({ kind, localTwin });
+  siteRef.current = { kind, localTwin };
 
   const designChanged = !!session && designAtStart !== null && (settings?.useDesign && design?.exists ? design.content : '') !== designAtStart;
 
@@ -879,7 +936,7 @@ export default function App() {
   const releaseElement = async (a: Annotation) => {
     const b = (a.tabId && handles.current[a.tabId]) || browser.current;
     const wc = b?.id();
-    if (!a.element || !b) return;
+    if (!a.element?.uid || !b) return;
     b.send('untweak', a.element.uid);
     const comp = a.element.component;
     for (const [name, edit] of Object.entries(a.propEdits || {})) b.setProp(a.element.uid, comp?.name || '', name, JSON.parse(edit.from));
@@ -963,7 +1020,7 @@ export default function App() {
   const startRun = async (request: AgentRequest, before?: string | null, meta: RunMeta = {}) => {
     if (!settings) return;
     const id = uid();
-    runMetaRef.current[id] = { ...meta, startedAt: Date.now() };
+    runMetaRef.current[id] = { ...meta, startedAt: Date.now(), ...(request.site && { site: request.site.kind }) };
     const asked = request.annotations.flatMap((a) => (a.kind === 'request' && a.request ? [a.request] : []));
     if (!meta.verify && !meta.variant) {
       const mine = runMetaRef.current[id];
@@ -972,7 +1029,7 @@ export default function App() {
       api.serverLogMark().then((n) => { mine.logMark = n; }).catch(() => {});
     }
     const flow = request.annotations.find((a) => a.kind === 'flow' && a.steps?.length);
-    if (flow && !meta.verify) runFlowRef.current[id] = { steps: flow.steps!, startUrl: flow.startUrl || request.url };
+    if (flow && !meta.verify) runFlowRef.current[id] = { steps: flow.steps!, startUrl: flow.startUrl || request.url, seen: flow.seen };
     runPageRef.current[id] = request.url;
     if (before) { beforeShotRef.current = { id, shot: before }; api.saveShot(id, 'before', before).catch(() => {}); }
     setAgentLog('');
@@ -982,7 +1039,7 @@ export default function App() {
     const resume = sess && sess.agent === settings.agent ? sess.id : null;
     if (!resume) setDesignAtStart(settings.useDesign && design?.exists ? design.content : '');
     try {
-      await api.runAgent({ runId: id, request, sessionId: resume, check: meta.variant || meta.verify ? undefined : otherRoutes(request.url, request.annotations.flatMap((a) => (a.kind === 'element' && a.element ? [a.element.selector] : (a.hits || []).map((h) => h.selector)))) });
+      await api.runAgent({ runId: id, request, sessionId: resume, check: meta.variant || meta.verify || request.site ? undefined : otherRoutes(request.url, request.annotations.flatMap((a) => (a.kind === 'element' && a.element ? [a.element.selector] : (a.hits || []).map((h) => h.selector)))) });
     } catch (e) {
       setChat((c) => [...c, { kind: 'error', id: uid(), text: errText(e) }]);
       setRunId(null);
@@ -1002,6 +1059,7 @@ export default function App() {
   const send = async (mode: 'queue' | 'now' | 'bg' = 'queue') => {
     if (!settings || busy || (mode !== 'bg' && job && !runRef.current)) return;
     verifyPending.current = null;
+    if (mode !== 'bg') matchRef.current = null;
     if (!settings.projectDir) {
       flash('Pick the project folder the agent should edit.');
       const dir = await api.pickFolder();
@@ -1060,6 +1118,7 @@ export default function App() {
           ? { ...env, frozen, states: [...describeConditions(cond), ...mocks.filter((m) => m.on).map((m) => `${m.method} ${m.path} is answered by a mock the user wrote (status ${m.status}), not by the real server`)], ...(viewAs && { profile: { name: viewAs.name, detail: [viewAs.locale, viewAs.timezone, viewAs.flags?.trim() && `flags: ${pairs(viewAs.flags, '=').map(([k, v]) => `${k}=${v}`).join(', ')}`].filter(Boolean).join(', ') } }) }
           : undefined,
         note: pendingNote.current || undefined,
+        site: siteRef.current.kind === 'live' || siteRef.current.kind === 'built' ? { kind: siteRef.current.kind, local: siteRef.current.localTwin || undefined } : undefined,
       };
       pendingNote.current = null;
       if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
@@ -1105,7 +1164,7 @@ export default function App() {
     } finally { setBusy(null); }
   };
 
-  const cancel = () => { if (runId) api.cancelAgent(runId); };
+  const cancel = () => { matchRef.current = null; if (runId) api.cancelAgent(runId); };
 
   const forceSteer = async (itemId: string) => {
     const running = runRef.current;
@@ -1213,22 +1272,34 @@ export default function App() {
   const afterRun = async (e: Extract<AgentEvent, { type: 'done' }>) => {
     const meta = runMetaRef.current[e.runId] || {};
     if (meta.variant) return nextVariant(e);
-    if (!e.changes?.length) return;
+    if (meta.match && matchRef.current && (!e.changes?.length || meta.site)) {
+      matchRef.current = null;
+      if (e.ok) setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Stopped matching the mockup: the last round changed nothing that can be compared here.' }]);
+    }
+    if (!e.changes?.length || meta.site) return;
     await captureAfter(e.runId);
     runA11y();
+    const flow = runFlowRef.current[e.runId];
+    let replayed: FlowResult | null = null;
+    let flowShot: string | null = null;
+    if (flow && e.ok && !meta.verify && verifyPending.current === e.runId && !runRef.current && !queuedRef.current.length) {
+      setJob('Replaying the steps you recorded…');
+      try {
+        replayed = await replayFlow(flow);
+        flowShot = await cleanCapture();
+      } finally { setJob(null); }
+      if (replayed) {
+        const result = { ...replayed, ...(flow.seen && { before: { errors: flow.seen.errors.length, failed: flow.seen.failed.length } }) };
+        setChat((c) => c.map((it) => (it.kind === 'done' && it.runId === e.runId ? { ...it, flow: result } : it)));
+      }
+    }
+    if (meta.match) return nextMatchRef.current(e);
     if (meta.verify || !e.ok || !settingsRef.current?.autoVerify) return;
     if (verifyPending.current !== e.runId || runRef.current || queuedRef.current.length) return;
     verifyPending.current = null;
     const shots = await api.runShots(e.runId, ['before', 'after']).catch(() => ({} as Record<string, string>));
     if (!shots.after) return;
-    const flow = runFlowRef.current[e.runId];
-    if (flow) {
-      setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Replaying the recorded interaction…' }]);
-      await replayFlow(flow);
-      const shot = await cleanCapture();
-      if (shot) shots.after = shot;
-      if (runRef.current || queuedRef.current.length) return;
-    }
+    if (flowShot) shots.after = flowShot;
     let same = false;
     if (shots.before) { try { same = await looksSame(shots.before, shots.after); } catch {  } }
     const since = meta.startedAt || 0;
@@ -1246,7 +1317,7 @@ export default function App() {
     const request: AgentRequest = {
       url: navRef.current.url, title: navRef.current.title, viewport: browser.current!.size(),
       instruction: 'Fix what the automatic check of the result found', annotations: [],
-      verify: { before: shots.before, after: shots.after, same, ...(again.length && { requests: again }) },
+      verify: { before: shots.before, after: shots.after, same, ...(again.length && { requests: again }), ...(replayed && { flow: replayed }) },
       diagnostics: cons.length || net.length || devSince || serverSince ? { console: cons, network: withBodies(net), devLog: devSince, serverLog: serverSince } : undefined,
     };
     setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Checking the result…' }]);
@@ -1254,6 +1325,7 @@ export default function App() {
   };
   const afterRunRef = useRef(afterRun);
   afterRunRef.current = afterRun;
+  const nextMatchRef = useRef<(e: Extract<AgentEvent, { type: 'done' }>) => Promise<void>>(async () => {});
 
   const pickVariant = async (itemId: string, id: string) => {
     const item = chat.find((c) => c.id === itemId && c.kind === 'variants') as Extract<ChatItem, { kind: 'variants' }> | undefined;
@@ -1270,6 +1342,141 @@ export default function App() {
       refreshGit();
       flash(r.failed.length ? `Applied, but couldn't restore ${r.failed.join(', ')}` : `Variant ${opt?.index} applied`);
     } catch (e) { flash(errText(e)); }
+  };
+
+  const mockupGap = async (m: { image: string; x: number; y: number }) => {
+    const b = browser.current;
+    const shot = b && await cleanCapture();
+    if (!b || !shot) return null;
+    try {
+      const fitted = await fitMockup(m.image, shot, { x: m.x, y: m.y }, b.size().width);
+      const d = await diffOverlay(fitted, shot);
+      return { shot, fitted, diff: d.url, pct: d.pct };
+    } catch { return null; }
+  };
+  const matchRequest = (gap: NonNullable<Awaited<ReturnType<typeof mockupGap>>>, round: number, was: number): AgentRequest => ({
+    url: navRef.current.url, title: navRef.current.title, viewport: browser.current!.size(),
+    instruction: round === 1
+      ? `Make this page match the mockup (reference 1). Reference 2 is the page as it renders now, and reference 3 marks in red where the two differ (${gap.pct.toFixed(1)}% of the page). Match the layout, spacing, sizes, colors and type. Keep the page's real content and components where the mockup only has placeholder copy or images, and use the project's design tokens. When you finish, Pinpoint compares the page with the mockup again and sends you what still differs.`
+      : `The page was compared with the mockup again after your last change: ${gap.pct.toFixed(1)}% of it still differs (it was ${was.toFixed(1)}%). Reference 3 shows where, in red. Fix the largest remaining differences in layout, spacing, size and color. Leave differences that are only font rendering, real content in place of placeholder content, or images.`,
+    annotations: [
+      { n: 1, kind: 'reference', note: 'The mockup to match, scaled to the width of the page.', image: gap.fitted, name: 'mockup' },
+      { n: 2, kind: 'reference', note: 'The page as it renders now.', image: gap.shot, name: 'page now' },
+      { n: 3, kind: 'reference', note: 'Where the page and the mockup differ: differing pixels are red, the rest is greyed out.', image: gap.diff, name: 'differences' },
+    ],
+    route: currentRoute ? { path: currentRoute.route, file: currentRoute.file, framework: currentRoute.framework } : undefined,
+  });
+  const matchMockup = async () => {
+    if (!overlay || !settings || runRef.current || job || busy) return;
+    if (siteRef.current.kind === 'live' || siteRef.current.kind === 'built') { flash('Matching a mockup needs the local dev server, so Pinpoint can see each change. Open the page locally first.'); return; }
+    if (!settings.projectDir) { flash('Pick the project folder the agent should edit.'); return; }
+    setBusy('Comparing the page with the mockup…');
+    try {
+      const gap = await mockupGap(overlay);
+      if (!gap) { flash("Couldn't compare the page with the mockup."); return; }
+      if (gap.pct <= MATCH_GOAL) { flash(`The page already matches the mockup closely (${gap.pct.toFixed(1)}% differs).`); return; }
+      matchRef.current = { image: overlay.image, x: overlay.x, y: overlay.y, round: 1, last: gap.pct };
+      if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
+      const thumb = await thumbnail(gap.fitted);
+      setChat((c) => [...c, { kind: 'user', id: uid(), text: `Match the mockup (${gap.pct.toFixed(1)}% of the page differs now)`, annotations: [{ id: uid(), n: 1, kind: 'reference', note: '', color: colorFor(1), image: thumb, name: overlay.name }], agent: settings.agent }]);
+      setOverlay(null);
+      await startRun(matchRequest(gap, 1, gap.pct), gap.shot, { match: 1 });
+    } finally { setBusy(null); }
+  };
+  const nextMatch = async (e: Extract<AgentEvent, { type: 'done' }>) => {
+    const m = matchRef.current;
+    if (!m) return;
+    const stop = (text: string) => { matchRef.current = null; setChat((c) => [...c, { kind: 'status', id: uid(), text }]); };
+    if (!e.ok) { matchRef.current = null; return; }
+    if (runRef.current || queuedRef.current.length || verifyPending.current !== e.runId) { matchRef.current = null; return; }
+    const gap = await mockupGap(m);
+    if (!gap || matchRef.current !== m) { matchRef.current = null; return; }
+    const now = `${gap.pct.toFixed(1)}% of the page differs from the mockup (it was ${m.last.toFixed(1)}%)`;
+    if (gap.pct <= MATCH_GOAL) return stop(`Matched after ${m.round} round${m.round > 1 ? 's' : ''}: ${now}. What is left is mostly font rendering and content.`);
+    if (m.round >= MATCH_ROUNDS) return stop(`Stopped after ${m.round} rounds: ${now}. Lay the mockup over the page to see what is left, or point at it and ask.`);
+    if (m.last - gap.pct < 0.3) return stop(`Stopped: it is no longer getting closer. ${now[0].toUpperCase()}${now.slice(1)}.`);
+    setChat((c) => [...c, { kind: 'status', id: uid(), text: `Round ${m.round} done: ${now}. Sending what still differs…` }]);
+    const was = m.last;
+    m.round++;
+    m.last = gap.pct;
+    startRun(matchRequest(gap, m.round, was), gap.shot, { match: m.round });
+  };
+
+  nextMatchRef.current = nextMatch;
+
+  const openVariantsLive = (itemId: string) => {
+    const why = bgBlocked ? bgBlocked.replace(/^Background runs/, 'Live variants')
+      : siteRef.current.kind !== 'dev' ? 'Live variants need the page to be on your local dev server.'
+        : !settingsRef.current?.devCommand ? 'Start the dev server from Pinpoint once (the terminal button), so it knows the command to preview each variant with.' : null;
+    if (why) { flash(why); return; }
+    setLiveVariants(itemId);
+  };
+  const liveItem = liveVariants ? chat.find((c) => c.id === liveVariants && c.kind === 'variants') as Extract<ChatItem, { kind: 'variants' }> | undefined : undefined;
+  const livePage = (() => { try { const u = new URL(nav.url); return u.pathname + u.search; } catch { return '/'; } })();
+
+  const sweepPlan = () => {
+    const origin = originOf(nav.url);
+    if (!origin) return { pages: [], crawl: false };
+    let here = '/';
+    try { const u = new URL(nav.url); here = u.pathname + u.search; } catch {  }
+    const fixed = routes.filter((r) => !r.dynamic && r.route !== currentRoute?.route);
+    return {
+      pages: [{ route: currentRoute?.route || here, url: nav.url }, ...fixed.slice(0, 11).map((r) => ({ route: r.route, url: origin + r.route }))],
+      crawl: !fixed.length,
+    };
+  };
+  const sweepOpenPage = (url: string, width: number) => {
+    setSweepOpen(false);
+    setMulti(false);
+    setDevice(width ? { on: true, w: width, h: width < 600 ? 844 : 1180, zoom: 'fit', touch: device.touch } : DEVICE_OFF);
+    go(url);
+  };
+  const sweepFix = async (pages: SweepPage[]) => {
+    setSweepOpen(false);
+    setInstruction(sweepInstruction(pages, (p) => routes.find((r) => r.route === p.route)?.file));
+    const worst = worstShots(pages);
+    const shots = await api.runShots('sweep', worst.map((w) => `${w.page.key}-${w.shot.size}`)).catch(() => ({} as Record<string, string>));
+    let n = nextN();
+    const added: Annotation[] = [];
+    for (const w of worst) {
+      const image = shots[`${w.page.key}-${w.shot.size}`];
+      if (!image) continue;
+      added.push({ id: uid(), n, kind: 'reference', color: colorFor(n), image, name: `${w.page.route} · ${w.shot.label}`, note: `${w.page.route} as it renders now at ${w.shot.width}px wide. ${w.shot.issues.slice(0, 2).map((i) => i.text).join('. ')}` });
+      n++;
+    }
+    if (added.length) setAnnotations((prev) => [...prev, ...added]);
+    if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
+    setTimeout(() => composerRef.current?.focus(), 50);
+  };
+
+  useEffect(() => {
+    api.reviewState().then((s) => { setReviewing(s.running); setReviewComments(s.comments); }).catch(() => {});
+    return api.onReviewComment((c) => {
+      setReviewComments((list) => [...list, c]);
+      flashRef.current(`${c.name || 'Someone'} left a comment on ${c.path}`);
+    });
+  }, []);
+  const addReviewComments = (list: ReviewComment[]) => {
+    const base = originOf(navRef.current.url);
+    let n = nextN();
+    const added: Annotation[] = list.map((c) => {
+      const note = `${c.text}${c.name ? ` (comment from ${c.name})` : ' (review comment)'}`;
+      const pageUrl = base ? base + c.path : undefined;
+      const ann: Annotation = c.selector
+        ? {
+          id: uid(), n, kind: 'element', color: colorFor(n), note, pageUrl, viewport: c.viewport.width ? c.viewport : undefined,
+          element: { uid: '', selector: c.selector, tag: c.tag || 'div', classes: c.classes, text: c.elText || '', html: c.html, rect: c.rect || { x: 0, y: 0, width: 0, height: 0 } },
+        }
+        : { id: uid(), n, kind: 'note', color: colorFor(n), note, pageUrl, viewport: c.viewport.width ? c.viewport : undefined };
+      n++;
+      return ann;
+    });
+    setAnnotations((prev) => [...prev, ...added]);
+    const ids = new Set(list.map((c) => c.id));
+    setReviewComments((cs) => cs.filter((c) => !ids.has(c.id)));
+    setReviewOpen(false);
+    if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
+    setTimeout(() => composerRef.current?.focus(), 50);
   };
 
   const diffMockup = async () => {
@@ -1310,7 +1517,11 @@ export default function App() {
     const first = users[0];
     const title = (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || 'Visual edits').split('\n')[0].slice(0, 72);
     const lines = ['## What changed', ''];
+    const shots: { runId: string; label: string }[] = [];
+    let asked = '';
     for (const it of chat) {
+      if (it.kind === 'user') asked = (it.text || it.annotations.map((a) => a.note).find(Boolean) || '').split('\n')[0].slice(0, 80);
+      if (it.kind === 'done' && it.shots && !it.undone && !it.variant && it.visual !== 'none') shots.push({ runId: it.runId, label: asked });
       if (it.kind === 'user') {
         const asks = [it.text, ...it.annotations.map((a) => a.note)].filter((t) => t && t.trim());
         if (asks.length) lines.push(`- **Asked:** ${asks.map((t) => t.trim().split('\n')[0]).join('; ')}`);
@@ -1320,7 +1531,7 @@ export default function App() {
       }
     }
     lines.push('', '---', 'Made with [Pinpoint](https://github.com/m-ahmed-elbeskeri/pinpoint).');
-    return { title, body: lines.join('\n') };
+    return { title, body: lines.join('\n'), shots };
   };
 
   const addRequest = (r: NetRequest, handler: ApiHandler | null) => {
@@ -1383,6 +1594,18 @@ export default function App() {
       `${design?.exists ? 'Improve' : 'Create'} DESIGN.md at the project root: a concise design system for this project (colors, typography, spacing, radii, shadows, key components and usage rules). ` +
       'Base it on the code (theme / Tailwind config, CSS variables, shared components)' + (draft ? ' and this draft extracted from the rendered page:\n\n' + draft : '.'),
     );
+    setTimeout(() => composerRef.current?.focus(), 50);
+  };
+  const flowFix = (id: string) => {
+    const item = chatRef.current.find((c) => c.kind === 'done' && c.runId === id) as Extract<ChatItem, { kind: 'done' }> | undefined;
+    const f = item?.flow;
+    if (!f) return;
+    const found = [
+      f.done < f.total ? `- It stopped at step ${f.done + 1} of ${f.total}: the element that step clicks or types into was not on the page.` : `- All ${f.total} steps ran.`,
+      ...f.errors.map((x) => `- Console error: ${x}`),
+      ...f.failed.map((x) => `- Failed request: ${x}`),
+    ];
+    setInstruction(`I replayed the steps I recorded after your change and it still isn't right:\n${found.join('\n')}\n\nFind why and fix it.`);
     setTimeout(() => composerRef.current?.focus(), 50);
   };
   const askToFix = () => {
@@ -1463,6 +1686,7 @@ export default function App() {
             kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [], commit: e.commit || null,
             ...(runMetaRef.current[e.runId]?.verify && { verify: true }),
             ...(runMetaRef.current[e.runId]?.variant && { variant: runMetaRef.current[e.runId].variant }),
+            ...(runMetaRef.current[e.runId]?.site && e.changes?.length && { unseen: runMetaRef.current[e.runId].site }),
           },
         ]);
         setRunId(null);
@@ -1496,6 +1720,9 @@ export default function App() {
     onPickVariant: pickVariant,
     onMeasureBuild: measureBuild,
     onForceSteer: forceSteer,
+    onFlowFix: flowFix,
+    onVariantsLive: openVariantsLive,
+    onOpenLocal: () => { if (siteRef.current.localTwin) go(siteRef.current.localTwin); else quickStartDev(); },
   };
   const chatActions = useStableActions<ChatActions>(chatHandlers);
 
@@ -1504,6 +1731,8 @@ export default function App() {
     else if (e.type === 'started') { setDevRunning(true); setDevLog(''); }
     else if (e.type === 'exit') { setDevRunning(false); setDevLog((l) => l + `\n[process exited with code ${e.code}]\n`); }
     else if (e.type === 'url') {
+      const started = originOf(e.url);
+      if (started) setTwins((t) => ({ ...t, local: started }));
       const cur = navRef.current.url;
       if (!cur || cur === 'about:blank' || /^chrome-error:/.test(cur) || loadErrorRef.current) {
         setTimeout(() => go(e.url), 400);
@@ -1632,7 +1861,8 @@ export default function App() {
   const focusAnn = (a: Annotation) => {
     setActiveId(a.id);
     if (a.tabId && a.tabId !== activeTabRef.current && tabsRef.current.some((t) => t.id === a.tabId)) switchTab(a.tabId);
-    if (a.kind === 'element' && a.element) (a.tabId ? handles.current[a.tabId] : browser.current)?.send('scrollTo', a.element.uid);
+    if (a.kind === 'element' && a.element?.uid) (a.tabId ? handles.current[a.tabId] : browser.current)?.send('scrollTo', a.element.uid);
+    else if (a.kind === 'element' && a.element && (!a.pageUrl || a.pageUrl === navRef.current.url)) browser.current?.reveal(a.element.selector);
   };
 
   const agentReady = settings && agents ? agents[settings.agent]?.ok : true;
@@ -1723,11 +1953,19 @@ export default function App() {
               />
             ) : <Globe size={14} className="url-icon" />}
             <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} onFocus={(e) => e.target.select()} placeholder="localhost:3000, a URL, or a path to an .html file" spellCheck={false} />
+            {projectDir && !loadError && (
+              <SiteChip
+                kind={kind} host={siteOrigin.replace(/^https?:\/\//, '')}
+                localUrl={localTwin} liveUrl={kind === 'dev' || kind === 'built' ? twinUrl(nav.url, liveOrigin) : ''}
+                canStartDev={!!devCommand && !devRunning} onGo={go} onStartDev={quickStartDev}
+              />
+            )}
           </form>
           <ProfileMenu profiles={profiles} current={tab?.profile || ''} onPick={(p) => tab && setTabProfile(tab.id, p)} onSave={saveProfiles} />
           <div className="vp-toggles">
             <button type="button" className={wsOpen ? 'on' : ''} onClick={() => { if (wsOpen) browser.current?.closeWorkspace(); setWsOpen(!wsOpen); }} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Components: render any component from the project on its own, with its props and variants"><Boxes size={14} /></button>
             <button type="button" onClick={() => setEnginesOpen(true)} disabled={!/^https?:/.test(nav.url)} title="Other browsers: see this page in Safari's engine (WebKit) and Firefox"><AppWindow size={14} /></button>
+            <button type="button" className={sweepOpen ? 'on' : ''} onClick={() => setSweepOpen(true)} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Check every page at phone, tablet and desktop widths for layout, loading and accessibility problems"><ShieldCheck size={14} /></button>
             <span className="vp-sep" />
             {QUICK_SIZES.map((q) => {
               const on = q.w ? device.on && device.w === q.w : !device.on;
@@ -1768,7 +2006,7 @@ export default function App() {
                   onReady={() => { applyTabProfile(t); if (here()) syncPage(); }}
                   onKey={(k) => { if (here()) handleKey(k); }}
                   onError={(msg) => patchTab(t.id, { error: msg })}
-                  onConsole={(c) => { if (here()) onConsole(c); }}
+                  onConsole={(c) => { if (!here()) return; onConsole(c); if (c.level === 'error') tapRef.current?.errors.push(c.message.split('\n')[0].slice(0, 200)); }}
                   onPageChange={() => { if (here()) { clearDiagnostics(); setFrozenState(false); setA11y([]); } }}
                   onFrozen={(on) => { if (here()) onFrozen(on); }}
                   onStep={(s) => { if (here()) onStep(s); }}
@@ -1777,7 +2015,7 @@ export default function App() {
               );
             })}
 
-            {overlay && mode !== 'sketch' && <MockupOverlay overlay={overlay} onChange={setOverlay} onDiff={diffMockup} onClose={() => setOverlay(null)} />}
+            {overlay && mode !== 'sketch' && <MockupOverlay overlay={overlay} onChange={setOverlay} onDiff={diffMockup} onMatch={matchMockup} canMatch={!runId && !job && !busy} onClose={() => setOverlay(null)} />}
             {frozen && <div className="frozen-tag"><Snowflake size={12} /> Page frozen · press F to release</div>}
             {rec && <div className="frozen-tag rec"><CircleDot size={12} /> Recording · {rec.steps.length} step{rec.steps.length === 1 ? '' : 's'} <button onClick={toggleRecording}>Stop</button></div>}
             {isolated && <div className="frozen-tag iso">Showing one element on its own <button onClick={() => isolate(null)}>Show page</button></div>}
@@ -1937,7 +2175,7 @@ export default function App() {
           {(runId || job) && (
             <div className="working">
               <Loader2 size={14} className="spin" />{' '}
-              {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is ${runMeta?.verify ? 'checking the result' : 'working'}…`}
+              {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is ${runMeta?.verify ? 'checking the result' : runMeta?.match ? `matching the mockup, round ${runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}
             </div>
           )}
           {away && chat.length > 0 && (
@@ -1997,7 +2235,7 @@ export default function App() {
             />
             <div className="composer-foot">
               <button className="icon-btn attach-btn" onClick={() => fileInput.current?.click()} title="Attach reference images (or paste / drop them)"><Paperclip size={15} /></button>
-              {!runId && <HandoffMenu hasRequest={!!(instruction.trim() || annotations.length)} canIssue={!!gitStatus?.gh.authed && !!gitStatus?.remote} onExport={exportHandoff} onCopy={copyHandoff} onIssue={issueHandoff} onImport={importHandoff} />}
+              {!runId && <HandoffMenu hasRequest={!!(instruction.trim() || annotations.length)} canIssue={!!gitStatus?.gh.authed && !!gitStatus?.remote} onExport={exportHandoff} onCopy={copyHandoff} onIssue={issueHandoff} onImport={importHandoff} onReview={() => setReviewOpen(true)} reviewCount={reviewComments.length} reviewing={reviewing} />}
               <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) addReferences(e.target.files); e.target.value = ''; }} />
               {!runId && <VariantsMenu value={settings.variants || 0} set={(n) => saveSettings({ variants: n })} />}
               {runId
@@ -2065,6 +2303,28 @@ export default function App() {
           onClose={() => setEnginesOpen(false)}
         />
       )}
+      {sweepOpen && (
+        <SweepView
+          {...sweepPlan()} partition={partitionOf(tab?.profile || '')}
+          onOpen={sweepOpenPage} onFix={sweepFix} onClose={() => setSweepOpen(false)}
+        />
+      )}
+      {liveItem && (
+        <VariantsLive
+          options={liveItem.options} chosen={liveItem.chosen} page={livePage} busy={!!runId || !!job}
+          onPick={(id) => { setLiveVariants(null); pickVariant(liveItem.id, id); }}
+          onClose={() => setLiveVariants(null)}
+        />
+      )}
+      {reviewOpen && (
+        <ReviewPanel
+          url={nav.url} canShare={kind === 'dev' || kind === 'built'}
+          whyNot={kind === 'live' ? 'This is the live site: send people its normal address. Open the page locally to share your working copy.' : 'Open a page from your dev server first.'}
+          comments={reviewComments} onAdd={addReviewComments}
+          onDismiss={(id) => setReviewComments((cs) => cs.filter((c) => c.id !== id))}
+          onState={(s) => setReviewing(s.running)} flash={flash} onClose={() => setReviewOpen(false)}
+        />
+      )}
       {patchView && (
         <div className="modal-backdrop" onMouseDown={() => setPatchView(null)}>
           <div className="compare-modal" onMouseDown={(e) => e.stopPropagation()}>
@@ -2090,6 +2350,6 @@ export default function App() {
 
 function markerList(anns: Annotation[], activeId: string | null) {
   return anns
-    .filter((a) => a.kind === 'element' && a.element)
+    .filter((a) => a.kind === 'element' && a.element?.uid)
     .map((a) => ({ uid: a.element!.uid, n: a.n, color: a.color, active: a.id === activeId }));
 }

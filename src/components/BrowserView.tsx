@@ -6,6 +6,7 @@ import { tokenMatchScript } from '../lib/tokens';
 import { a11yScript } from '../lib/a11y';
 import { breakpointsScript, type Breakpoint } from './DeviceBar';
 import { classNamesScript, errorOverlayScript, setPropScript } from '../lib/pagetools';
+import { buildKindScript, type BuildKind } from '../lib/site';
 import { closeWorkspaceScript, storageScript, workspaceScript, type WorkspaceSpec } from '../lib/workspace';
 import type { FlowStep } from '../lib/types';
 import type { A11yIssue, NetRequest } from '../lib/types';
@@ -79,6 +80,7 @@ export interface BrowserHandle {
   errorOverlay(): Promise<string | null>;
   sendRequest(r: { method: string; url: string; body?: string }): Promise<{ status: number; body: string; ms: number; error?: string } | null>;
   hasHmr(): Promise<boolean>;
+  buildKind(): Promise<BuildKind>;
   frame(targets: FrameTarget[], fallbackY?: number): Promise<{ found: boolean; y: number }>;
   workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>;
   closeWorkspace(): void;
@@ -178,6 +180,9 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     async hasHmr() {
       const code = `!!(document.querySelector('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="/_next/static/chunks/"],script[src*="livereload"],script[src*="browser-sync"]') || window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__NUXT__ || window.__sveltekit_dev || Object.keys(window).some((k) => /^(webpackHotUpdate|webpackChunk|__webpack_hmr|__turbopack|__NEXT_HMR|__next_f$|__remixContext|__reactRouterContext)/.test(k)))`;
       try { return !!(await wv.current!.executeJavaScript(code)); } catch { return false; }
+    },
+    async buildKind() {
+      try { return (await wv.current!.executeJavaScript<BuildKind>(buildKindScript)) || 'unknown'; } catch { return 'unknown'; }
     },
     async sendRequest(r) {
       const code = `(async () => {
