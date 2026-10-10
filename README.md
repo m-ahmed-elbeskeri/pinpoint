@@ -148,6 +148,7 @@ The tablet and phone buttons next to the address bar open a device toolbar like 
 | | |
 |---|---|
 | **Page problems** | Console errors, failed network requests and dev-server errors show up as a chip. Send them along or hit **Ask to fix**. |
+| **API requests** | The Network tab lists the page's API calls with what was sent and returned, and the file that handles each one. Attach a request to your message, send it again, or mock its response. |
 | **Accessibility** | axe-core checks the open page against WCAG A/AA. Violations show up as a chip with **Ask to fix**. |
 | **No visible change** | When a run edits files but the page looks the same, its card says so in plain sight, and the result check is told to find out why. |
 | **Unintended changes** | Every run screenshots the open page and your other routes before and after, then lists each page that changed and what changed on it ("the header, the footer links"), with a before/after compare. |

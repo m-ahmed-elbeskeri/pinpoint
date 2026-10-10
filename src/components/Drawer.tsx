@@ -1,16 +1,18 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Play, Square, X } from './icons';
 import type { DevCandidate } from '../lib/types';
 
 const TerminalPane = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPane })));
 
-export type DrawerTab = 'term' | 'dev' | 'agent';
+export type DrawerTab = 'term' | 'dev' | 'agent' | 'net';
 interface Props {
   tab: DrawerTab;
   setTab(t: DrawerTab): void;
   cwd: string;
   shell?: string;
   onShell(shell: string): void;
+  network: ReactNode;
+  netFailed: number;
   devLog: string;
   agentLog: string;
   devRunning: boolean;
@@ -39,6 +41,9 @@ export function Drawer(p: Props) {
           <button className={p.tab === 'dev' ? 'on' : ''} onClick={() => p.setTab('dev')}>
             Dev server {p.devRunning && <span className="live-dot" />}
           </button>
+          <button className={p.tab === 'net' ? 'on' : ''} onClick={() => p.setTab('net')}>
+            Network {p.netFailed > 0 && <span className="tab-count">{p.netFailed}</span>}
+          </button>
           <button className={p.tab === 'agent' ? 'on' : ''} onClick={() => p.setTab('agent')}>Agent logs</button>
         </div>
         {p.tab === 'dev' && (
@@ -59,7 +64,8 @@ export function Drawer(p: Props) {
       <div className="term-wrap" style={{ display: p.tab === 'term' ? 'flex' : 'none' }}>
         {(p.tab === 'term' || seen.current) && <Suspense fallback={null}><TerminalPane cwd={p.cwd} preferred={p.shell} onPrefer={p.onShell} /></Suspense>}
       </div>
-      <pre ref={pre} className="drawer-log" style={{ display: p.tab === 'term' ? 'none' : undefined }}>{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>
+      {p.tab === 'net' && p.network}
+      <pre ref={pre} className="drawer-log" style={{ display: p.tab === 'term' || p.tab === 'net' ? 'none' : undefined }}>{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>
     </div>
   );
 }

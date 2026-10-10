@@ -91,6 +91,11 @@ function fmtStep(s) {
   return s.type;
 }
 
+const clipBody = (s, max = 4000) => {
+  const t = String(s || '').trim();
+  return t.length > max ? `${t.slice(0, max)}\n… (${t.length - max} more characters)` : t;
+};
+
 function describeAnnotation(a) {
   const lines = [];
   const note = a.note?.trim() ? a.note.trim() : '(no note; infer the intent from the image and the overall request)';
@@ -122,6 +127,16 @@ function describeAnnotation(a) {
     lines.push(`- The user did this in the page${a.startUrl ? ` (starting at ${a.startUrl})` : ''}:`);
     (a.steps || []).forEach((s, i) => lines.push(`  ${i + 1}. ${fmtStep(s)}`));
     lines.push('- The request is about what happens during or after these steps. Follow the same path through the code to find it.');
+  } else if (a.kind === 'request' && a.request) {
+    const r = a.request;
+    lines.push(`### [${a.n}] API request the page made: ${note}`);
+    lines.push(`- Request: \`${r.method} ${r.url}\``);
+    lines.push(`- Result: ${r.error && !r.status ? `failed before a response (${r.error})` : `status ${r.status}`}${r.ms != null ? ` in ${r.ms} ms` : ''}`);
+    if (r.handler) lines.push(`- Handled by: ${r.handler.file}:${r.handler.line}${r.handler.sure ? '' : ' (best match on the end of the path; confirm it is mounted there)'}`);
+    else lines.push('- No handler for this path was found in the project: it may be an external API, or a route registered in a way that could not be read.');
+    if (r.reqBody) lines.push('- Body sent:\n```\n' + clipBody(r.reqBody) + '\n```');
+    lines.push('- Response body:\n```\n' + (clipBody(r.resBody) || '(empty)') + '\n```');
+    lines.push('- The request is about this endpoint or how the page uses its answer. Read the handler and the code that calls it before changing either.');
   } else if (a.kind === 'reference') {
     lines.push(`### [${a.n}] Reference image: ${note}`);
     lines.push(`- Image: ${a.imageFile}`);
@@ -153,8 +168,11 @@ function fmtDiagnostics(d) {
   if (d.network?.length) {
     out.push('Failed network requests:');
     out.push('```');
-    for (const n of d.network) out.push(`${n.method || 'GET'} ${n.url} -> ${n.status || n.error}`);
+    for (const n of d.network) out.push(`${n.method || 'GET'} ${n.url} -> ${n.status || n.error}${n.handler ? `  (handled by ${n.handler})` : ''}`);
     out.push('```');
+    for (const n of d.network.filter((x) => x.body?.trim()).slice(-4)) {
+      out.push(`What ${n.method || 'GET'} ${n.url} answered:`, '```', clipBody(n.body, 1500), '```');
+    }
   }
   if (d.a11y?.length) {
     out.push('Accessibility violations (axe-core, WCAG A/AA):');
@@ -167,6 +185,12 @@ function fmtDiagnostics(d) {
     out.push('Dev server output (tail):');
     out.push('```');
     out.push(d.devLog.trim());
+    out.push('```');
+  }
+  if (d.serverLog?.trim()) {
+    out.push('Server output (from the log the user pointed Pinpoint at):');
+    out.push('```');
+    out.push(d.serverLog.trim());
     out.push('```');
   }
   return out.length ? out.join('\n') : null;
@@ -319,7 +343,15 @@ function buildVerifyPrompt({ request }) {
   out.push('(Both screenshots are attached.)', '');
   if (verify.same) out.push('IMPORTANT: the two screenshots are pixel-for-pixel identical. Your edit made no visible difference on this page. Unless the request was about something that cannot be seen (a refactor, an invisible attribute), work out why and fix it: the wrong file or selector, a rule overridden by a more specific one, a change that only applies in another state or breakpoint, or a build that did not pick the file up.', '');
   const diag = fmtDiagnostics(diagnostics);
-  if (diag) out.push('Problems reported by the page since your changes:', diag, '');
+  if (diag) out.push('Problems reported by the page, and server output, since your changes:', diag, '');
+  if (verify.requests?.length) {
+    out.push('The request the user pointed at was sent again after your changes:');
+    for (const r of verify.requests) {
+      out.push(`- \`${r.method} ${r.url}\`: before ${r.before?.status ?? 'no response'}, now ${r.after.error && !r.after.status ? `no response (${r.after.error})` : r.after.status}`);
+      out.push('  Response now:', '```', clipBody(r.after.body, 2500) || '(empty)', '```');
+    }
+    out.push('Is that the answer the user asked for? If the endpoint still fails or returns the wrong shape, fix it.', '');
+  }
   out.push('Check your work against what the user asked for:');
   out.push('1. Does the "after" screenshot show the change they wanted, in the place they pointed at?');
   out.push('2. Did anything else on the page break or shift that should not have (compare with "before")?');

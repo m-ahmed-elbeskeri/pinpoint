@@ -8,7 +8,7 @@ import { breakpointsScript, type Breakpoint } from './DeviceBar';
 import { classNamesScript, errorOverlayScript, setPropScript } from '../lib/pagetools';
 import { closeWorkspaceScript, storageScript, workspaceScript, type WorkspaceSpec } from '../lib/workspace';
 import type { FlowStep } from '../lib/types';
-import type { A11yIssue } from '../lib/types';
+import type { A11yIssue, NetRequest } from '../lib/types';
 
 interface WebviewEl extends HTMLElement {
   loadURL(url: string): Promise<void>;
@@ -77,6 +77,7 @@ export interface BrowserHandle {
   breakpoints(): Promise<Breakpoint[]>;
   classNames(): Promise<string[]>;
   errorOverlay(): Promise<string | null>;
+  sendRequest(r: { method: string; url: string; body?: string }): Promise<{ status: number; body: string; ms: number; error?: string } | null>;
   hasHmr(): Promise<boolean>;
   frame(targets: FrameTarget[], fallbackY?: number): Promise<{ found: boolean; y: number }>;
   workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>;
@@ -103,6 +104,7 @@ interface Props {
   onPageChange(): void;
   onFrozen(on: boolean): void;
   onStep(step: FlowStep): void;
+  onRequest(r: NetRequest): void;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -177,6 +179,19 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
       const code = `!!(document.querySelector('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="/_next/static/chunks/"],script[src*="livereload"],script[src*="browser-sync"]') || window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__NUXT__ || window.__sveltekit_dev || Object.keys(window).some((k) => /^(webpackHotUpdate|webpackChunk|__webpack_hmr|__turbopack|__NEXT_HMR|__next_f$|__remixContext|__reactRouterContext)/.test(k)))`;
       try { return !!(await wv.current!.executeJavaScript(code)); } catch { return false; }
     },
+    async sendRequest(r) {
+      const code = `(async () => {
+        const r = ${JSON.stringify(r)};
+        const json = (s) => { try { JSON.parse(s); return true; } catch (e) { return false; } };
+        const t = performance.now();
+        try {
+          const res = await fetch(r.url, { method: r.method, credentials: 'include', ...(r.body && r.method !== 'GET' && r.method !== 'HEAD' ? { body: r.body, headers: json(r.body) ? { 'content-type': 'application/json' } : undefined } : {}) });
+          const body = (await res.text()).slice(0, 16000);
+          return { status: res.status, body, ms: Math.round(performance.now() - t) };
+        } catch (e) { return { status: 0, body: '', ms: Math.round(performance.now() - t), error: String((e && e.message) || e) }; }
+      })()`;
+      try { return await wv.current!.executeJavaScript(code); } catch { return null; }
+    },
     async errorOverlay() {
       try { return (await wv.current!.executeJavaScript<string | null>(errorOverlayScript)) || null; } catch { return null; }
     },
@@ -226,6 +241,7 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
         else if (e.channel === 'step') cb.current.onStep(data);
         else if (e.channel === 'manip') cb.current.onManip(data);
+        else if (e.channel === 'net') cb.current.onRequest(data);
         else if (e.channel === 'pointer') el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         else if (e.channel === 'hits' || e.channel === 'reply') {
           const res = pending.current.get(data.reqId);

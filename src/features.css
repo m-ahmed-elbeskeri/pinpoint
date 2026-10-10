@@ -675,3 +675,50 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .load-stats small { color: var(--muted); font-size: 10.5px; }
 .load-stats p { margin: 7px 0 0; font-size: 10.5px; color: var(--muted); }
 .load-stats-btn.on { background: var(--bg-4); color: var(--text); }
+
+.tab-count { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 4px; border-radius: 8px; background: rgba(255, 77, 109, .18); color: #ff8aa0; font: 600 10px/1 var(--mono); }
+.net { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: 12px; }
+.net-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); min-width: 0; overflow-x: auto; }
+.net-seg button { height: 24px; padding: 0 9px; font-size: 11.5px; white-space: nowrap; }
+.net-filter { width: 170px; flex-shrink: 0; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); outline: 0; font: 11.5px var(--mono); }
+.net-filter:focus { border-color: var(--line-2); }
+.net-mock { display: inline-flex; align-items: center; flex-shrink: 0; height: 24px; border-radius: 6px; border: 1px solid var(--line-2); overflow: hidden; color: var(--muted); }
+.net-mock.on { border-color: rgba(255, 214, 10, .45); color: var(--accent-2); }
+.net-mock button { height: 100%; padding: 0 7px; font-size: 11px; display: inline-flex; align-items: center; color: inherit; }
+.net-mock button + button { border-left: 1px solid var(--line); }
+.net-mock button:hover { background: var(--bg-4); color: var(--text); }
+.net-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 42%) 1fr; }
+.net-list { overflow-y: auto; border-right: 1px solid var(--line); padding: 4px; }
+.net-row { display: grid; grid-template-columns: 34px 46px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; width: 100%; padding: 4px 8px; border-radius: 6px; text-align: left; }
+.net-row:hover { background: var(--bg-3); }
+.net-row.on { background: var(--bg-4); }
+.net-status { font: 600 11px var(--mono); color: var(--ok); }
+.net-row.warn .net-status, .net-status.warn { color: var(--warn); }
+.net-row.bad .net-status, .net-status.bad { color: var(--bad); }
+.net-row.bad .net-path { color: #ff8aa0; }
+.net-method { font: 500 10.5px var(--mono); color: var(--muted); }
+.net-path { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.net-ms { font: 10.5px var(--mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.net-tag { font: 600 9.5px/1 Inter, sans-serif; text-transform: uppercase; letter-spacing: .05em; padding: 3px 5px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-2); }
+.net-detail { overflow-y: auto; padding: 10px 12px 14px; min-width: 0; }
+.net-empty { padding: 18px 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.net-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.net-head b { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.net-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 9px 0 10px; }
+.net-hint { font-size: 11px; color: var(--muted); }
+.net-error { margin-bottom: 8px; padding: 6px 9px; border-radius: 7px; background: rgba(255, 77, 109, .09); border: 1px solid rgba(255, 77, 109, .3); color: #ff8aa0; font-size: 11.5px; }
+.net-handler { font-size: 11.5px; color: var(--text-2); }
+.net-handler button { color: var(--accent-2); font-size: 11.5px; }
+.net-handler button:hover { text-decoration: underline; }
+.net-handler i { color: var(--muted); font-style: normal; }
+.net-detail h4 { margin: 12px 0 5px; font: 600 10.5px/1 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.net-detail pre { margin: 0; padding: 8px 10px; max-height: 260px; overflow: auto; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font-size: 11px; line-height: 1.5; color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+.net-form { display: grid; gap: 8px; }
+.net-form b { font-size: 12.5px; }
+.net-form-row { display: flex; gap: 6px; }
+.net-form select, .net-form input, .net-form textarea { height: 28px; padding: 0 8px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line-2); color: var(--text); outline: 0; font-size: 12px; }
+.net-form input.mono { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; }
+.net-form .net-code { width: 70px; }
+.net-form textarea { height: 150px; padding: 8px 10px; resize: vertical; font-size: 11.5px; line-height: 1.5; }
+.net-form select:focus, .net-form input:focus, .net-form textarea:focus { border-color: var(--accent); }
+.ann-code { font: 600 13px var(--mono); color: var(--text-2); }

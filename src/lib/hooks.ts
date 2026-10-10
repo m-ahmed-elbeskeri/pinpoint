@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { ChatItem, ConsoleEntry, NetworkFailure } from './types';
+import type { ChatItem, ConsoleEntry, NetRequest, NetworkFailure } from './types';
 
 const api = window.pinpoint;
 
@@ -108,4 +108,23 @@ export function useStableActions<T extends Record<string, (...args: any[]) => an
   const stable = useRef<T | null>(null);
   stable.current ??= Object.fromEntries(Object.keys(handlers).map((k) => [k, (...a: unknown[]) => latest.current[k](...a)])) as T;
   return stable.current;
+}
+
+export function useRequests() {
+  const [requests, setRequests] = useState<NetRequest[]>([]);
+  const requestsRef = useRef(requests);
+  requestsRef.current = requests;
+  const buf = useRef<NetRequest[]>([]);
+  const timer = useRef(0);
+  const onRequest = useCallback((r: NetRequest) => {
+    buf.current.push(r);
+    timer.current ||= window.setTimeout(() => {
+      timer.current = 0;
+      const add = buf.current;
+      buf.current = [];
+      setRequests((l) => [...l, ...add].slice(-300));
+    }, 200);
+  }, []);
+  const clearRequests = useCallback(() => { buf.current = []; setRequests([]); }, []);
+  return { requests, requestsRef, onRequest, clearRequests };
 }

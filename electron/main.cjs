@@ -10,6 +10,7 @@ const runs = require('./runs.cjs');
 const project = require('./project.cjs');
 const { listRoutes } = require('./routes.cjs');
 const sourcemap = require('./sourcemap.cjs');
+const apiroutes = require('./apiroutes.cjs');
 const gitx = require('./git.cjs');
 const devserver = require('./devserver.cjs');
 const designsystem = require('./designsystem.cjs');
@@ -241,14 +242,36 @@ async function cdp(wc, method, params = {}) {
       else if (event === 'CSS.styleSheetRemoved') cdpSheets.get(id)?.delete(p.styleSheetId);
       else if (event === 'Fetch.requestPaused') onRequestPaused(wc, p);
     });
-    wc.debugger.once('detach', () => { cdpRoots.delete(id); cdpSheets.delete(id); netModes.delete(id); });
+    wc.debugger.once('detach', () => { cdpRoots.delete(id); cdpSheets.delete(id); netModes.delete(id); netMocks.delete(id); });
   }
   return wc.debugger.sendCommand(method, params);
 }
 
+const netMocks = new Map();
+const mockFor = (wc, request) => {
+  const list = netMocks.get(wc.id);
+  if (!list?.length) return null;
+  let pathname = '';
+  try { const u = new URL(request.url); pathname = u.pathname + u.search; } catch { return null; }
+  const bare = pathname.split('?')[0];
+  return list.find((m) => (m.method === 'ANY' || m.method === request.method) && (m.path === pathname || m.path === bare
+    || (m.path.includes('*') && new RegExp('^' + m.path.split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$').test(bare)))) || null;
+};
+const wantsFetch = (wc) => netModes.has(wc.id) || !!netMocks.get(wc.id)?.length;
+
 function onRequestPaused(wc, p) {
   const mode = netModes.get(wc.id);
   const send = (method, params) => wc.debugger.sendCommand(method, params).catch(() => {});
+  const mock = mockFor(wc, p.request);
+  if (mock) {
+    let json = true;
+    try { JSON.parse(mock.body); } catch { json = false; }
+    return send('Fetch.fulfillRequest', {
+      requestId: p.requestId, responseCode: mock.status || 200,
+      responseHeaders: [{ name: 'content-type', value: json ? 'application/json' : 'text/plain; charset=utf-8' }, { name: 'access-control-allow-origin', value: '*' }, { name: 'x-pinpoint-mock', value: '1' }],
+      body: Buffer.from(mock.body || '').toString('base64'),
+    });
+  }
   if (mode === 'hang') return;
   if (mode === 'error') {
     return send('Fetch.fulfillRequest', {
@@ -335,9 +358,47 @@ ipcMain.handle('page:network', async (_e, { webContentsId, mode }) => {
     await cdp(wc, 'Fetch.enable', { patterns: [{ resourceType: 'XHR' }, { resourceType: 'Fetch' }] });
   } else {
     netModes.delete(wc.id);
-    await cdp(wc, 'Fetch.disable').catch(() => {});
+    if (!wantsFetch(wc)) await cdp(wc, 'Fetch.disable').catch(() => {});
   }
   return true;
+});
+
+ipcMain.handle('page:mocks', async (_e, { webContentsId, mocks }) => {
+  const wc = guest(webContentsId);
+  const list = (mocks || []).filter((m) => m && m.path).map((m) => ({ method: String(m.method || 'ANY').toUpperCase(), path: String(m.path), status: Number(m.status) || 200, body: String(m.body ?? '') }));
+  if (!list.length && !wc.debugger.isAttached()) { netMocks.delete(wc.id); return true; }
+  netMocks.set(wc.id, list);
+  if (wantsFetch(wc)) await cdp(wc, 'Fetch.enable', { patterns: [{ resourceType: 'XHR' }, { resourceType: 'Fetch' }] });
+  else await cdp(wc, 'Fetch.disable').catch(() => {});
+  return true;
+});
+
+ipcMain.handle('api:handler', (_e, { url, method }) => apiroutes.find(loadSettings().projectDir, url, method).catch(() => null));
+
+const serverLogFile = () => {
+  const { serverLog, projectDir } = loadSettings();
+  if (!serverLog?.trim()) return null;
+  return path.isAbsolute(serverLog) ? serverLog : path.join(projectDir || '', serverLog);
+};
+ipcMain.handle('serverlog:mark', async () => {
+  const file = serverLogFile();
+  if (!file) return 0;
+  try { return (await fs.promises.stat(file)).size; } catch { return 0; }
+});
+ipcMain.handle('serverlog:since', async (_e, offset) => {
+  const file = serverLogFile();
+  if (!file) return '';
+  try {
+    const { size } = await fs.promises.stat(file);
+    const from = offset > size ? 0 : Math.max(offset || 0, size - 64 * 1024);
+    if (size <= from) return '';
+    const handle = await fs.promises.open(file, 'r');
+    try {
+      const buf = Buffer.alloc(size - from);
+      await handle.read(buf, 0, buf.length, from);
+      return buf.toString('utf8').replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '').slice(-12000);
+    } finally { await handle.close(); }
+  } catch { return ''; }
 });
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));

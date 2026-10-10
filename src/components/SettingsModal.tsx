@@ -42,6 +42,13 @@ export function SettingsModal({ settings, agents, onSave, onClose }: Props) {
         </section>
 
         <section>
+          <h4>Server log</h4>
+          <label>Log file your backend writes to <span className="hint">(optional; what it prints during a run is shown to the result check)</span>
+            <input value={s.serverLog || ''} onChange={(e) => set('serverLog', e.target.value)} placeholder="logs/server.log, or a full path" spellCheck={false} />
+          </label>
+        </section>
+
+        <section>
           <h4>Layout</h4>
           <div className="setting-row">
             <span>Sidebar position</span>

@@ -36,6 +36,64 @@ try {
   })()`);
 } catch {  }
 
+try {
+  webFrame.executeJavaScript(`(() => {
+    if (window.__pinpointNet) return;
+    Object.defineProperty(window, '__pinpointNet', { enumerable: false, value: true });
+    const MAX = 16000;
+    let seq = 0;
+    const clip = (s) => (typeof s === 'string' ? (s.length > MAX ? s.slice(0, MAX) + '… (' + (s.length - MAX) + ' more characters)' : s) : '');
+    const textual = (type) => !type || type.indexOf('json') >= 0 || type.indexOf('text') >= 0 || type.indexOf('xml') >= 0 || type.indexOf('javascript') >= 0 || type.indexOf('urlencoded') >= 0;
+    const bodyText = (b) => {
+      if (b == null) return '';
+      if (typeof b === 'string') return clip(b);
+      if (b instanceof URLSearchParams) return clip(b.toString());
+      if (b instanceof FormData) { const o = []; b.forEach((v, k) => o.push(k + '=' + (typeof v === 'string' ? v : '[file]'))); return clip(o.join('&')); }
+      return '[binary]';
+    };
+    const report = (entry) => { try { document.dispatchEvent(new CustomEvent('pinpoint-net', { detail: JSON.stringify(entry) })); } catch (err) {} };
+    const absolute = (u) => { try { return new URL(u, location.href).href; } catch (err) { return String(u); } };
+
+    const nativeFetch = window.fetch;
+    if (nativeFetch) window.fetch = function (input, init) {
+      const started = performance.now();
+      const isReq = typeof Request !== 'undefined' && input instanceof Request;
+      const entry = { id: 'f' + (++seq), kind: 'fetch', method: String((init && init.method) || (isReq && input.method) || 'GET').toUpperCase(), url: absolute(isReq ? input.url : input), reqBody: bodyText(init && init.body), at: Date.now() };
+      const done = (extra) => report(Object.assign(entry, { ms: Math.round(performance.now() - started) }, extra));
+      return nativeFetch.apply(this, arguments).then((res) => {
+        const type = res.headers.get('content-type') || '';
+        if (textual(type)) res.clone().text().then((t) => done({ status: res.status, type, resBody: clip(t) }), () => done({ status: res.status, type, resBody: '' }));
+        else done({ status: res.status, type, resBody: '[' + (type || 'binary') + ']' });
+        return res;
+      }, (err) => { done({ status: 0, error: String((err && err.message) || err) }); throw err; });
+    };
+
+    const X = window.XMLHttpRequest;
+    if (X) {
+      const open = X.prototype.open, send = X.prototype.send;
+      X.prototype.open = function (method, url) { this.__pp = { id: 'x' + (++seq), kind: 'xhr', method: String(method || 'GET').toUpperCase(), url: absolute(url) }; return open.apply(this, arguments); };
+      X.prototype.send = function (body) {
+        const entry = this.__pp;
+        if (entry) {
+          const started = performance.now();
+          entry.reqBody = bodyText(body); entry.at = Date.now();
+          this.addEventListener('loadend', () => {
+            const type = this.getResponseHeader('content-type') || '';
+            let resBody = '';
+            try { resBody = this.responseType === '' || this.responseType === 'text' ? clip(this.responseText) : this.responseType === 'json' ? clip(JSON.stringify(this.response)) : '[' + this.responseType + ']'; } catch (err) {}
+            report(Object.assign(entry, { ms: Math.round(performance.now() - started), status: this.status, type, resBody }, this.status === 0 ? { error: 'The request did not complete' } : null));
+          });
+        }
+        return send.apply(this, arguments);
+      };
+    }
+  })()`);
+} catch {  }
+
+document.addEventListener('pinpoint-net', (e) => {
+  try { ipcRenderer.sendToHost('net', JSON.parse(e.detail)); } catch {  }
+});
+
 let mode = 'browse';
 let hoverEl = null;
 let hoverStack = [];

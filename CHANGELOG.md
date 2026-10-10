@@ -4,6 +4,20 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-10
+
+### Added
+
+- **Network panel.** The drawer has a Network tab listing every API request the page makes (fetch and XHR): status, timing, what was sent and what came back. Pick one and **Add to request** attaches it to your next message, the same way a picked element is.
+- **The file that handles a request.** Each request shows the handler it maps to in your project (Next.js and SvelteKit route files, Express, Fastify, Hono, FastAPI, Flask, Django, Rails and Go routes), with a click to open it. The agent is told too.
+- **Send again.** Re-issue a request from the page with one click. When a request is part of what you asked for, the result check sends it again after the agent's change and shows the agent the new answer.
+- **Mock a response.** Answer any endpoint with your own JSON and status, so the page can be built before the backend exists, then ask the agent to build the endpoint to match.
+- **Server output in the result check.** What your dev server printed during a run is shown to the result check. For a backend Pinpoint didn't start, point it at the log file in Settings.
+
+### Changed
+
+- **Failed requests carry the server's answer.** Page problems sent to the agent include the response body of a failed request and the file that handles it, not only the status code.
+
 ## [0.4.4] - 2026-10-10
 
 ### Faster
@@ -183,7 +197,8 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.1...v0.4.2

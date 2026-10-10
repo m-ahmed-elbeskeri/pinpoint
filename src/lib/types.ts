@@ -104,7 +104,8 @@ export interface ElementInfo {
 export interface Annotation {
   id: string;
   n: number;
-  kind: 'element' | 'drawing' | 'sketch' | 'reference' | 'flow';
+  kind: 'element' | 'drawing' | 'sketch' | 'reference' | 'flow' | 'request';
+  request?: RequestNote;
   steps?: FlowStep[];
   startUrl?: string;
   name?: string;
@@ -188,7 +189,17 @@ export interface DesignDoc { path: string; exists: boolean; content: string }
 export interface RouteInfo { route: string; file: string; framework: string; dynamic: boolean }
 
 export interface ConsoleEntry { level: 'error' | 'warning'; message: string; source?: string; line?: number; count: number; at: number; file?: string; fileLine?: number }
-export interface NetworkFailure { url: string; method: string; status?: number; error?: string; resourceType?: string; at: number }
+export interface NetworkFailure { url: string; method: string; status?: number; error?: string; resourceType?: string; at: number; body?: string; handler?: string }
+export interface ApiHandler { file: string; line: number; pattern: string; methods: string[]; sure: boolean }
+export interface NetRequest {
+  id: string; kind: 'fetch' | 'xhr'; method: string; url: string; at: number; ms?: number;
+  status?: number; type?: string; error?: string; reqBody?: string; resBody?: string;
+}
+export interface RequestNote {
+  method: string; url: string; status?: number; ms?: number; error?: string;
+  reqBody?: string; resBody?: string; handler?: { file: string; line: number; sure: boolean };
+}
+export interface Mock { id: string; method: string; path: string; status: number; body: string; on: boolean }
 
 export interface Settings {
   agent: AgentId;
@@ -207,6 +218,7 @@ export interface Settings {
   panelSide: 'left' | 'right';
   panelWidth: number;
   terminalShell?: string;
+  serverLog?: string;
   panelHidden: boolean;
   drawerHeight: number;
   useDesign: boolean;
@@ -275,6 +287,10 @@ export interface PinpointAPI {
   matchedRules(webContentsId: number, uid: string): Promise<CssRuleInfo[]>;
   setAnimationRate(webContentsId: number, rate: number): Promise<boolean>;
   setNetwork(webContentsId: number, mode: NetworkMode): Promise<boolean>;
+  setMocks(webContentsId: number, mocks: { method: string; path: string; status: number; body: string }[]): Promise<boolean>;
+  findHandler(url: string, method: string): Promise<ApiHandler | null>;
+  serverLogMark(): Promise<number>;
+  serverLogSince(offset: number): Promise<string>;
   findStory(name: string): Promise<{ file: string | null; storybook: boolean; url: string | null; canStart: boolean }>;
   startStorybook(name: string): Promise<string | null>;
   replay(webContentsId: number, steps: FlowStep[]): Promise<{ done: number; total: number }>;

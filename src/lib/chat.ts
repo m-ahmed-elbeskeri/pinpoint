@@ -1,22 +1,22 @@
 import type { Breakpoint } from '../components/DeviceBar';
 import type { FrameTarget } from '../components/BrowserView';
 import { uid } from './draw';
-import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, NetworkFailure, PageEnv } from './types';
+import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, NetworkFailure, PageEnv, RequestNote } from './types';
 
 export interface AgentRequest {
   url: string; title: string; viewport: { width: number; height: number; responsive?: boolean };
   breakpoints?: Breakpoint[];
   instruction: string; overview?: string;
   annotations: Omit<Annotation, 'id' | 'color'>[];
-  diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string; a11y?: A11yIssue[]; overlay?: string };
+  diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string; a11y?: A11yIssue[]; overlay?: string; serverLog?: string };
   route?: { path: string; file: string; framework: string };
   env?: PageEnv & { frozen: boolean; states?: string[]; profile?: { name: string; detail: string } };
   variant?: { index: number; total: number };
-  verify?: { before?: string; after: string; same?: boolean };
+  verify?: { before?: string; after: string; same?: boolean; requests?: { method: string; url: string; before?: { status?: number }; after: { status: number; body: string; error?: string } }[] };
   note?: string;
 }
 
-export interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number } }
+export interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number }; requests?: RequestNote[]; devAnchor?: string; logMark?: number }
 
 export function mergeRequests(reqs: AgentRequest[]): AgentRequest {
   const last = reqs[reqs.length - 1];

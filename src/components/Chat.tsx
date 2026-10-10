@@ -388,7 +388,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
             <div className="msg-attachments">
               {item.annotations.map((a) => (
                 <div key={a.id} className="msg-att" title={a.note}>
-                  {a.image ? <img src={a.image} alt="" /> : <div className="msg-att-empty">{a.kind === 'flow' ? `${a.steps?.length || 0} steps` : ''}</div>}
+                  {a.image ? <img src={a.image} alt="" /> : <div className="msg-att-empty">{a.kind === 'flow' ? `${a.steps?.length || 0} steps` : a.kind === 'request' ? `${a.request?.method} ${a.request?.status || 'ERR'}` : ''}</div>}
                   <span className="badge" style={{ background: a.color }}>{a.n}</span>
                 </div>
               ))}

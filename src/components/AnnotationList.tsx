@@ -25,6 +25,7 @@ const PLACEHOLDER: Record<Annotation['kind'], string> = {
   sketch: 'What is this sketch? Where should it go?',
   reference: 'What should we take from this image?',
   drawing: 'Explain your drawing…',
+  request: 'What is wrong with this request, or what should it return?',
 };
 
 export function AnnotationList(p: Props) {
@@ -37,7 +38,7 @@ export function AnnotationList(p: Props) {
         return (
           <div key={a.id} className={`ann ${p.activeId === a.id ? 'active' : ''}`} onClick={() => p.onFocus(a)}>
             <div className="ann-thumb">
-              {a.image ? <img src={a.image} alt="" /> : <Square size={16} />}
+              {a.image ? <img src={a.image} alt="" /> : a.kind === 'request' ? <b className="ann-code">{a.request?.status || 'ERR'}</b> : <Square size={16} />}
               <span className="badge" style={{ background: a.color }}>{a.n}</span>
             </div>
             <div className="ann-body">

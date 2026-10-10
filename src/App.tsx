@@ -30,7 +30,7 @@ import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './component
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
   OtherChat,
-  A11yIssue, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
+  A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
   GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, SourceInfo, Tool,
 } from './lib/types';
 
@@ -39,7 +39,8 @@ import { chatTitle, finalizeItems, healChat, mergeDeltas, mergeRequests, splitMe
 import { describe, handoffMarkdown, toPlaywright } from './lib/handoff';
 import { clampRect, errText, readImage, stripAnsi } from './lib/util';
 import { useShapes } from './lib/useShapes';
-import { useChatScroll, useLogs, usePageProblems, useStableActions } from './lib/hooks';
+import { useChatScroll, useLogs, usePageProblems, useRequests, useStableActions } from './lib/hooks';
+import { NetworkPanel, failed as requestFailed, pathOf } from './components/NetworkPanel';
 import { TopBar } from './components/TopBar';
 import { EmptyChat } from './components/EmptyChat';
 import { AnnotationList } from './components/AnnotationList';
@@ -126,6 +127,12 @@ export default function App() {
   const [sheet, setSheet] = useState<ContextTab | null>(null);
   const [diffView, setDiffView] = useState<{ runId: string; path?: string } | null>(null);
   const { consoleLog, netFails, consoleRef, netRef, onConsole, clearDiagnostics } = usePageProblems();
+  const { requests, requestsRef, onRequest, clearRequests } = useRequests();
+  const [mocks, setMocks] = useState<Mock[]>([]);
+  const mocksRef = useRef(mocks);
+  mocksRef.current = mocks;
+  const devLogRef = useRef(devLog);
+  devLogRef.current = devLog;
   const [includeDiag, setIncludeDiag] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -541,10 +548,18 @@ export default function App() {
     browser.current?.send('mode', m === 'select' ? 'select' : 'browse');
   }, []);
 
+  const applyMocks = useCallback(() => {
+    const id = browser.current?.id();
+    if (id == null) return;
+    api.setMocks(id, mocksRef.current.filter((m) => m.on)).catch((err) => flash(errText(err)));
+  }, []);
+  useEffect(() => { applyMocks(); }, [mocks, applyMocks]);
+
   const syncPage = useCallback(() => {
     browser.current?.send('mode', modeRef.current === 'select' ? 'select' : 'browse');
     browser.current?.send('markers', markerList(annRef.current, null));
     applyEnv(envRef.current, frozenRef.current);
+    applyMocks();
     browser.current?.send('layout', settingsRef.current?.layoutOverlay !== false);
     browser.current?.send('record', !!recRef.current);
     if (condRef.current.stress.length) browser.current?.send('stress', condRef.current.stress);
@@ -948,6 +963,13 @@ export default function App() {
     if (!settings) return;
     const id = uid();
     runMetaRef.current[id] = { ...meta, startedAt: Date.now() };
+    const asked = request.annotations.flatMap((a) => (a.kind === 'request' && a.request ? [a.request] : []));
+    if (!meta.verify && !meta.variant) {
+      const mine = runMetaRef.current[id];
+      if (asked.length) mine.requests = asked;
+      mine.devAnchor = stripAnsi(devLogRef.current).slice(-200);
+      api.serverLogMark().then((n) => { mine.logMark = n; }).catch(() => {});
+    }
     const flow = request.annotations.find((a) => a.kind === 'flow' && a.steps?.length);
     if (flow && !meta.verify) runFlowRef.current[id] = { steps: flow.steps!, startUrl: flow.startUrl || request.url };
     runPageRef.current[id] = request.url;
@@ -1023,7 +1045,7 @@ export default function App() {
       const hasDiag = includeDiag && (consoleLog.length || netFails.length || devHasErrors);
       const a11yIssues = includeA11y && a11y.length ? a11y : undefined;
       const diagnostics = hasDiag || a11yIssues
-        ? { console: hasDiag ? await locateConsole(consoleLog) : [], network: hasDiag ? netFails : [], devLog: hasDiag && devHasErrors ? devTail : '', a11y: a11yIssues, overlay: (hasDiag && hasPage && await b.errorOverlay()) || undefined }
+        ? { console: hasDiag ? await locateConsole(consoleLog) : [], network: hasDiag ? await withHandlers(withBodies(netFails)) : [], devLog: hasDiag && devHasErrors ? devTail : '', a11y: a11yIssues, overlay: (hasDiag && hasPage && await b.errorOverlay()) || undefined }
         : undefined;
       const request: AgentRequest = {
         url: navRef.current.url, title: navRef.current.title, viewport: { ...b.size(), responsive: device.on || undefined },
@@ -1033,8 +1055,8 @@ export default function App() {
         annotations: anns.map(({ id: _i, color: _c, ...a }) => a),
         diagnostics,
         route: currentRoute ? { path: currentRoute.route, file: currentRoute.file, framework: currentRoute.framework } : undefined,
-        env: env.colorScheme || env.reducedMotion || frozen || describeConditions(cond).length || viewAs
-          ? { ...env, frozen, states: describeConditions(cond), ...(viewAs && { profile: { name: viewAs.name, detail: [viewAs.locale, viewAs.timezone, viewAs.flags?.trim() && `flags: ${pairs(viewAs.flags, '=').map(([k, v]) => `${k}=${v}`).join(', ')}`].filter(Boolean).join(', ') } }) }
+        env: env.colorScheme || env.reducedMotion || frozen || describeConditions(cond).length || mocks.some((m) => m.on) || viewAs
+          ? { ...env, frozen, states: [...describeConditions(cond), ...mocks.filter((m) => m.on).map((m) => `${m.method} ${m.path} is answered by a mock the user wrote (status ${m.status}), not by the real server`)], ...(viewAs && { profile: { name: viewAs.name, detail: [viewAs.locale, viewAs.timezone, viewAs.flags?.trim() && `flags: ${pairs(viewAs.flags, '=').map(([k, v]) => `${k}=${v}`).join(', ')}`].filter(Boolean).join(', ') } }) }
           : undefined,
         note: pendingNote.current || undefined,
       };
@@ -1177,6 +1199,16 @@ export default function App() {
     startRun({ ...j.base, ...(slim && { instruction: '', annotations: [], overview: undefined }), diagnostics: undefined, note: undefined, variant }, before, { variant, frame: runMetaRef.current[e.runId]?.frame });
   };
 
+  const withBodies = (fails: NetworkFailure[]): NetworkFailure[] => fails.map((n) => {
+    const hit = [...requestsRef.current].reverse().find((r) => r.url === n.url && r.method === n.method && requestFailed(r));
+    return hit?.resBody ? { ...n, body: hit.resBody } : n;
+  });
+  const withHandlers = (fails: NetworkFailure[]) => Promise.all(fails.map(async (n, i) => {
+    if (i < fails.length - 8 || !/^https?:/.test(n.url)) return n;
+    const h = await api.findHandler(n.url, n.method).catch(() => null);
+    return h ? { ...n, handler: `${h.file}:${h.line}` } : n;
+  }));
+
   const afterRun = async (e: Extract<AgentEvent, { type: 'done' }>) => {
     const meta = runMetaRef.current[e.runId] || {};
     if (meta.variant) return nextVariant(e);
@@ -1201,11 +1233,20 @@ export default function App() {
     const since = meta.startedAt || 0;
     const cons = consoleRef.current.filter((c) => c.at >= since);
     const net = netRef.current.filter((n) => n.at >= since);
+    const again: NonNullable<NonNullable<AgentRequest['verify']>['requests']> = [];
+    for (const r of meta.requests || []) {
+      const res = await browser.current?.sendRequest({ method: r.method, url: r.url, body: r.reqBody });
+      if (res) again.push({ method: r.method, url: r.url, before: { status: r.status }, after: { status: res.status, body: res.body, error: res.error } });
+    }
+    const devNow = stripAnsi(devLogRef.current);
+    const at = meta.devAnchor ? devNow.lastIndexOf(meta.devAnchor) : -1;
+    const devSince = (at >= 0 ? devNow.slice(at + meta.devAnchor!.length) : '').split('\n').slice(-60).join('\n').trim();
+    const serverSince = meta.logMark != null ? (await api.serverLogSince(meta.logMark).catch(() => '')).split('\n').slice(-60).join('\n').trim() : '';
     const request: AgentRequest = {
       url: navRef.current.url, title: navRef.current.title, viewport: browser.current!.size(),
       instruction: 'Fix what the automatic check of the result found', annotations: [],
-      verify: { before: shots.before, after: shots.after, same },
-      diagnostics: cons.length || net.length ? { console: cons, network: net, devLog: '' } : undefined,
+      verify: { before: shots.before, after: shots.after, same, ...(again.length && { requests: again }) },
+      diagnostics: cons.length || net.length || devSince || serverSince ? { console: cons, network: withBodies(net), devLog: devSince, serverLog: serverSince } : undefined,
     };
     setChat((c) => [...c, { kind: 'status', id: uid(), text: 'Checking the result…' }]);
     startRun(request, shots.after, { verify: true });
@@ -1279,6 +1320,27 @@ export default function App() {
     }
     lines.push('', '---', 'Made with [Pinpoint](https://github.com/m-ahmed-elbeskeri/pinpoint).');
     return { title, body: lines.join('\n') };
+  };
+
+  const addRequest = (r: NetRequest, handler: ApiHandler | null) => {
+    const n = nextN();
+    const ann: Annotation = {
+      id: uid(), n, kind: 'request', note: '', color: colorFor(n), pageUrl: navRef.current.url,
+      request: { method: r.method, url: r.url, status: r.status, ms: r.ms, error: r.error, reqBody: r.reqBody, resBody: r.resBody, handler: handler ? { file: handler.file, line: handler.line, sure: handler.sure } : undefined },
+    };
+    setAnnotations((prev) => [...prev, ann]);
+    setActiveId(ann.id);
+    if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
+  };
+  const replayRequest = async (r: NetRequest) => {
+    const res = await browser.current?.sendRequest({ method: r.method, url: r.url, body: r.reqBody });
+    flash(!res ? 'The page could not send it.' : res.error && !res.status ? `${r.method} ${pathOf(r.url)} failed: ${res.error}` : `${r.method} ${pathOf(r.url)} answered ${res.status} in ${res.ms} ms`);
+  };
+  const buildMock = (m: Mock) => {
+    setInstruction(`Build the endpoint ${m.method === 'ANY' ? 'GET' : m.method} ${m.path} in this project's backend. It should answer with status ${m.status} and a body shaped like this (the page is being developed against it as a mock):\n\n${m.body}\n\nFollow how the existing endpoints are written and registered, use real data where the project has it, and tell me when I can switch the mock off.`);
+    if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
+    setTimeout(() => composerRef.current?.focus(), 50);
   };
 
   const openFile = (path: string, line?: number) => {
@@ -1708,6 +1770,7 @@ export default function App() {
                   onPageChange={() => { if (here()) { clearDiagnostics(); setFrozenState(false); setA11y([]); } }}
                   onFrozen={(on) => { if (here()) onFrozen(on); }}
                   onStep={(s) => { if (here()) onStep(s); }}
+                  onRequest={(r) => { if (here()) onRequest(r); }}
                 />
               );
             })}
@@ -1960,6 +2023,14 @@ export default function App() {
         <div className={`resizer row ${resizing === 'drawer' ? 'on' : ''}`} onPointerDown={startResize('drawer')} />
         <Drawer
           tab={drawerTab} setTab={setDrawerTab} devLog={devLog} agentLog={agentLog}
+          netFailed={requests.filter(requestFailed).length}
+          network={
+            <NetworkPanel
+              requests={requests} mocks={mocks} setMocks={setMocks}
+              findHandler={(url, method) => api.findHandler(url, method)}
+              onAdd={addRequest} onReplay={replayRequest} onOpenFile={openFile} onBuild={buildMock} onClear={clearRequests}
+            />
+          }
           cwd={projectDir} shell={settings.terminalShell} onShell={(terminalShell) => { if (terminalShell !== settingsRef.current?.terminalShell) saveSettings({ terminalShell }); }}
           devRunning={devRunning} devCommand={devCommand} devCandidates={devInfo?.candidates}
           onStartDev={startDev} onStopDev={() => api.stopDev()} onClose={() => setDrawerOpen(false)}
