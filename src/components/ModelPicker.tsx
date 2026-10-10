@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Cpu } from 'lucide-react';
+import { Check, ChevronDown, Cpu } from './icons';
 
 export interface ModelChoice { value: string; label: string; desc?: string }
 export interface LevelChoice { value: string; label: string; desc?: string }

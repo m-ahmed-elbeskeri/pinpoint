@@ -28,8 +28,16 @@ function onPath(name) {
   return null;
 }
 
-// The shells this machine has, most likely choice first.
+// The shells this machine has, most likely choice first. Finding them means probing PATH
+// and asking WSL, which is slow enough to notice, so the list is kept for a minute.
+let found = null; // { at, list }
 function shells() {
+  if (found && Date.now() - found.at < 60000) return found.list;
+  found = { at: Date.now(), list: findShells() };
+  return found.list;
+}
+
+function findShells() {
   const list = [];
   const add = (id, name, file, args = []) => { if (file && exists(file) && !list.some((s) => s.id === id)) list.push({ id, name, path: file, args }); };
   if (process.platform === 'win32') {
@@ -87,11 +95,23 @@ function open(sender, { shell, cwd, cols, rows }) {
   const s = { id: `t${++counter}`, shell: pick.id, name: pick.name, proc, buffer: '', exited: false, sender, cols: proc.cols, rows: proc.rows };
   sessions.set(s.id, s);
   const send = (channel, payload) => { if (!s.sender.isDestroyed()) s.sender.send(channel, payload); };
+  // A noisy command prints thousands of small chunks a second: they are sent on together
+  // every few milliseconds, and the kept output is only trimmed once it has doubled.
+  const flush = () => {
+    s.timer = null;
+    if (!s.pending) return;
+    send('term:data', { id: s.id, data: s.pending });
+    s.pending = '';
+  };
   proc.onData((data) => {
-    s.buffer = (s.buffer + data).slice(-KEEP);
-    send('term:data', { id: s.id, data });
+    s.buffer += data;
+    if (s.buffer.length > KEEP * 2) s.buffer = s.buffer.slice(-KEEP);
+    s.pending = (s.pending || '') + data;
+    s.timer ||= setTimeout(flush, 8);
   });
   proc.onExit(({ exitCode }) => {
+    clearTimeout(s.timer);
+    flush();
     s.exited = true;
     send('term:exit', { id: s.id, code: exitCode });
   });
@@ -104,7 +124,8 @@ function attach(sender, id) {
   const s = sessions.get(id);
   if (!s) return null;
   s.sender = sender;
-  return { ...describe(s), buffer: s.buffer };
+  s.pending = ''; // it is in the buffer handed over here
+  return { ...describe(s), buffer: s.buffer.slice(-KEEP) };
 }
 function write(id, data) { const s = sessions.get(id); if (s && !s.exited) s.proc.write(data); }
 function resize(id, cols, rows) {

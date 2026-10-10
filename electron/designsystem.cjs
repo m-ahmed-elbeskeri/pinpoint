@@ -38,6 +38,27 @@ function walk(root, keep) {
   return out;
 }
 
+// The same list as walk(), read without blocking the app while it works.
+async function walkAsync(root, keep) {
+  const out = [];
+  const stack = [''];
+  while (stack.length && out.length < MAX_FILES) {
+    const rel = stack.pop();
+    let entries;
+    try { entries = await fs.promises.readdir(path.join(root, rel), { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (!SKIP.has(e.name)) stack.push(r); }
+      else if (e.isFile() && keep(e.name)) out.push(r);
+    }
+  }
+  return out;
+}
+
+async function readSmallAsync(file) {
+  try { return (await fs.promises.stat(file)).size <= MAX_BYTES ? await fs.promises.readFile(file, 'utf8') : null; } catch { return null; }
+}
+
 function readSmall(file) {
   try { return fs.statSync(file).size <= MAX_BYTES ? fs.readFileSync(file, 'utf8') : null; } catch { return null; }
 }
@@ -51,7 +72,17 @@ function allDeps(root, pkgFiles) {
   return deps;
 }
 
+// Asked for on every live tweak and again when a run starts: the answer is kept for a
+// few seconds so a burst of edits walks the project once.
+let lastInspect = null; // { root, at, value }
 function inspect(root) {
+  if (lastInspect && lastInspect.root === root && Date.now() - lastInspect.at < 5000) return lastInspect.value;
+  const value = inspectNow(root);
+  lastInspect = { root, at: Date.now(), value };
+  return value;
+}
+
+function inspectNow(root) {
   if (!root || !fs.existsSync(root)) return null;
   const files = walk(root, (n) => /\.(css|scss|sass|less|pcss)$/.test(n) || n === 'package.json' || n === 'components.json' || /^(tailwind|uno|panda|theme)\.config\.\w+$/.test(n));
   const pkgs = files.filter((f) => /(^|\/)package\.json$/.test(f) && f.split('/').length <= 3);
@@ -98,20 +129,30 @@ function inspect(root) {
 }
 
 // How many times <Name …> appears in the project's source, and where.
-function componentUsage(root, name) {
+// Runs on every pick of a component, so the files are read without blocking the app
+// and the answer for a name is kept briefly (picking siblings asks the same thing).
+const usageCache = new Map(); // root:name -> { at, value }
+async function componentUsage(root, name) {
   if (!root || !/^[A-Za-z_$][\w$.]{1,60}$/.test(name || '')) return { count: 0, files: [] };
+  const hit = usageCache.get(`${root}:${name}`);
+  if (hit && Date.now() - hit.at < 10000) return hit.value;
   const kebab = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
   const esc = (s) => s.replace(/[.$]/g, '\\$&');
   const re = new RegExp(`<(?:${esc(name)}${kebab !== name.toLowerCase() ? `|${esc(kebab)}` : ''})(?=[\\s/>])`, 'g');
   const per = [];
-  for (const f of walk(root, (n) => /\.(jsx|tsx|js|ts|vue|svelte|astro|mdx)$/.test(n) && !/\.(test|spec|stories)\.\w+$/.test(n) && !n.endsWith('.d.ts'))) {
-    const text = readSmall(path.join(root, f));
-    if (!text) continue;
-    const n = (text.match(re) || []).length;
-    if (n) per.push({ file: f, n });
+  const files = await walkAsync(root, (n) => /\.(jsx|tsx|js|ts|vue|svelte|astro|mdx)$/.test(n) && !/\.(test|spec|stories)\.\w+$/.test(n) && !n.endsWith('.d.ts'));
+  for (let i = 0; i < files.length; i += 64) {
+    const texts = await Promise.all(files.slice(i, i + 64).map((f) => readSmallAsync(path.join(root, f))));
+    texts.forEach((text, j) => {
+      const n = text ? (text.match(re) || []).length : 0;
+      if (n) per.push({ file: files[i + j], n });
+    });
   }
   per.sort((a, b) => b.n - a.n);
-  return { count: per.reduce((s, p) => s + p.n, 0), files: per.slice(0, 6).map((p) => p.file), fileCount: per.length };
+  const value = { count: per.reduce((s, p) => s + p.n, 0), files: per.slice(0, 6).map((p) => p.file), fileCount: per.length };
+  usageCache.set(`${root}:${name}`, { at: Date.now(), value });
+  if (usageCache.size > 50) usageCache.delete(usageCache.keys().next().value);
+  return value;
 }
 
 // The component's Storybook story file, if there is one, and whether the project uses Storybook.

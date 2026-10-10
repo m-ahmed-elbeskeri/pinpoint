@@ -53,3 +53,20 @@ function classNames() {
   return [...names].sort();
 }
 export const classNamesScript = `(${classNames.toString()})()`;
+
+// Runs in the page: the text of the dev server's error overlay (Vite, Next.js, webpack), if one is showing.
+// It names the file, the line and the code around it, which the console message often does not.
+function errorOverlay(): string | null {
+  const text = (n: Element | null | undefined) => ((n as HTMLElement | null)?.innerText || n?.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+  const vite = document.querySelector('vite-error-overlay')?.shadowRoot;
+  if (vite) {
+    const part = (sel: string) => text(vite.querySelector(sel));
+    return [part('.plugin'), part('.message-body') || part('.message'), part('.file'), part('.frame'), part('.stack')].filter(Boolean).join('\n').slice(0, 4000) || null;
+  }
+  const next = document.querySelector('nextjs-portal')?.shadowRoot?.querySelector('[role="dialog"], [data-nextjs-dialog]');
+  if (next) return text(next).slice(0, 4000) || null;
+  const frame = document.querySelector<HTMLIFrameElement>('#webpack-dev-server-client-overlay');
+  try { if (frame?.contentDocument) return text(frame.contentDocument.body).slice(0, 4000) || null; } catch { /* not ours to read */ }
+  return null;
+}
+export const errorOverlayScript = `(${errorOverlay.toString()})()`;

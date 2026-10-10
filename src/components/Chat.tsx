@@ -1,10 +1,10 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
 import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, CornerDownRight, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, ShieldCheck, Gauge, EyeOff,
-} from 'lucide-react';
+  ExternalLink, CornerDownRight, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+} from './icons';
 import type { BuildSize, ChatItem, DiffFile, FileChange, PerfMetrics, RevertResult } from '../lib/types';
 
 // Diffs per run are fetched once and shared by every file row of that run.
@@ -35,28 +35,56 @@ function ShotStrip({ runId, onOpen }: { runId: string; onOpen(): void }) {
   );
 }
 
-// What the run did to the open page's load cost. Only changes worth a look are listed.
+// What the run did to how the open page loads, in plain words: a verdict first, then
+// only the differences worth a look. Nothing is shown when nothing moved.
 function PerfLine({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } }) {
   const { before: b, after: a } = perf;
   const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
-  const sign = (n: number) => (n > 0 ? '+' : '−');
   const items: { text: string; worse: boolean }[] = [];
   const bytes = (label: string, x: number, y: number) => {
     const d = y - x;
-    if (Math.abs(d) >= 1024 && Math.abs(d) >= x * 0.01) items.push({ text: `${label} ${sign(d)}${kb(Math.abs(d))}`, worse: d > 0 });
+    if (Math.abs(d) >= 1024 && Math.abs(d) >= x * 0.01) items.push({ text: `${kb(Math.abs(d))} ${d > 0 ? 'more' : 'less'} ${label}`, worse: d > 0 });
   };
-  bytes('JS', b.js, a.js);
+  bytes('JavaScript', b.js, a.js);
   bytes('CSS', b.css, a.css);
-  if (a.requests !== b.requests) items.push({ text: `${sign(a.requests - b.requests)}${Math.abs(a.requests - b.requests)} request${Math.abs(a.requests - b.requests) > 1 ? 's' : ''}`, worse: a.requests > b.requests });
-  if (Math.abs(a.nodes - b.nodes) >= 5) items.push({ text: `DOM ${sign(a.nodes - b.nodes)}${Math.abs(a.nodes - b.nodes)} nodes`, worse: a.nodes - b.nodes > 50 });
-  if (Math.abs(a.cls - b.cls) >= 0.01) items.push({ text: `layout shift ${b.cls} → ${a.cls}`, worse: a.cls > b.cls });
-  if (b.lcp && a.lcp && Math.abs(a.lcp - b.lcp) >= 150) items.push({ text: `largest paint ${b.lcp} → ${a.lcp} ms`, worse: a.lcp > b.lcp });
-  const title = `Before → after, measured on a fresh load of this page (dev build)\nJS ${kb(b.js)} → ${kb(a.js)}\nCSS ${kb(b.css)} → ${kb(a.css)}\nRequests ${b.requests} → ${a.requests}\nDOM nodes ${b.nodes} → ${a.nodes}\nLayout shift ${b.cls} → ${a.cls}\nLargest paint ${b.lcp || '?'} → ${a.lcp || '?'} ms`;
+  const req = a.requests - b.requests;
+  if (req) items.push({ text: `${Math.abs(req)} ${req > 0 ? 'more' : 'fewer'} file${Math.abs(req) > 1 ? 's' : ''} to download`, worse: req > 0 });
+  const nodes = a.nodes - b.nodes;
+  if (Math.abs(nodes) >= 5) items.push({ text: `${Math.abs(nodes)} ${nodes > 0 ? 'more' : 'fewer'} elements on the page`, worse: nodes > 50 });
+  if (Math.abs(a.cls - b.cls) >= 0.01) items.push({ text: a.cls > b.cls ? 'content jumps around more while loading' : 'content jumps around less while loading', worse: a.cls > b.cls });
+  if (b.lcp && a.lcp && Math.abs(a.lcp - b.lcp) >= 150) items.push({ text: `main content appears ${Math.abs(a.lcp - b.lcp)} ms ${a.lcp > b.lcp ? 'later' : 'sooner'}`, worse: a.lcp > b.lcp });
+  const worse = items.some((i) => i.worse), better = items.some((i) => !i.worse);
+  if (!items.length) return null; // nothing moved: the numbers are behind "Load stats"
   return (
-    <div className={`route-check ${items.some((i) => i.worse) ? 'moved' : ''}`} title={title}>
-      <Gauge size={12} />
-      {items.length ? items.map((i) => <span key={i.text} className={i.worse ? 'worse' : 'better'}>{i.text}</span>)
-        : <span>Load cost unchanged{a.js || a.lcp ? ` (${[a.js ? `${kb(a.js)} JS` : '', a.lcp ? `${a.lcp} ms to largest paint` : ''].filter(Boolean).join(', ')})` : ''}</span>}
+    <div className={`route-check ${worse ? 'moved' : ''}`}>
+      <Timer size={12} />
+      <span>{worse && better ? 'Loading changed' : worse ? 'Loads a little heavier' : 'Loads a little lighter'}:</span>
+      {items.map((i) => <span key={i.text} className={i.worse ? 'worse' : 'better'}>{i.text}</span>)}
+    </div>
+  );
+}
+
+// Every load number, before and after, shown when asked for.
+function PerfStats({ perf }: { perf: { before: PerfMetrics; after: PerfMetrics } }) {
+  const { before: b, after: a } = perf;
+  const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
+  const rows: [string, string, string, string?][] = [
+    ['JavaScript downloaded', kb(b.js), kb(a.js)],
+    ['CSS downloaded', kb(b.css), kb(a.css)],
+    ['Files requested', String(b.requests), String(a.requests)],
+    ['Elements on the page', String(b.nodes), String(a.nodes)],
+    ['Content jumping while loading', String(b.cls), String(a.cls), '0 is none, under 0.1 is good'],
+    ['Time until the main content shows', b.lcp ? `${b.lcp} ms` : '?', a.lcp ? `${a.lcp} ms` : '?'],
+  ];
+  return (
+    <div className="load-stats">
+      <div className="load-stats-head"><span>How this page loads</span><span>Before</span><span>After</span></div>
+      {rows.map(([label, before, after, hint]) => (
+        <div key={label} className={before === after ? '' : 'diff'} title={hint}>
+          <span>{label}{hint && <small> ({hint})</small>}</span><span>{before}</span><span>{after}</span>
+        </div>
+      ))}
+      <p>Measured on a fresh load of the dev build, so sizes are bigger than in production.</p>
     </div>
   );
 }
@@ -154,6 +182,21 @@ function InlineDiff({ runId, path, onFirstLine }: { runId: string; path: string;
         );
       })}
     </div>
+  );
+}
+
+// The files of a run. A long list starts folded to its first few, so the card stays a glance.
+const FILES_SHOWN = 5;
+function FileList({ count, children }: { count: number; children: ReactNode[] }) {
+  const [all, setAll] = useState(false);
+  const fold = count > FILES_SHOWN + 1; // never hide just one
+  return (
+    <ul className="done-files">
+      {fold && !all ? children.slice(0, FILES_SHOWN) : children}
+      {fold && (
+        <li><button className="files-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show ${count - FILES_SHOWN} more files`}</button></li>
+      )}
+    </ul>
   );
 }
 
@@ -335,6 +378,7 @@ const STEER_TAG = {
 };
 
 export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, gitRepo }: ItemProps) {
+  const [loadStats, setLoadStats] = useState(false);
   switch (item.kind) {
     case 'user': {
       const tag = item.steer ? STEER_TAG[item.steer] : null;
@@ -408,10 +452,14 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
       const elsewhere = moved.filter((r) => !r.current); // pages the user wasn't looking at
       const sideEffects = moved.some((r) => r.current && r.asked?.length && r.areas?.length); // more changed here than was pointed at
       const others = (item.routeCheck?.filter((r) => !r.current) || []).length;
+      const counted = item.changes.filter((c) => c.add != null);
+      const added = counted.reduce((s, c) => s + (c.add || 0), 0), removed = counted.reduce((s, c) => s + (c.del || 0), 0);
+      // A check that found nothing to fix is a footnote, not a result: one quiet line.
+      const quiet = !!item.verify && n === 0;
       return (
-        <div className={`done-card ${item.ok ? 'ok' : 'fail'} ${item.undone ? 'undone' : ''}`}>
+        <div className={`done-card ${item.ok ? 'ok' : 'fail'} ${item.undone ? 'undone' : ''} ${quiet ? 'quiet' : ''}`}>
           <div className="done-head">
-            {item.verify && item.ok ? <ShieldCheck size={15} /> : item.ok ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+            <i className="done-icon">{item.verify && item.ok ? <SealCheck size={quiet ? 14 : 15} weight="fill" /> : item.ok ? <CheckCircle2 size={15} weight="fill" /> : <XCircle size={15} weight="fill" />}</i>
             <span>
               {item.instant && !item.undone ? `Applied instantly · ${files}`
                 : item.background && !item.undone ? `Background run applied · ${files}`
@@ -419,6 +467,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
                 : item.verify ? (n ? `Checked the result and fixed ${files}` : item.ok ? 'Checked the result: looks right' : 'Check stopped')
                   : item.undone ? 'Reverted' : n ? `Changed ${files}` : item.ok ? 'Done, no file changes' : 'Stopped'}
             </span>
+            {counted.length > 0 && !item.undone && <span className="df-stat" title="Lines added and removed across these files"><i className="add">+{added}</i><i className="del">−{removed}</i></span>}
             <span className="done-meta">
               {item.durationMs ? `${Math.round(item.durationMs / 1000)}s` : ''}
               {item.cost ? ` · $${item.cost.toFixed(2)}` : ''}
@@ -431,7 +480,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
             )}
           </div>
           {n > 0 && (
-            <ul className="done-files">
+            <FileList count={n}>
               {item.changes.map((c) => (
                 <FileRow
                   key={c.path}
@@ -443,7 +492,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
                   onOpen={(line) => onOpenFile(c.path, line)}
                 />
               ))}
-            </ul>
+            </FileList>
           )}
           {noVisual && (
             <div className="no-visual">
@@ -476,6 +525,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
             </div>
           )}
           {item.perf && <PerfLine perf={item.perf} />}
+          {item.perf && loadStats && <PerfStats perf={item.perf} />}
           {item.build && <BuildLine build={item.build} />}
           {/* A check that changed nothing has nothing to review or undo. */}
           {!(item.verify && n === 0) && <div className="done-actions">
@@ -497,6 +547,11 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
             {n > 0 && !item.undone && item.ok && (
               <button className="btn ghost xs" disabled={busy} onClick={() => onMeasureBuild(item.runId)} title="Run the project's build and measure the JS and CSS it produces (the per-run numbers come from the dev server)">
                 <Gauge size={12} /><span className="btn-text">Build size</span>
+              </button>
+            )}
+            {item.perf && (
+              <button className={`btn ghost xs load-stats-btn ${loadStats ? 'on' : ''}`} onClick={() => setLoadStats(!loadStats)} title="How this page loads, before and after this change">
+                <Timer size={12} /><span className="btn-text">Load stats</span>
               </button>
             )}
             <div className="spacer" />

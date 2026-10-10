@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { structuredPatch } from 'diff';
-import { ExternalLink, FileMinus2, FilePen, FilePlus2, Loader2, Undo2, X } from 'lucide-react';
+import { ExternalLink, FileMinus2, FilePen, FilePlus2, Loader2, Undo2, X } from './icons';
 import type { DiffFile, RevertResult } from '../lib/types';
 
 interface Props {

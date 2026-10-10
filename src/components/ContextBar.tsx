@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Accessibility, AlertTriangle, Component, FileCode2, Wrench, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Accessibility, AlertTriangle, Component, FileCode2, Wrench, X } from './icons';
 import type { A11yIssue, ConsoleEntry, DesignSystem, NetworkFailure, RouteInfo } from '../lib/types';
 
 interface Props {
@@ -23,6 +23,16 @@ interface Props {
 export function ContextBar(p: Props) {
   const [open, setOpen] = useState(false);
   const [a11yOpen, setA11yOpen] = useState(false);
+  // Clicking anywhere else closes the open list.
+  useEffect(() => {
+    if (!open && !a11yOpen) return;
+    const fn = (e: MouseEvent) => {
+      if ((e.target as Element).closest?.('.diag-pop, [data-diag-chip]')) return;
+      setOpen(false); setA11yOpen(false);
+    };
+    window.addEventListener('mousedown', fn);
+    return () => window.removeEventListener('mousedown', fn);
+  }, [open, a11yOpen]);
   const ds = p.designSystem;
   const dsLabel = ds ? [ds.tailwind && 'Tailwind', ...ds.libraries.slice(0, 2), !ds.tailwind && !ds.libraries.length && (ds.tokenFiles.length ? 'CSS tokens' : ds.styling[0])].filter(Boolean).join(' · ') : '';
   const a11yNodes = p.a11y.reduce((s, v) => s + v.count, 0);
@@ -51,12 +61,12 @@ export function ContextBar(p: Props) {
           </span>
         )}
         {diagCount > 0 && (
-          <button className={`chip ${errors || p.network.length ? 'danger' : 'warn'} ${p.includeDiag ? '' : 'excluded'}`} onClick={() => { setOpen(!open); setA11yOpen(false); }} title="Problems on the page">
+          <button data-diag-chip className={`chip ${errors || p.network.length ? 'danger' : 'warn'} ${p.includeDiag ? '' : 'excluded'}`} onClick={() => { setOpen(!open); setA11yOpen(false); }} title="Problems on the page">
             <AlertTriangle size={12} /> {diagLabel}
           </button>
         )}
         {p.a11y.length > 0 && (
-          <button className={`chip ${p.includeA11y ? 'warn' : ''}`} onClick={() => { setA11yOpen(!a11yOpen); setOpen(false); }} title="Accessibility problems on this page (axe-core, WCAG A/AA)">
+          <button data-diag-chip className={`chip ${p.includeA11y ? 'warn' : ''}`} onClick={() => { setA11yOpen(!a11yOpen); setOpen(false); }} title="Accessibility problems on this page (axe-core, WCAG A/AA)">
             <Accessibility size={12} /> {a11yNodes} a11y
           </button>
         )}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, FileCode2, Link2, Route as RouteIcon } from 'lucide-react';
+import { ChevronDown, FileCode2, Link2, Route as RouteIcon } from './icons';
 import type { RouteInfo } from '../lib/types';
 
 interface Props {

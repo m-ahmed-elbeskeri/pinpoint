@@ -275,10 +275,11 @@ async function finish(check, save, shared = true) {
   if (!routes.length) return [];
   await sleep(1500); // let the dev server finish rebuilding
   const after = await shootAll(routes, check.partition);
-  if (shared) baseline = { root: check.root, origin: check.origin, partition: check.partition, fingerprint: fingerprint(check.root), shots: after };
+  if (shared) baseline = { root: check.root, origin: check.origin, partition: check.partition, fingerprint: await fingerprintAsync(check.root), shots: after };
   else baseline = null; // some pages weren't re-shot: start fresh next time
   const results = [];
   for (const r of routes) {
+    await new Promise(setImmediate); // comparing a page is a burst of pixel work: let the app breathe between pages
     const key = keyFor(r.route);
     const a = before.get(key), b = after.get(key);
     if (!a || !b) continue;

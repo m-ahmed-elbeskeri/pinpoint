@@ -1,4 +1,4 @@
-import { Hand, RotateCw, X } from 'lucide-react';
+import { Hand, RotateCw, X } from './icons';
 
 // Responsive mode: the page is shown at an exact size, scaled to fit the stage.
 export interface Device { on: boolean; w: number; h: number; zoom: 'fit' | number; touch: boolean } // h 0 = fill the height

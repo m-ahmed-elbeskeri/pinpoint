@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Columns2, Loader2, MonitorSmartphone, ScanEye, SplitSquareHorizontal, X } from 'lucide-react';
+import { Columns2, Loader2, MonitorSmartphone, ScanEye, SplitSquareHorizontal, X } from './icons';
 
 export interface CompareTarget {
   runId?: string;                             // a run's shots…
@@ -36,6 +36,26 @@ export async function diffOverlay(before: string, after: string): Promise<{ url:
   }
   xb.putImageData(db, 0, 0);
   return { url: cb.toDataURL('image/jpeg', .85), pct: (changed / (w * h)) * 100 };
+}
+
+// True when two screenshots are the same to the eye (the same test diffOverlay's `pct < 0.01` was),
+// without building the marked-up image, and stopping at the first sign of a real difference.
+export async function looksSame(before: string, after: string): Promise<boolean> {
+  const [a, b] = await Promise.all([load(before), load(after)]);
+  const w = b.width, h = b.height;
+  const limit = w * h * 0.0001;
+  const pixels = (img: HTMLImageElement) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true })!;
+    x.drawImage(img, 0, 0, w, h);
+    return x.getImageData(0, 0, w, h).data;
+  };
+  const da = pixels(a), db = pixels(b);
+  let changed = 0;
+  for (let i = 0; i < db.length; i += 4) {
+    if (Math.abs(db[i] - da[i]) + Math.abs(db[i + 1] - da[i + 1]) + Math.abs(db[i + 2] - da[i + 2]) > 60 && ++changed >= limit) return false;
+  }
+  return true;
 }
 
 export function CompareView({ runId, pair, images, labels = ['Before', 'After'], title = 'Before & after', onClose, captureSizes }: Props) {

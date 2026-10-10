@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PanelLeft, PanelRight, X } from 'lucide-react';
+import { PanelLeft, PanelRight, X } from './icons';
 import type { AgentId, Settings } from '../lib/types';
 
 interface Props {

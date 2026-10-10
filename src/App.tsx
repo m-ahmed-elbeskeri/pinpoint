@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown, ArrowLeft, ArrowRight, Bug, Check, FolderOpen, Globe, Loader2, Monitor, MousePointer2, MousePointerClick,
-  PenTool, Plus, RotateCw, Send, Settings as SettingsIcon, Smartphone, Square, SquarePen, Tablet,
-  TerminalSquare, Trash2, X, PanelLeft, PanelRight, Paperclip, Palette, ImagePlus, Zap, CornerDownRight,
-  AppWindow, Blend, Boxes, Brain, CircleDot, ClipboardCopy, Columns3, Download, Snowflake, SquareStack,
-} from 'lucide-react';
+  ArrowDown, ArrowLeft, ArrowRight, Check, Globe, Loader2, Monitor,
+  Plus, RotateCw, Send, Smartphone, Square, Tablet,
+  Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight,
+  AppWindow, Boxes, CircleDot, Columns3, Snowflake, SquareStack,
+} from './components/icons';
 import { BrowserView, sleep, type BrowserHandle, type FrameTarget, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
 import { DrawToolbar, TOOL_KEYS } from './components/DrawToolbar';
@@ -19,7 +19,7 @@ import { DiffViewer } from './components/DiffViewer';
 import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
 import { GitPanel } from './components/GitPanel';
-import { CompareView, diffOverlay, type CompareTarget } from './components/CompareView';
+import { CompareView, looksSame, type CompareTarget } from './components/CompareView';
 import { ElementTools, type ToolSection } from './components/ElementTools';
 import { ConditionsMenu, HandoffMenu, MAX_VARIANTS, NO_CONDITIONS, PinsChip, VariantsMenu, describeConditions, type Conditions } from './components/PageTools';
 import { MultiView } from './components/MultiView';
@@ -29,9 +29,19 @@ import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './component
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
   OtherChat,
-  A11yIssue, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog, NetworkFailure,
-  GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, Shape, SourceInfo, Tool,
+  A11yIssue, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
+  GitStatus, PageEnv, Rect, RevertResult, RouteInfo, Settings, SourceInfo, Tool,
 } from './lib/types';
+
+import { makeTab, matchRoute, normalizeUrl, pairs, partitionOf, tabLabel, type Tab } from './lib/urls';
+import { chatTitle, finalizeItems, healChat, mergeDeltas, mergeRequests, splitMemory, type AgentRequest, type ParkedChat, type RunMeta } from './lib/chat';
+import { describe, handoffMarkdown, toPlaywright } from './lib/handoff';
+import { clampRect, errText, readImage, stripAnsi } from './lib/util';
+import { useShapes } from './lib/useShapes';
+import { useChatScroll, useLogs, usePageProblems, useStableActions } from './lib/hooks';
+import { TopBar } from './components/TopBar';
+import { EmptyChat } from './components/EmptyChat';
+import { AnnotationList } from './components/AnnotationList';
 
 const api = window.pinpoint;
 export const isMac = api.platform === 'darwin';
@@ -39,187 +49,6 @@ export const MOD = isMac ? '⌘' : 'Ctrl';
 document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
 
-// ---------- helpers ----------
-function normalizeUrl(input: string) {
-  const s = input.trim();
-  if (!s) return '';
-  if (/^[a-zA-Z]:[\\/]/.test(s)) return 'file:///' + s.replace(/\\/g, '/');
-  if (/^(https?|file|about|data):/i.test(s)) return s;
-  if (s.startsWith('/')) return 'file://' + s; // macOS / Linux absolute path
-  if (/^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?/.test(s) || /^:\d+/.test(s)) return 'http://' + s.replace(/^:/, 'localhost:');
-  if (/^\d+$/.test(s)) return `http://localhost:${s}`;
-  return 'https://' + s;
-}
-
-const errText = (e: unknown) => String((e as Error)?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-
-// Route patterns ([id], :id, [...slug], *) -> regex, to find which route renders a URL.
-function routeRegex(route: string) {
-  const body = route.split('/').map((seg) => {
-    if (/^\[\[?\.\.\./.test(seg) || seg === '*') return '.*';
-    if (/^\[.+\]$/.test(seg) || /^[:$]/.test(seg)) return '[^/]+';
-    return seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }).join('/');
-  return new RegExp(`^${body || '/'}/?$`);
-}
-
-function matchRoute(routes: RouteInfo[], url: string, root: string): RouteInfo | null {
-  if (!url || !routes.length) return null;
-  let path = '';
-  try {
-    const u = new URL(url);
-    if (u.protocol === 'file:') {
-      const file = decodeURIComponent(u.pathname).replace(/^\/([a-zA-Z]:)/, '$1');
-      const r = root.replace(/\\/g, '/').replace(/\/$/, '');
-      if (!file.toLowerCase().startsWith(r.toLowerCase() + '/')) return null;
-      path = '/' + file.slice(r.length + 1);
-      if (path === '/index.html') path = '/';
-    } else path = u.pathname.replace(/\/$/, '') || '/';
-  } catch { return null; }
-  return routes.find((r) => !r.dynamic && r.route === path) || routes.find((r) => r.dynamic && routeRegex(r.route).test(path)) || null;
-}
-
-// Reads an image file, shrinking big ones so requests stay light.
-function readImage(file: File, maxEdge = 1800): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onerror = reject;
-    fr.onload = () => {
-      const img = new Image();
-      img.onerror = reject;
-      img.onload = () => {
-        const s = Math.min(1, maxEdge / Math.max(img.width, img.height));
-        if (s === 1 && file.size < 1.5e6) return resolve(fr.result as string);
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
-        c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL(file.type === 'image/png' && file.size < 4e6 ? 'image/png' : 'image/jpeg', 0.9));
-      };
-      img.src = fr.result as string;
-    };
-    fr.readAsDataURL(file);
-  });
-}
-
-interface AgentRequest {
-  url: string; title: string; viewport: { width: number; height: number; responsive?: boolean };
-  breakpoints?: Breakpoint[];
-  instruction: string; overview?: string;
-  annotations: Omit<Annotation, 'id' | 'color'>[];
-  diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string; a11y?: A11yIssue[] };
-  route?: { path: string; file: string; framework: string };
-  env?: PageEnv & { frozen: boolean; states?: string[]; profile?: { name: string; detail: string } };
-  variant?: { index: number; total: number };
-  verify?: { before?: string; after: string; same?: boolean };
-  note?: string; // something Pinpoint did that the agent should know (e.g. which variant was picked)
-}
-
-// What kind of run an id is: a normal request, one of several variants, or the automatic check.
-// frame: what the "before" screenshot was aimed at, so the "after" one shows the same place.
-interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number } }
-
-// Several queued messages become one follow-up, renumbering their annotations.
-function mergeRequests(reqs: AgentRequest[]): AgentRequest {
-  const last = reqs[reqs.length - 1];
-  let n = 0;
-  return {
-    ...last,
-    instruction: reqs.map((r) => r.instruction).filter(Boolean).join('\n\n'),
-    annotations: reqs.flatMap((r) => r.annotations.map((a) => ({ ...a, n: ++n }))),
-    overview: last.overview ?? reqs.find((r) => r.overview)?.overview,
-  };
-}
-
-type Delta = { kind: 'text' | 'thinking'; text: string };
-// Streamed tokens are appended to the draft block of the same kind, or start one.
-function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
-  if (!buf.length) return items;
-  const next = [...items];
-  for (const d of buf) {
-    const last = next[next.length - 1];
-    if (last && last.kind === d.kind && last.streaming) next[next.length - 1] = { ...last, text: last.text + d.text };
-    else next.push({ kind: d.kind, id: uid(), text: d.text, streaming: true });
-  }
-  return next;
-}
-// A complete block replaces the streamed draft of the same kind (or is added).
-function finalizeItems(c: ChatItem[], kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []): ChatItem[] {
-  let i = -1;
-  for (let j = c.length - 1; j >= 0; j--) { const it = c[j]; if (it.kind === kind && it.streaming) { i = j; break; } }
-  const done: ChatItem[] = text ? [{ kind, id: i >= 0 ? c[i].id : uid(), text }] : [];
-  if (i >= 0) return [...c.slice(0, i), ...done, ...c.slice(i + 1), ...extra];
-  return [...c, ...done, ...extra];
-}
-// The agent proposes memories with a trailing "REMEMBER: …" line.
-function splitMemory(text: string): { text: string; extra: ChatItem[] } {
-  const m = text.match(/^\s*`?REMEMBER:\s*(.+?)`?\s*$/m);
-  return m ? { text: text.replace(m[0], '').trim(), extra: [{ kind: 'memory', id: uid(), text: m[1].trim(), status: 'pending' }] } : { text, extra: [] };
-}
-function chatTitle(items: ChatItem[]) {
-  const first = items.find((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }> | undefined;
-  return (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || `${first?.annotations.length || 0} annotation(s)`).slice(0, 80);
-}
-// A chat that isn't on screen but is still alive: its agent is working, and its messages keep arriving.
-interface ParkedChat {
-  id: string; createdAt: number; items: ChatItem[]; session: { id: string; agent: AgentId } | null;
-  designAtStart: string | null; runId: string | null; agent: AgentId;
-}
-
-// A saved chat whose last request never finished (app closed mid-run) gets an
-// explicit note instead of hanging on "Starting…" forever.
-function healChat(items: ChatItem[]): ChatItem[] {
-  let lastUser = -1;
-  items.forEach((it, i) => { if (it.kind === 'user') lastUser = i; });
-  if (lastUser < 0 || items.slice(lastUser).some((it) => it.kind === 'done')) return items;
-  return [
-    ...items.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
-    { kind: 'error', id: uid(), text: 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.' },
-  ];
-}
-
-// Screenshots for before/after are stored as JPEG to keep run folders small.
-function toJpeg(dataUrl: string, quality = 0.86): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
-      c.getContext('2d')!.drawImage(img, 0, 0);
-      resolve(c.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
-  });
-}
-
-const stripAnsi = (s: string) => s.replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, '');
-
-function clampRect(r: Rect, vp: { width: number; height: number }): Rect {
-  const x = Math.max(0, r.x), y = Math.max(0, r.y);
-  return { x, y, width: Math.max(0, Math.min(vp.width, r.x + r.width) - x), height: Math.max(0, Math.min(vp.height, r.y + r.height) - y) };
-}
-
-function useShapes() {
-  const [shapes, setShapes] = useState<Shape[]>([]);
-  const [undoStack, setUndo] = useState<Shape[][]>([]);
-  const [redoStack, setRedo] = useState<Shape[][]>([]);
-  return {
-    shapes,
-    set(next: Shape[]) { setUndo((u) => [...u.slice(-100), shapes]); setRedo([]); setShapes(next); },
-    undo() { if (!undoStack.length) return; setRedo((r) => [...r, shapes]); setShapes(undoStack[undoStack.length - 1]); setUndo(undoStack.slice(0, -1)); },
-    redo() { if (!redoStack.length) return; setUndo((u) => [...u, shapes]); setShapes(redoStack[redoStack.length - 1]); setRedo(redoStack.slice(0, -1)); },
-    reset() { setShapes([]); setUndo([]); setRedo([]); },
-    canUndo: undoStack.length > 0,
-    canRedo: redoStack.length > 0,
-  };
-}
-
-const MODES: { id: Mode; label: string; icon: typeof MousePointer2; key: string; hint: string }[] = [
-  { id: 'browse', label: 'Browse', icon: MousePointer2, key: 'V', hint: 'Use the site normally' },
-  { id: 'select', label: 'Select', icon: MousePointerClick, key: 'S', hint: 'Click elements to annotate them' },
-  { id: 'draw', label: 'Draw', icon: PenTool, key: 'D', hint: 'Draw on top of the page' },
-  { id: 'sketch', label: 'Sketch', icon: SquarePen, key: 'K', hint: 'Sketch a new idea on a blank board' },
-];
 
 // Quick sizes in the URL bar; responsive mode's own bar has the rest.
 const QUICK_SIZES = [
@@ -228,86 +57,12 @@ const QUICK_SIZES = [
   { icon: Smartphone, label: 'Phone 390 × 844 (responsive mode)', w: 390, h: 844 },
 ];
 
-const describe = (a: Annotation, root: string) => {
-  if (a.kind === 'element' && a.element) {
-    const el = a.element;
-    const cls = el.classes?.filter((c) => c.length < 24).slice(0, 2).join('.') || '';
-    const extras = [a.reorder ? `moved to ${a.reorder.to + 1}` : '', ...(a.states || []).map((s) => (s === 'disabled' ? s : ':' + s)), a.tweaks ? `${Object.keys(a.tweaks).length} tweak${Object.keys(a.tweaks).length > 1 ? 's' : ''}` : ''].filter(Boolean);
-    return {
-      title: `<${el.tag}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''}>`,
-      sub: (el.source?.file ? shortPath(el.source.file, root) + (el.source.line ? `:${el.source.line}` : '')
-        : el.source?.components?.length ? el.source.components.slice(-2).join(' › ') : el.text || el.selector) + (extras.length ? ` · ${extras.join(' · ')}` : ''),
-    };
-  }
-  if (a.kind === 'drawing') return { title: 'Drawing on page', sub: a.hits?.length ? `over ${a.hits.length} element${a.hits.length > 1 ? 's' : ''}` : 'markup' };
-  if (a.kind === 'reference') return { title: 'Reference image', sub: a.name || 'image' };
-  if (a.kind === 'flow') return { title: 'Recorded interaction', sub: `${a.steps?.length || 0} step${a.steps?.length === 1 ? '' : 's'}` };
-  return { title: 'Sketch', sub: 'wireframe' };
-};
-
-// A recorded interaction as a Playwright test.
-function toPlaywright(a: Annotation) {
-  const q = (s: string) => JSON.stringify(s);
-  const lines = ["import { test } from '@playwright/test';", '', `test(${q(a.note.trim() || 'recorded interaction')}, async ({ page }) => {`];
-  if (a.startUrl) lines.push(`  await page.goto(${q(a.startUrl)});`);
-  for (const s of a.steps || []) {
-    const loc = `page.locator(${q(s.selector || '')})`;
-    if (s.type === 'click') lines.push(`  await ${loc}.click();${s.text ? ` // ${s.text}` : ''}`);
-    else if (s.type === 'fill') lines.push(`  await ${loc}.fill(${s.secret ? "process.env.TEST_PASSWORD ?? ''" : q(s.value || '')});`);
-    else if (s.type === 'check') lines.push(`  await ${loc}.setChecked(${s.value === 'true'});`);
-    else if (s.type === 'key') lines.push(`  await page.keyboard.press(${q(s.key || '')});`);
-    else if (s.type === 'navigate') lines.push(`  await page.waitForURL(${q(s.url || '')});`);
-  }
-  lines.push('  // TODO: assert what should be true here', '});', '');
-  return lines.join('\n');
-}
-
-// A request written out for a person: what an issue or ticket needs.
-function handoffMarkdown(h: Handoff, root: string) {
-  const out = ['## Request', '', h.instruction || '_(see the notes below)_', '', `- Page: ${h.url}${h.viewport ? ` (${h.viewport.width}×${h.viewport.height})` : ''}`, ''];
-  for (const a of h.annotations) {
-    const d = describe(a, root);
-    out.push(`### ${a.n}. ${d.title}${a.note.trim() ? `: ${a.note.trim()}` : ''}`);
-    const el = a.element;
-    if (el) {
-      out.push(`- Selector: \`${el.selector}\``);
-      if (el.source?.file) out.push(`- Source: \`${shortPath(el.source.file, root)}${el.source.line ? `:${el.source.line}` : ''}\``);
-      if (el.component?.name) out.push(`- Component: \`<${el.component.name}>\`${a.scope ? ` (${a.scope === 'instance' ? 'this instance only' : 'all uses'})` : ''}`);
-      if (a.states?.length) out.push(`- State: ${a.states.join(', ')}`);
-      for (const [k, v] of Object.entries(a.tweaks || {})) out.push(`- \`${k}\`: ${el.styles?.[k] ? `${el.styles[k]} → ` : ''}${v}`);
-      if (a.textEdit) out.push(`- Text: "${a.textEdit.from}" → "${a.textEdit.to}"`);
-      if (a.classEdit) out.push(`- Classes: \`${a.classEdit.from}\` → \`${a.classEdit.to}\``);
-    }
-    (a.steps || []).forEach((s, i) => out.push(`${i + 1}. ${s.type}${s.selector ? ` \`${s.selector}\`` : ''}${s.text ? ` "${s.text}"` : ''}${s.value && !s.secret ? ` = ${s.value}` : ''}${s.key || s.url ? ` ${s.key || s.url}` : ''}`));
-    if (a.image) out.push('- _Screenshot in the hand-off file_');
-    out.push('');
-  }
-  out.push('---', 'Made with [Pinpoint](https://github.com/m-ahmed-elbeskeri/pinpoint). Open the hand-off file in Pinpoint (share menu → Open hand-off file) to run this request with its screenshots.');
-  return out.join('\n');
-}
-
-// One page open in Pinpoint's browser.
-interface Tab { id: string; url: string; title: string; canBack: boolean; canForward: boolean; loading: boolean; error: string | null; initialUrl: string; profile: string }
-const makeTab = (url: string, profile = ''): Tab => ({ id: uid(), url: '', title: '', canBack: false, canForward: false, loading: false, error: null, initialUrl: url, profile });
-// A "view as" profile is a separate browser storage partition.
-const partitionOf = (profile: string) => (profile ? `persist:pinpoint-${profile}` : 'persist:pinpoint');
-// "key=value" / "Name: value" lines from a profile's settings.
-const pairs = (text: string | undefined, sep: string): [string, string][] => (text || '').split('\n').map((l) => l.trim()).filter((l) => l && l.includes(sep))
-  .map((l) => [l.slice(0, l.indexOf(sep)).trim(), l.slice(l.indexOf(sep) + 1).trim()] as [string, string]).filter(([k]) => k);
-const tabLabel = (t: Tab) => {
-  if (t.title && t.title !== 'about:blank' && !/^https?:\/\//.test(t.title)) return t.title;
-  const u = t.url || t.initialUrl;
-  if (!u || u === 'about:blank') return 'New tab';
-  try { const x = new URL(u); return x.protocol === 'file:' ? decodeURIComponent(x.pathname.split('/').pop() || u) : x.host + (x.pathname === '/' ? '' : x.pathname); } catch { return u; }
-};
-
 // ---------- app ----------
 export default function App() {
   const browser = useRef<BrowserHandle | null>(null); // the active tab's page
   const handles = useRef<Record<string, BrowserHandle | null>>({});
   const frame = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const chatEnd = useRef<HTMLDivElement>(null);
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [agents, setAgents] = useState<Record<AgentId, { ok: boolean; version?: string }> | null>(null);
@@ -360,8 +115,7 @@ export default function App() {
   const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
   const [resizing, setResizing] = useState<'panel' | 'drawer' | 'device' | null>(null);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('term');
-  const [devLog, setDevLog] = useState('');
-  const [agentLog, setAgentLog] = useState('');
+  const { devLog, agentLog, setDevLog, setAgentLog, addLog } = useLogs();
   const [devRunning, setDevRunning] = useState(false);
   const [devInfo, setDevInfo] = useState<DevDetection | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -378,8 +132,7 @@ export default function App() {
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
   const [sheet, setSheet] = useState<ContextTab | null>(null);
   const [diffView, setDiffView] = useState<{ runId: string; path?: string } | null>(null);
-  const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
-  const [netFails, setNetFails] = useState<NetworkFailure[]>([]);
+  const { consoleLog, netFails, consoleRef, netRef, onConsole, clearDiagnostics } = usePageProblems();
   const [includeDiag, setIncludeDiag] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -405,6 +158,7 @@ export default function App() {
   const [a11y, setA11y] = useState<A11yIssue[]>([]);
   const [includeA11y, setIncludeA11y] = useState(false);
   const [job, setJob] = useState<string | null>(null);         // label shown between the runs of a variants job
+  const { chatEnd, away, onChatScroll, onChatWheel, toLatest, follow } = useChatScroll(chat, runId, job);
   const [profiles, setProfiles] = useState<Profile[]>([]);     // "view as" profiles of this project
   const profilesRef = useRef(profiles);
   profilesRef.current = profiles;
@@ -441,10 +195,6 @@ export default function App() {
   envRef.current = env;
   const frozenRef = useRef(frozen);
   frozenRef.current = frozen;
-  const consoleRef = useRef(consoleLog);
-  consoleRef.current = consoleLog;
-  const netRef = useRef(netFails);
-  netRef.current = netFails;
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500); };
 
@@ -523,7 +273,7 @@ export default function App() {
   const leaveChat = () => {
     if (job || variantJob.current) { flash('Variants are being made in this chat. Wait for them before switching.'); return false; }
     if (queuedRef.current.length) { flash('A message is waiting to be sent in this chat. Switch once it has gone out.'); return false; }
-    if (deltaRaf.current) { cancelAnimationFrame(deltaRaf.current); deltaRaf.current = 0; }
+    if (deltaTimer.current) { clearTimeout(deltaTimer.current); deltaTimer.current = 0; }
     const items = mergeDeltas(chatRef.current, deltaBuf.current);
     deltaBuf.current = [];
     if (chatId && items.length) {
@@ -540,7 +290,7 @@ export default function App() {
     setChatId(c.id); setChatCreated(c.createdAt); setChat(c.items); setSession(c.session); setDesignAtStart(c.designAtStart ?? null);
     setRunId(running);
     runRef.current = running;
-    stick.current = true;
+    follow();
   };
   const openChat = async (id: string) => {
     if (id === chatId || !leaveChat()) return;
@@ -604,20 +354,6 @@ export default function App() {
   };
   const parkedEventRef = useRef(parkedEvent);
   parkedEventRef.current = parkedEvent;
-
-  // Failed network requests from the page.
-  useEffect(() => api.onNetworkError((n) => {
-    setNetFails((l) => (l.some((x) => x.url === n.url && x.status === n.status && x.error === n.error) ? l : [...l, n].slice(-30)));
-  }), []);
-
-  const onConsole = useCallback((c: { level: 'error' | 'warning'; message: string; source?: string; line?: number }) => {
-    setConsoleLog((l) => {
-      const i = l.findIndex((x) => x.message === c.message && x.level === c.level);
-      if (i >= 0) return l.map((x, j) => (j === i ? { ...x, count: x.count + 1, at: Date.now() } : x));
-      return [...l, { ...c, count: 1, at: Date.now() }].slice(-40);
-    });
-  }, []);
-  const clearDiagnostics = () => { setConsoleLog([]); setNetFails([]); };
 
   // ---------- page state ----------
   // Emulated media (and focus, while frozen) are re-applied when they change and on every new page.
@@ -820,6 +556,17 @@ export default function App() {
       if (r?.file) return { ...src, file: r.file, line: r.line, column: r.column };
     }
     return src;
+  };
+
+  // Console errors point into served (compiled) code: say which project file and line that is.
+  // Best effort and bounded, so a slow dev server doesn't hold up the request.
+  const locateConsole = async (entries: ConsoleEntry[]): Promise<ConsoleEntry[]> => {
+    const located = Promise.all(entries.map(async (c, i) => {
+      if (c.level !== 'error' || !c.line || !/^https?:/.test(c.source || '') || i < entries.length - 12) return c;
+      const r = await api.resolveSourceMap({ url: c.source!, line: c.line, column: 1 }).catch(() => null);
+      return r?.file ? { ...c, file: r.file, fileLine: r.line } : c;
+    }));
+    return Promise.race([located, sleep(2000).then(() => entries)]);
   };
 
   // ---------- navigation ----------
@@ -1361,7 +1108,7 @@ export default function App() {
       const hasDiag = includeDiag && (consoleLog.length || netFails.length || devHasErrors);
       const a11yIssues = includeA11y && a11y.length ? a11y : undefined;
       const diagnostics = hasDiag || a11yIssues
-        ? { console: hasDiag ? consoleLog : [], network: hasDiag ? netFails : [], devLog: hasDiag && devHasErrors ? devTail : '', a11y: a11yIssues }
+        ? { console: hasDiag ? await locateConsole(consoleLog) : [], network: hasDiag ? netFails : [], devLog: hasDiag && devHasErrors ? devTail : '', a11y: a11yIssues, overlay: (hasDiag && hasPage && await b.errorOverlay()) || undefined }
         : undefined;
       const request: AgentRequest = {
         url: navRef.current.url, title: navRef.current.title, viewport: { ...b.size(), responsive: device.on || undefined },
@@ -1458,7 +1205,7 @@ export default function App() {
     if (!b) return null;
     b.send('hide', true);
     await sleep(90);
-    try { return await toJpeg(await b.capture()); } catch { return null; } finally { b.send('hide', false); }
+    try { return await b.capture(undefined, true); } catch { return null; } finally { b.send('hide', false); }
   };
 
   // After a run, wait for hot reload (or our own reload for file:// pages) to settle, then shoot.
@@ -1479,7 +1226,7 @@ export default function App() {
     const before = beforeShotRef.current?.id === id ? beforeShotRef.current.shot : null;
     const judge = async (after: string): Promise<'none' | 'changed' | undefined> => {
       if (!before) return undefined;
-      try { return (await diffOverlay(before, after)).pct < 0.01 ? 'none' : 'changed'; } catch { return undefined; } // sizes differ or an image failed to load
+      try { return (await looksSame(before, after)) ? 'none' : 'changed'; } catch { return undefined; } // sizes differ or an image failed to load
     };
     let visual = await judge(shot);
     // Looks the same: maybe the page just wasn't hot-reloaded (a static server). Reload once and look again.
@@ -1550,7 +1297,7 @@ export default function App() {
     }
     // Identical screenshots: the change didn't show. The check is told, so it looks for why.
     let same = false;
-    if (shots.before) { try { same = (await diffOverlay(shots.before, shots.after)).pct < 0.01; } catch { /* different sizes */ } }
+    if (shots.before) { try { same = await looksSame(shots.before, shots.after); } catch { /* different sizes */ } }
     const since = meta.startedAt || 0;
     const cons = consoleRef.current.filter((c) => c.at >= since);
     const net = netRef.current.filter((n) => n.at >= since);
@@ -1682,31 +1429,23 @@ export default function App() {
   };
   const askToFix = () => {
     setIncludeDiag(true);
-    setInstruction((t) => (t.trim() ? t : 'Fix the problems listed in the runtime diagnostics (console errors / failed requests).'));
+    // Name the actual problems, so the request reads as a task and not as "go look for errors".
+    const cons = consoleRef.current, errors = cons.filter((c) => c.level === 'error');
+    const list = [
+      ...(errors.length ? errors : cons).slice(-4).map((c) => `- ${c.message.split('\n')[0].slice(0, 160)}${c.source ? ` (${c.source.split('/').pop()!.split('?')[0]}${c.line ? `:${c.line}` : ''})` : ''}`),
+      ...netRef.current.slice(-3).map((n) => `- ${n.method} ${n.url.replace(/^https?:\/\/[^/]+/, '')} failed (${n.status || n.error})`),
+    ];
+    const ask = `Fix what is breaking this page:\n${list.join('\n')}\n\nThe full errors are attached. Find the cause in the code and fix that, not just the symptom, then tell me what was wrong.`;
+    setInstruction((t) => (t.trim() ? t : list.length ? ask : 'Fix the errors the dev server is reporting (its output is attached).'));
     setTimeout(() => composerRef.current?.focus(), 50);
   };
 
-  // Terminal output can arrive hundreds of lines a second: collect it and update a few times a second.
-  const logBuf = useRef({ dev: '', agent: '' });
-  const logTimer = useRef(0);
-  const addLog = (which: 'dev' | 'agent', text: string) => {
-    logBuf.current[which] += text;
-    if (logTimer.current) return;
-    logTimer.current = window.setTimeout(() => {
-      logTimer.current = 0;
-      const { dev, agent } = logBuf.current;
-      logBuf.current = { dev: '', agent: '' };
-      if (dev) setDevLog((l) => (l + dev).slice(-200_000));
-      if (agent) setAgentLog((l) => (l + agent).slice(-200_000));
-    }, 120);
-  };
-
   // ---------- agent events ----------
-  // Token deltas arrive fast; batch them into one state update per frame.
+  // Token deltas arrive fast; batch them into a state update every 50 ms (redrawing the chat each frame made the app stutter).
   const deltaBuf = useRef<{ kind: 'text' | 'thinking'; text: string }[]>([]);
-  const deltaRaf = useRef(0);
+  const deltaTimer = useRef(0);
   const flushDeltas = useCallback(() => {
-    deltaRaf.current = 0;
+    deltaTimer.current = 0;
     const buf = deltaBuf.current;
     deltaBuf.current = [];
     if (!buf.length) return;
@@ -1714,7 +1453,7 @@ export default function App() {
   }, []);
   // A complete block replaces the streamed draft of the same kind (or is added).
   const finalizeBlock = (kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []) => {
-    if (deltaRaf.current) { cancelAnimationFrame(deltaRaf.current); flushDeltas(); }
+    if (deltaTimer.current) { clearTimeout(deltaTimer.current); flushDeltas(); }
     setChat((c) => finalizeItems(c, kind, text, extra));
   };
 
@@ -1747,7 +1486,7 @@ export default function App() {
       case 'text_delta':
       case 'thinking_delta':
         deltaBuf.current.push({ kind: e.type === 'text_delta' ? 'text' : 'thinking', text: e.text });
-        if (!deltaRaf.current) deltaRaf.current = requestAnimationFrame(flushDeltas);
+        if (!deltaTimer.current) deltaTimer.current = window.setTimeout(flushDeltas, 50);
         break;
       case 'status': push({ kind: 'status', id: uid(), text: e.text }); break;
       case 'session': setSession({ id: e.sessionId, agent: (settingsRef.current?.agent || 'claude') }); break;
@@ -1765,7 +1504,7 @@ export default function App() {
       case 'log': addLog('agent', e.text + '\n'); break;
       case 'error': push({ kind: 'error', id: uid(), text: e.text }); break;
       case 'done':
-        if (deltaRaf.current) { cancelAnimationFrame(deltaRaf.current); flushDeltas(); }
+        if (deltaTimer.current) { clearTimeout(deltaTimer.current); flushDeltas(); }
         setChat((c) => [
           ...c.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'ok' as const }
             : (it.kind === 'text' || it.kind === 'thinking') && it.streaming ? { ...it, streaming: false } : it)),
@@ -1795,41 +1534,6 @@ export default function App() {
   const refreshGitRef = useRef(refreshGit);
   refreshGitRef.current = refreshGit;
 
-  // The conversation follows new output only while the reader is at the bottom;
-  // scrolling up to read leaves it where it is. A message you send jumps back down.
-  const stick = useRef(true);
-  const chatLen = useRef(0);
-  // away: scrolled up from the end. fresh: something new arrived down there meanwhile.
-  const [away, setAway] = useState<{ fresh: boolean } | null>(null);
-  const awayRef = useRef(away);
-  awayRef.current = away;
-  const onChatScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    // Only being right at the end counts as following along: any scroll up, however small, is left alone.
-    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 12;
-    if (stick.current ? awayRef.current : !awayRef.current) setAway(stick.current ? null : { fresh: false });
-  }, []);
-  // Scrolling up lets go at once, before the next line of output can pull the view back down.
-  const onChatWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    if (e.deltaY < 0 && el.scrollHeight > el.clientHeight) { stick.current = false; if (!awayRef.current) setAway({ fresh: false }); }
-  }, []);
-  const toLatest = () => {
-    const box = chatEnd.current?.parentElement;
-    if (!box) return;
-    stick.current = true;
-    setAway(null);
-    box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
-  };
-  useLayoutEffect(() => {
-    const box = chatEnd.current?.parentElement;
-    if (!box) return;
-    const grew = chat.length > chatLen.current;
-    chatLen.current = chat.length;
-    if (grew && chat[chat.length - 1]?.kind === 'user') { stick.current = true; if (awayRef.current) setAway(null); }
-    if (stick.current) box.scrollTop = box.scrollHeight;
-    else if (awayRef.current && !awayRef.current.fresh) setAway({ fresh: true });
-  }, [chat, runId, job]);
 
   // The conversation's buttons, as one object that never changes identity, so
   // finished messages aren't rendered again when anything else on screen changes.
@@ -1846,21 +1550,7 @@ export default function App() {
     onMeasureBuild: measureBuild,
     onForceSteer: forceSteer,
   };
-  const chatHandlersRef = useRef(chatHandlers);
-  chatHandlersRef.current = chatHandlers;
-  const chatActions = useMemo<ChatActions>(() => ({
-    onReload: () => chatHandlersRef.current.onReload(),
-    onUndo: (...a) => chatHandlersRef.current.onUndo(...a),
-    onReview: (...a) => chatHandlersRef.current.onReview(...a),
-    onMemory: (...a) => chatHandlersRef.current.onMemory(...a),
-    onRevertFile: (...a) => chatHandlersRef.current.onRevertFile(...a),
-    onOpenFile: (...a) => chatHandlersRef.current.onOpenFile(...a),
-    onCommit: (...a) => chatHandlersRef.current.onCommit(...a),
-    onCompare: (...a) => chatHandlersRef.current.onCompare(...a),
-    onPickVariant: (...a) => chatHandlersRef.current.onPickVariant(...a),
-    onMeasureBuild: (...a) => chatHandlersRef.current.onMeasureBuild(...a),
-    onForceSteer: (...a) => chatHandlersRef.current.onForceSteer(...a),
-  }), []);
+  const chatActions = useStableActions<ChatActions>(chatHandlers);
 
   // ---------- dev server ----------
   useEffect(() => api.onDevEvent((e) => {
@@ -2045,61 +1735,22 @@ export default function App() {
     gridTemplateRows: drawerOpen ? `52px 1fr ${dh}px` : '52px 1fr',
     gridTemplateAreas: `'top top' ${row2}${drawerOpen ? ' ' + row3 : ''}`,
   };
-  const PanelIcon = left ? PanelLeft : PanelRight;
 
   return (
     <div className={`app ${resizing ? 'resizing' : ''}`} style={gridStyle}>
       {/* ---------- top bar ---------- */}
-      <header className="topbar">
-        <button className="project-btn" onClick={pickProject} title={settings.projectDir || 'Choose the project folder the agent edits'}>
-          <FolderOpen size={14} />
-          <span>{settings.projectDir ? settings.projectDir.split(/[\\/]/).pop() : 'Open project'}</span>
-        </button>
-
-        <div className="tb-div" />
-
-        <div className="seg mode-seg">
-          {MODES.map((m) => (
-            <button key={m.id} className={mode === m.id ? 'on' : ''} onClick={() => setMode(m.id)} title={`${m.hint} (${m.key})`}>
-              <m.icon size={15} /><span>{m.label}</span><kbd>{m.key}</kbd>
-            </button>
-          ))}
-          <button className={rec ? 'rec' : ''} onClick={toggleRecording} disabled={!/^(https?|file):/.test(nav.url)} title={rec ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
-            <CircleDot size={15} /><span>{rec ? 'Stop' : 'Record'}</span>
-          </button>
-        </div>
-
-        <div className="spacer" />
-
-        <div className="top-right">
-          {update && (update.status === 'ready' || update.status === 'available' || update.status === 'downloading') && (
-            <button className={`update-chip ${update.status}`} disabled={update.status === 'downloading'} onClick={() => api.updateInstall()} title={update.status === 'ready' ? `Version ${update.version} is downloaded. Click to restart into it.` : update.status === 'available' ? `Version ${update.version} is out. Click to open the download page.` : `Downloading version ${update.version}…`}>
-              <Download size={13} /> {update.status === 'ready' ? 'Restart to update' : update.status === 'available' ? `Get ${update.version}` : `Updating${update.percent ? ` ${update.percent}%` : '…'}`}
-            </button>
-          )}
-          <button className={`icon-btn ${drawerOpen ? 'on' : ''}`} onClick={() => setDrawerOpen(!drawerOpen)} title="Terminal, dev server and logs">
-            <TerminalSquare size={16} />{devRunning && <span className="live-dot abs" />}
-          </button>
-          <button
-            className={`icon-btn ${sheet === 'design' ? 'on' : ''} ${designChanged ? 'warn' : ''}`}
-            onClick={() => setSheet(sheet === 'design' ? null : 'design')} disabled={!projectDir}
-            title={designChanged ? 'Design rules changed during this chat. Start a new chat to use them.'
-              : design?.exists ? (settings.useDesign ? 'Design rules: DESIGN.md is sent at the start of each chat' : 'Design rules: DESIGN.md exists but is switched off') : 'Design rules: set up your colors, type, spacing and components'}
-          >
-            <Palette size={16} />{design?.exists && settings.useDesign && <span className="ctx-dot" />}
-          </button>
-          <button
-            className={`icon-btn ${sheet === 'memory' ? 'on' : ''}`}
-            onClick={() => setSheet(sheet === 'memory' ? null : 'memory')} disabled={!projectDir}
-            title={`Project memory: short rules sent with every request${memoryOn ? ` (${memoryOn} on)` : ''}`}
-          >
-            <Brain size={16} />{memoryOn > 0 && <b className="icon-count">{memoryOn}</b>}
-          </button>
-          <button className="icon-btn" onClick={() => browser.current?.devtools()} title="Page DevTools"><Bug size={16} /></button>
-          <button className={`icon-btn ${settings.panelHidden ? '' : 'on'}`} onClick={togglePanel} title={`Toggle sidebar (${MOD}+B)`}><PanelIcon size={16} /></button>
-          <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings"><SettingsIcon size={16} /></button>
-        </div>
-      </header>
+      <TopBar
+        mod={MOD} projectDir={settings.projectDir} onPickProject={pickProject}
+        mode={mode} setMode={setMode}
+        recording={!!rec} canRecord={/^(https?|file):/.test(nav.url)} onToggleRecording={toggleRecording}
+        update={update} onInstallUpdate={() => api.updateInstall()}
+        drawerOpen={drawerOpen} devRunning={devRunning} onToggleDrawer={() => setDrawerOpen(!drawerOpen)}
+        sheet={sheet} setSheet={setSheet}
+        design={design?.exists ? (settings.useDesign ? 'on' : 'off') : 'none'} designChanged={designChanged} memoryOn={memoryOn}
+        onDevtools={() => browser.current?.devtools()}
+        panelSide={left ? 'left' : 'right'} panelHidden={!!settings.panelHidden} onTogglePanel={togglePanel}
+        onSettings={() => setSettingsOpen(true)}
+      />
 
       {/* ---------- browser ---------- */}
       <main className="stage">
@@ -2350,18 +2001,7 @@ export default function App() {
 
         <div className="chat" onScroll={onChatScroll} onWheel={onChatWheel}>
           {chat.length === 0 ? (
-            <div className="chat-empty">
-              <h3>How it works</h3>
-              <ol>
-                <li><MousePointerClick size={15} /><div><b>Select</b> <kbd>S</kbd><span>Click elements and write what should change. Pinpoint sends the element, its styles, a screenshot and the source file it came from.</span></div></li>
-                <li><PenTool size={15} /><div><b>Draw</b> <kbd>D</kbd><span>Circle, arrow, cross out or scribble notes right on the page.</span></div></li>
-                <li><SquarePen size={15} /><div><b>Sketch</b> <kbd>K</kbd><span>Draw a wireframe of something new on a blank board.</span></div></li>
-                <li><Send size={15} /><div><b>Send</b> <kbd>↵</kbd><span>{settings.agent === 'claude' ? 'Claude Code' : 'Codex'} edits your project. Hot reload shows the result.</span></div></li>
-              </ol>
-              {agents && !agentReady && (
-                <div className="warn-box">{settings.agent === 'claude' ? 'Claude Code' : 'Codex'} CLI wasn't found. Install it or set its path in Settings.</div>
-              )}
-            </div>
+            <EmptyChat agentName={settings.agent === 'claude' ? 'Claude Code' : 'Codex'} cliMissing={!!agents && !agentReady} setMode={setMode} />
           ) : <ChatList items={chat} actions={chatActions} root={root} gitRepo={!!gitStatus?.repo} busy={!!runId || !!job} />}
           {(runId || job) && (
             <div className="working">
@@ -2399,51 +2039,14 @@ export default function App() {
               onShowNode={(sel) => browser.current?.reveal(sel)}
             />
           )}
-          {(annotations.length > 0 || pendingMarks > 0) && (
-            <div className="ann-list">
-              {annotations.map((a) => {
-                const d = describe(a, root);
-                return (
-                  <div key={a.id} className={`ann ${activeId === a.id ? 'active' : ''}`} onClick={() => focusAnn(a)}>
-                    <div className="ann-thumb">
-                      {a.image ? <img src={a.image} alt="" /> : <Square size={16} />}
-                      <span className="badge" style={{ background: a.color }}>{a.n}</span>
-                    </div>
-                    <div className="ann-body">
-                      <div className="ann-title"><span className="mono">{d.title}</span><span className="ann-sub">{d.sub}</span></div>
-                      <textarea
-                        data-note={a.id}
-                        rows={1}
-                        placeholder={a.kind === 'element' ? 'What should change here?' : a.kind === 'flow' ? 'What goes wrong (or should change) when you do this?' : a.kind === 'sketch' ? 'What is this sketch? Where should it go?' : a.kind === 'reference' ? 'What should we take from this image?' : 'Explain your drawing…'}
-                        onPaste={onPaste}
-                        value={a.note}
-                        onFocus={() => setActiveId(a.id)}
-                        onChange={(e) => updateNote(a.id, e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } }}
-                      />
-                    </div>
-                    {a.kind === 'flow' && (
-                      <button className="icon-btn xs ann-act" title="Copy these steps as a Playwright test" onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(toPlaywright(a)); flash('Playwright test copied.'); }}><ClipboardCopy size={13} /></button>
-                    )}
-                    {a.kind === 'reference' && a.image && (
-                      <button
-                        className={`icon-btn xs ann-act ${overlay?.image === a.image ? 'on' : ''}`} title="Lay this image over the page to compare"
-                        onClick={(e) => { e.stopPropagation(); setOverlay(overlay?.image === a.image ? null : { image: a.image!, name: a.name || 'mockup', opacity: 0.5, x: 0, y: 0, moving: false }); }}
-                      ><Blend size={13} /></button>
-                    )}
-                    <button className="icon-btn xs ann-x" onClick={(e) => { e.stopPropagation(); removeAnn(a.id); }} title="Remove"><X size={13} /></button>
-                  </div>
-                );
-              })}
-              {pendingMarks > 0 && (
-                <div className="ann pending">
-                  <PenTool size={14} /> {page.shapes.length ? `${page.shapes.length} mark${page.shapes.length > 1 ? 's' : ''} on page` : ''}
-                  {page.shapes.length && sketch.shapes.length ? ' · ' : ''}
-                  {sketch.shapes.length ? `${sketch.shapes.length} in sketch` : ''} will be attached
-                </div>
-              )}
-            </div>
-          )}
+          <AnnotationList
+            annotations={annotations} root={root} activeId={activeId} overlayImage={overlay?.image ?? null}
+            pageMarks={page.shapes.length} sketchMarks={sketch.shapes.length}
+            onFocus={focusAnn} onActive={setActiveId} onNote={updateNote} onPaste={onPaste} onSend={() => send()}
+            onCopyTest={(a) => { navigator.clipboard?.writeText(toPlaywright(a)); flash('Playwright test copied.'); }}
+            onOverlay={(a) => setOverlay(overlay?.image === a.image ? null : { image: a.image!, name: a.name || 'mockup', opacity: 0.5, x: 0, y: 0, moving: false })}
+            onRemove={removeAnn}
+          />
 
           <div className="composer-box">
             <textarea

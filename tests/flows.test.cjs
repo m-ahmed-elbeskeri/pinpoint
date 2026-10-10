@@ -124,8 +124,10 @@ server.listen(0, '127.0.0.1', () => {
       log('unintended change on the other page is flagged', /Also changed 1 other page/.test(all) && rows.some((r) => r.includes('/about.html')), String(routes).replace(/\s+/g, ' '));
       log('each changed page names what changed on it', rows.some((r) => r.includes('this page') && r.includes('<h1>') && r.includes('Home')) && rows.some((r) => r.includes('/about.html') && r.includes('<h1>') && r.includes('About')), rows.join(' || '));
       log('before/after screenshots attached to the run', await ui(`!!document.querySelector('.done-card .shot-strip')`));
-      const perfShown = await until(`[...document.querySelectorAll('.done-card .route-check')].some((r) => /Load cost|CSS|JS|request|DOM/.test(r.textContent)) ? 1 : 0`, 15000);
-      log('load cost line shown', perfShown === 1, routes);
+      const perfShown = await until(`document.querySelector('.done-card .load-stats-btn') ? 1 : 0`, 15000);
+      log('load stats are a click away', perfShown === 1, routes);
+      await ui(`document.querySelector('.done-card .load-stats-btn').click(); 0`);
+      log('the load stats open on the card', await until(`/Files requested/.test(document.querySelector('.done-card .load-stats')?.textContent || '') ? 1 : 0`, 3000) === 1);
       await shot('1-run');
 
       // ---- 3b. point at the heading; the agent also changes the paragraph: that must be called out

@@ -4,6 +4,30 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-10
+
+### Added
+
+- **Ask to fix sends the real problem.** The request now names the errors and failed requests it is about, and carries the text of the dev server's error overlay (Vite, Next.js, webpack) with its file, line and code frame. Console errors point at the project file and line instead of the served URL.
+- **Load stats.** A button on a run's card opens a before-and-after table of how the page loads: JavaScript and CSS downloaded, files requested, elements, layout shift and time to the main content.
+
+### Changed
+
+- **New icons.** The app uses the Phosphor icon set.
+- **Run results are calmer.** The "Changed N files" card is a plain card where only the status icon carries colour, with the total lines added and removed in its header, the files in their own inset, and long lists folded to the first five. A result check that found nothing to fix is one quiet line.
+- **Load cost in plain words.** A change in how the page loads reads as "Loads a little heavier: 3.2 kB more JavaScript" rather than a row of metrics, and nothing is shown when nothing changed.
+- **How it works** in an empty chat is a connected list of steps; Select, Draw and Sketch switch to that mode when clicked.
+- **Menus close when you click the page.** Clicking anywhere in the browsed page closes an open menu, and the page-problems and accessibility lists close on a click outside them.
+
+### Faster
+
+- **A page that reports many errors at once** (a dev error overlay comes with dozens) no longer redraws the app for each one.
+- **Starting and finishing a run, picking a component and live tweaks** no longer pause the app while the project's files are read.
+- **Streaming replies** update the chat twenty times a second instead of on every frame, and a long dev-server or agent log only draws its end.
+- **Screenshots** for before and after are made as JPEG in one step, and checking whether anything changed stops at the first real difference.
+- **The terminal** sends noisy output in small batches and remembers the list of installed shells for a minute.
+- **The accessibility audit** waits for the page to be idle before it starts.
+
 ## [0.4.2] - 2026-10-03
 
 ### Added

@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from './icons';
 import { Dropdown, type DropdownItem } from './Dropdown';
 import { ModelPicker } from './ModelPicker';
 import type { ModelCatalog, Settings } from '../lib/types';

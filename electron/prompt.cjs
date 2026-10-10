@@ -145,10 +145,16 @@ function describeAnnotation(a) {
 function fmtDiagnostics(d) {
   if (!d) return null;
   const out = [];
+  if (d.overlay?.trim()) {
+    out.push("Error overlay the dev server is showing over the page right now (usually the root cause; start here):");
+    out.push('```');
+    out.push(d.overlay.trim());
+    out.push('```');
+  }
   if (d.console?.length) {
     out.push('Browser console (most recent last):');
     out.push('```');
-    for (const c of d.console) out.push(`[${c.level}]${c.count > 1 ? ` (x${c.count})` : ''} ${c.message}${c.source ? `  (${c.source}${c.line ? ':' + c.line : ''})` : ''}`);
+    for (const c of d.console) out.push(`[${c.level}]${c.count > 1 ? ` (x${c.count})` : ''} ${c.message}${c.file ? `  (${c.file}${c.fileLine ? ':' + c.fileLine : ''})` : c.source ? `  (${c.source}${c.line ? ':' + c.line : ''})` : ''}`);
     out.push('```');
   }
   if (d.network?.length) {
@@ -201,6 +207,7 @@ function contextSections({ design, memory, diagnostics, route, env, designSystem
   if (diag) {
     out.push('## Runtime diagnostics from the page');
     out.push("These came from the user's browser session. Fix them if they relate to the request or the user asks; otherwise mention anything that looks serious.");
+    out.push('When fixing them: open the file and line an error names before changing anything, treat the earliest error as the likely cause of the ones after it, and for a failed request check the code that serves that URL as well as the code that calls it.');
     out.push(diag);
   }
   if (memory?.length) {

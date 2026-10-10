@@ -1,4 +1,4 @@
-import { FolderOpen, Globe, MousePointer2, PenTool, SquarePen, TerminalSquare, ArrowRight } from 'lucide-react';
+import { FolderOpen, Globe, MousePointer2, PenTool, SquarePen, TerminalSquare, ArrowRight } from './icons';
 import { Logo } from './Logo';
 
 interface Props {
@@ -84,7 +84,7 @@ export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningU
               </div>
               <div className="demo-cards"><div /><div /><div /></div>
               <div className="demo-note"><b>1</b><span className="typing">make it pop</span></div>
-              <div className="demo-cursor"><MousePointer2 size={20} fill="#fff" /></div>
+              <div className="demo-cursor"><MousePointer2 size={20} weight="fill" color="#fff" /></div>
               <div className="demo-pen"><PenTool size={16} /></div>
             </div>
           </div>

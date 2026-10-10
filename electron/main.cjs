@@ -212,8 +212,9 @@ ipcMain.handle('shell:openFile', async (_e, { rel, line }) => {
 });
 
 // ---------- IPC: capture ----------
-// Captures the guest page (optionally a rect in CSS px) and returns a PNG data URL.
-ipcMain.handle('capture', async (_e, { webContentsId, rect }) => {
+// Captures the guest page (optionally a rect in CSS px) and returns a PNG data URL,
+// or a JPEG one when asked: much quicker to make, for shots that are stored as JPEG anyway.
+ipcMain.handle('capture', async (_e, { webContentsId, rect, jpeg }) => {
   const wc = webContents.fromId(webContentsId);
   if (!wc) throw new Error('webview not found');
   const img = rect
@@ -224,6 +225,7 @@ ipcMain.handle('capture', async (_e, { webContentsId, rect }) => {
         height: Math.max(1, Math.round(rect.height)),
       })
     : await wc.capturePage();
+  if (jpeg && !img.isEmpty()) return `data:image/jpeg;base64,${onWhite(img).toJPEG(86).toString('base64')}`;
   return onWhite(img).toDataURL();
 });
 
@@ -499,7 +501,7 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   }
 
   const agentName = settings.agent === 'codex' ? 'Codex' : 'Claude Code';
-  const snap = snapshot.take(cwd);
+  const snap = await snapshot.takeAsync(cwd);
   othersWrote.set(runId, new Map());
   // Other pages are screenshotted now (in the background) and again afterwards.
   let routes = null;
@@ -522,7 +524,7 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
   // Attach the real file diff to the final event, whatever tools the agent used.
   const onEvent = async (evt) => {
     if (evt.type !== 'done') return send(evt);
-    let changes = snapshot.diff(snap);
+    let changes = await snapshot.diffAsync(snap);
     const theirs = othersWrote.get(runId);
     othersWrote.delete(runId);
     if (theirs?.size) changes = changes.filter((c) => theirs.get(c.path) !== fileSig(cwd, c.path));

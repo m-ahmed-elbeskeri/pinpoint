@@ -83,4 +83,49 @@ function diff(snap) {
   return changes;
 }
 
-module.exports = { take, diff, walk, walkAsync };
+// take() and diff() without blocking the app: a run starts and ends while the
+// person may be using another chat or the page, and a large project takes a while to read.
+const BATCH = 64;
+async function takeAsync(root) {
+  const files = new Map();
+  let budget = MAX_CONTENT_TOTAL;
+  const all = await walkAsync(root);
+  for (let i = 0; i < all.length; i += BATCH) {
+    const batch = all.slice(i, i + BATCH);
+    const stats = await Promise.all(batch.map((rel) => fs.promises.stat(path.join(root, rel)).catch(() => null)));
+    const wanted = stats.map((st) => { const yes = !!st && st.size <= MAX_CONTENT_FILE && budget - st.size > 0; if (yes) budget -= st.size; return yes; });
+    const contents = await Promise.all(batch.map((rel, j) => (wanted[j] ? fs.promises.readFile(path.join(root, rel)).catch(() => undefined) : null)));
+    batch.forEach((rel, j) => {
+      const st = stats[j];
+      if (!st || contents[j] === undefined) return; // vanished
+      files.set(rel, { mtime: st.mtimeMs, size: st.size, content: contents[j] });
+    });
+  }
+  return { root, files };
+}
+
+async function diffAsync(snap) {
+  const changes = [];
+  const all = await walkAsync(snap.root);
+  const now = new Set(all);
+  for (let i = 0; i < all.length; i += BATCH) {
+    const batch = all.slice(i, i + BATCH);
+    const stats = await Promise.all(batch.map((rel) => fs.promises.stat(path.join(snap.root, rel)).catch(() => null)));
+    for (let j = 0; j < batch.length; j++) {
+      const rel = batch[j], st = stats[j], before = snap.files.get(rel);
+      if (!st) continue;
+      if (!before) changes.push({ path: rel, kind: 'add' });
+      else if (st.mtimeMs !== before.mtime || st.size !== before.size) {
+        // mtime can change without content changing (e.g. a rewrite of identical text).
+        if (before.content && st.size === before.size) {
+          try { if ((await fs.promises.readFile(path.join(snap.root, rel))).equals(before.content)) continue; } catch { /* treat as changed */ }
+        }
+        changes.push({ path: rel, kind: 'modify' });
+      }
+    }
+  }
+  for (const rel of snap.files.keys()) if (!now.has(rel)) changes.push({ path: rel, kind: 'delete' });
+  return changes;
+}
+
+module.exports = { take, diff, takeAsync, diffAsync, walk, walkAsync };

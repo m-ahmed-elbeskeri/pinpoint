@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, Box, RotateCcw, X } from 'lucide-react';
+import { BookOpen, Box, RotateCcw, X } from './icons';
 import type { Annotation, CssRuleInfo, ForcedState } from '../lib/types';
 
 export type ToolSection = 'tweak' | 'content' | 'component' | 'rules';

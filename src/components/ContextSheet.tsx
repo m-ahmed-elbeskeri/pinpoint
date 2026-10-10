@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Brain, Check, Eye, Loader2, Palette, PenLine, Plus, Sparkles, Trash2, Wand2, X } from 'lucide-react';
+import { Brain, Check, Eye, Loader2, Palette, PenLine, Plus, Sparkles, Trash2, Wand2, X } from './icons';
 import { Markdown } from './Chat';
 import type { DesignDoc, MemoryItem, Settings } from '../lib/types';
 import { uid } from '../lib/draw';

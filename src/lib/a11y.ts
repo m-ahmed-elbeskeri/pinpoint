@@ -2,6 +2,8 @@
 // WCAG A/AA violations in a compact form for the context bar and the agent.
 async function audit() {
   const axe = (window as any).axe;
+  // The audit is heavy and runs on the page's own thread: start it when the page has a quiet moment.
+  await new Promise<void>((done) => (window.requestIdleCallback ? window.requestIdleCallback(() => done(), { timeout: 4000 }) : setTimeout(done, 200)));
   const res = await axe.run(
     { exclude: [['pinpoint-overlay']] },
     { resultTypes: ['violations'], runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } },

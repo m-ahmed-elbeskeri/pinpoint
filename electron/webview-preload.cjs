@@ -515,6 +515,8 @@ window.addEventListener('click', onClick, true);
 window.addEventListener('mousemove', onMove, true);
 window.addEventListener('keydown', onKey, true);
 window.addEventListener('mouseleave', () => { if (mode === 'select') { hoverEl = null; } });
+// The host never sees clicks made in here; tell it, so its open menus can close.
+window.addEventListener('mousedown', () => ipcRenderer.sendToHost('pointer'), true);
 
 // ---------- freeze ----------
 // Holds transient UI open so it can be picked: page scripts stop hearing the

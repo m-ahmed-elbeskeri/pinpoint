@@ -5,7 +5,7 @@ import { extractDesignScript } from '../lib/extractDesign';
 import { tokenMatchScript } from '../lib/tokens';
 import { a11yScript } from '../lib/a11y';
 import { breakpointsScript, type Breakpoint } from './DeviceBar';
-import { classNamesScript, setPropScript } from '../lib/pagetools';
+import { classNamesScript, errorOverlayScript, setPropScript } from '../lib/pagetools';
 import { closeWorkspaceScript, storageScript, workspaceScript, type WorkspaceSpec } from '../lib/workspace';
 import type { FlowStep } from '../lib/types';
 import type { A11yIssue } from '../lib/types';
@@ -67,7 +67,7 @@ export interface BrowserHandle {
   reload(): void;
   devtools(): void;
   send(channel: string, ...args: unknown[]): void;
-  capture(rect?: Rect): Promise<string>;
+  capture(rect?: Rect, jpeg?: boolean): Promise<string>; // jpeg: quicker, for shots that are kept as JPEG
   hitTest(points: [number, number][]): Promise<ElementInfo[]>;
   locateSource(uid: string): Promise<ElementInfo['source']>;
   size(): { width: number; height: number };
@@ -80,6 +80,7 @@ export interface BrowserHandle {
   reveal(selector: string): void;                           // scroll an element into view
   breakpoints(): Promise<Breakpoint[]>;                     // widths the page's CSS switches at
   classNames(): Promise<string[]>;                          // class names the page's CSS defines
+  errorOverlay(): Promise<string | null>;                   // what the dev server's error overlay says, when one is up
   hasHmr(): Promise<boolean>;                               // the page updates itself when files change
   frame(targets: FrameTarget[], fallbackY?: number): Promise<{ found: boolean; y: number }>; // bring these elements into view (or go back to a scroll position)
   workspace(spec: WorkspaceSpec): Promise<{ ok: boolean; error?: string } | null>; // render a component alone, over the page
@@ -125,9 +126,9 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     reload() { wv.current?.reload(); },
     devtools() { wv.current?.openDevTools(); },
     send(channel, ...args) { if (ready.current) wv.current?.send(channel, ...args); },
-    async capture(rect) {
+    async capture(rect, jpeg) {
       const id = wv.current!.getWebContentsId();
-      return window.pinpoint.capture(id, rect);
+      return window.pinpoint.capture(id, rect, jpeg);
     },
     hitTest(points) {
       return new Promise((resolve) => {
@@ -181,6 +182,9 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
       const code = `!!(document.querySelector('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="/_next/static/chunks/"],script[src*="livereload"],script[src*="browser-sync"]') || window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__NUXT__ || window.__sveltekit_dev || Object.keys(window).some((k) => /^(webpackHotUpdate|webpackChunk|__webpack_hmr|__turbopack|__NEXT_HMR|__next_f$|__remixContext|__reactRouterContext)/.test(k)))`;
       try { return !!(await wv.current!.executeJavaScript(code)); } catch { return false; }
     },
+    async errorOverlay() {
+      try { return (await wv.current!.executeJavaScript<string | null>(errorOverlayScript)) || null; } catch { return null; }
+    },
     async classNames() {
       try { return await wv.current!.executeJavaScript(classNamesScript); } catch { return []; }
     },
@@ -228,6 +232,8 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
         else if (e.channel === 'step') cb.current.onStep(data);
         else if (e.channel === 'manip') cb.current.onManip(data);
+        // A click on the page counts as a click outside any open menu.
+        else if (e.channel === 'pointer') el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         else if (e.channel === 'hits' || e.channel === 'reply') {
           const res = pending.current.get(data.reqId);
           if (res) { pending.current.delete(data.reqId); res(e.channel === 'hits' ? data.hits : data.data); }

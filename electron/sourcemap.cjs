@@ -55,7 +55,9 @@ async function resolve({ url, line, column }, projectDir) {
   try {
     const { consumer, mapUrl } = await consumerFor(url);
     // Stack columns are 1-based; source-map columns are 0-based.
-    const pos = consumer.originalPositionFor({ line, column: Math.max(0, column - 1) });
+    let pos = consumer.originalPositionFor({ line, column: Math.max(0, column - 1) });
+    // Only the line is known (a console message): take the first mapping on it.
+    if (!pos?.source && column <= 1) pos = consumer.originalPositionFor({ line, column: 0, bias: SourceMapConsumer.LEAST_UPPER_BOUND });
     if (!pos?.source) return null;
     return { file: cleanSource(pos.source, mapUrl, projectDir), line: pos.line || undefined, column: pos.column != null ? pos.column + 1 : undefined };
   } catch {

@@ -1,0 +1,81 @@
+// The shapes a request and a conversation take, and the pure steps that build a transcript.
+import type { Breakpoint } from '../components/DeviceBar';
+import type { FrameTarget } from '../components/BrowserView';
+import { uid } from './draw';
+import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, NetworkFailure, PageEnv } from './types';
+
+export interface AgentRequest {
+  url: string; title: string; viewport: { width: number; height: number; responsive?: boolean };
+  breakpoints?: Breakpoint[];
+  instruction: string; overview?: string;
+  annotations: Omit<Annotation, 'id' | 'color'>[];
+  diagnostics?: { console: ConsoleEntry[]; network: NetworkFailure[]; devLog: string; a11y?: A11yIssue[]; overlay?: string };
+  route?: { path: string; file: string; framework: string };
+  env?: PageEnv & { frozen: boolean; states?: string[]; profile?: { name: string; detail: string } };
+  variant?: { index: number; total: number };
+  verify?: { before?: string; after: string; same?: boolean };
+  note?: string; // something Pinpoint did that the agent should know (e.g. which variant was picked)
+}
+
+// What kind of run an id is: a normal request, one of several variants, or the automatic check.
+// frame: what the "before" screenshot was aimed at, so the "after" one shows the same place.
+export interface RunMeta { variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number } }
+
+// Several queued messages become one follow-up, renumbering their annotations.
+export function mergeRequests(reqs: AgentRequest[]): AgentRequest {
+  const last = reqs[reqs.length - 1];
+  let n = 0;
+  return {
+    ...last,
+    instruction: reqs.map((r) => r.instruction).filter(Boolean).join('\n\n'),
+    annotations: reqs.flatMap((r) => r.annotations.map((a) => ({ ...a, n: ++n }))),
+    overview: last.overview ?? reqs.find((r) => r.overview)?.overview,
+  };
+}
+
+export type Delta = { kind: 'text' | 'thinking'; text: string };
+// Streamed tokens are appended to the draft block of the same kind, or start one.
+export function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
+  if (!buf.length) return items;
+  const next = [...items];
+  for (const d of buf) {
+    const last = next[next.length - 1];
+    if (last && last.kind === d.kind && last.streaming) next[next.length - 1] = { ...last, text: last.text + d.text };
+    else next.push({ kind: d.kind, id: uid(), text: d.text, streaming: true });
+  }
+  return next;
+}
+// A complete block replaces the streamed draft of the same kind (or is added).
+export function finalizeItems(c: ChatItem[], kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []): ChatItem[] {
+  let i = -1;
+  for (let j = c.length - 1; j >= 0; j--) { const it = c[j]; if (it.kind === kind && it.streaming) { i = j; break; } }
+  const done: ChatItem[] = text ? [{ kind, id: i >= 0 ? c[i].id : uid(), text }] : [];
+  if (i >= 0) return [...c.slice(0, i), ...done, ...c.slice(i + 1), ...extra];
+  return [...c, ...done, ...extra];
+}
+// The agent proposes memories with a trailing "REMEMBER: …" line.
+export function splitMemory(text: string): { text: string; extra: ChatItem[] } {
+  const m = text.match(/^\s*`?REMEMBER:\s*(.+?)`?\s*$/m);
+  return m ? { text: text.replace(m[0], '').trim(), extra: [{ kind: 'memory', id: uid(), text: m[1].trim(), status: 'pending' }] } : { text, extra: [] };
+}
+export function chatTitle(items: ChatItem[]) {
+  const first = items.find((c) => c.kind === 'user') as Extract<ChatItem, { kind: 'user' }> | undefined;
+  return (first?.text || first?.annotations.map((a) => a.note).find(Boolean) || `${first?.annotations.length || 0} annotation(s)`).slice(0, 80);
+}
+// A chat that isn't on screen but is still alive: its agent is working, and its messages keep arriving.
+export interface ParkedChat {
+  id: string; createdAt: number; items: ChatItem[]; session: { id: string; agent: AgentId } | null;
+  designAtStart: string | null; runId: string | null; agent: AgentId;
+}
+
+// A saved chat whose last request never finished (app closed mid-run) gets an
+// explicit note instead of hanging on "Starting…" forever.
+export function healChat(items: ChatItem[]): ChatItem[] {
+  let lastUser = -1;
+  items.forEach((it, i) => { if (it.kind === 'user') lastUser = i; });
+  if (lastUser < 0 || items.slice(lastUser).some((it) => it.kind === 'done')) return items;
+  return [
+    ...items.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
+    { kind: 'error', id: uid(), text: 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.' },
+  ];
+}

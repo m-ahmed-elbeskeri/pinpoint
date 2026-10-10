@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   modelCatalog: () => ipcRenderer.invoke('agents:models'),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
-  capture: (webContentsId, rect) => ipcRenderer.invoke('capture', { webContentsId, rect }),
+  capture: (webContentsId, rect, jpeg) => ipcRenderer.invoke('capture', { webContentsId, rect, jpeg }),
   runAgent: (args) => ipcRenderer.invoke('agent:run', args),
   cancelAgent: (runId) => ipcRenderer.invoke('agent:cancel', runId),
   steerAgent: (args) => ipcRenderer.invoke('agent:steer', args),

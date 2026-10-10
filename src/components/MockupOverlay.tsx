@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Move, RotateCcw, ScanEye, X } from 'lucide-react';
+import { Move, RotateCcw, ScanEye, X } from './icons';
 
 export interface Overlay { image: string; name: string; opacity: number; x: number; y: number; moving: boolean }
 

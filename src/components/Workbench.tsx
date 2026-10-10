@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Boxes, Check, Globe, Loader2, Play, Trash2, UserRound, X } from 'lucide-react';
+import { Boxes, Check, Globe, Loader2, Play, Trash2, UserRound, X } from './icons';
 import type { BgRun, ComponentEntry, ComponentProp, Profile } from '../lib/types';
 import type { WorkspaceSpec } from '../lib/workspace';
 

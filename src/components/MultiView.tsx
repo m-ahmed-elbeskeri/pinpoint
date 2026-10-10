@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X } from './icons';
 
 const SIZES = [
   { label: 'Phone', w: 390, h: 844 },

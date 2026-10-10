@@ -1,4 +1,4 @@
-import { ArrowUpRight, Circle, Eraser, Highlighter, Pencil, Plus, Redo2, Square, Trash2, Type, Undo2 } from 'lucide-react';
+import { ArrowUpRight, Circle, Eraser, Highlighter, Pencil, Plus, Redo2, Square, Trash2, Type, Undo2 } from './icons';
 import type { Tool } from '../lib/types';
 import { COLORS } from '../lib/draw';
 

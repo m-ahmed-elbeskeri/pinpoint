@@ -200,7 +200,7 @@ export interface MemoryItem { id: string; text: string; enabled: boolean; create
 export interface DesignDoc { path: string; exists: boolean; content: string }
 export interface RouteInfo { route: string; file: string; framework: string; dynamic: boolean }
 
-export interface ConsoleEntry { level: 'error' | 'warning'; message: string; source?: string; line?: number; count: number; at: number }
+export interface ConsoleEntry { level: 'error' | 'warning'; message: string; source?: string; line?: number; count: number; at: number; file?: string; fileLine?: number } // file: the project file the source maps back to
 export interface NetworkFailure { url: string; method: string; status?: number; error?: string; resourceType?: string; at: number }
 
 export interface Settings {
@@ -272,7 +272,7 @@ export interface PinpointAPI {
   modelCatalog(): Promise<ModelCatalog>;
   pickFolder(): Promise<string | null>;
   openPath(p: string): Promise<string>;
-  capture(webContentsId: number, rect?: Rect): Promise<string>;
+  capture(webContentsId: number, rect?: Rect, jpeg?: boolean): Promise<string>;
   runAgent(args: { runId: string; request: unknown; sessionId?: string | null; check?: { routes: { route: string; url: string; current?: boolean }[]; currentFile?: string; perfUrl?: string; targets?: string[]; partition?: string } }): Promise<{ requestDir: string }>;
   cancelAgent(runId: string): Promise<boolean>;
   steerAgent(args: { runId: string; steerId: string; request: unknown; mode: 'queue' | 'now' }): Promise<{ delivered: boolean }>;

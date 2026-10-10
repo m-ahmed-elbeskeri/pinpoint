@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Play, Square, X } from 'lucide-react';
+import { Play, Square, X } from './icons';
 import type { DevCandidate } from '../lib/types';
 
 // The terminal (and the library that draws it) is loaded the first time its tab is opened.
@@ -28,7 +28,8 @@ export function Drawer(p: Props) {
   const pre = useRef<HTMLPreElement>(null);
   const seen = useRef(false); // the terminal tab has been opened at least once
   if (p.tab === 'term') seen.current = true;
-  const text = p.tab === 'dev' ? p.devLog : p.agentLog;
+  // Only the end is drawn: laying the whole log out again on every update makes the app stutter.
+  const text = (p.tab === 'dev' ? p.devLog : p.agentLog).slice(-40_000);
 
   useEffect(() => { setCmd(p.devCommand); }, [p.devCommand]);
   useEffect(() => { pre.current?.scrollTo(0, pre.current.scrollHeight); }, [text]);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Download, FlaskConical, Layers, Loader2, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from 'lucide-react';
+import { Check, Download, FlaskConical, Layers, Loader2, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from './icons';
 import type { NetworkMode, PageEnv, Pin } from '../lib/types';
 
 // Closes a popover when the user clicks anywhere outside it.

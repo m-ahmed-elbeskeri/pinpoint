@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, History, Loader2, MessageSquare, Trash2 } from 'lucide-react';
+import { Check, History, Loader2, MessageSquare, Trash2 } from './icons';
 import type { ChatMeta, OtherChat } from '../lib/types';
 
 interface Props {

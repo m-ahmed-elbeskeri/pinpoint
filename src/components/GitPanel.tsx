@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, X } from 'lucide-react';
+import { GitBranch, GitCommitHorizontal, GitPullRequestArrow, Loader2, Plus, X } from './icons';
 import type { GitStatus, Settings } from '../lib/types';
 
 interface Props {
