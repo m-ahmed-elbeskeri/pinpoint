@@ -4,6 +4,8 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-10
+
 ### Faster
 
 - **Comparing screenshots** (the visual change check, pins, "did anything change") runs in background workers instead of pausing the app.
@@ -181,7 +183,9 @@ The first public release.
 - Integrated title bar on Windows and macOS, resizable sidebar on either side, dev-server terminal and agent logs.
 - Installers for Windows (NSIS), macOS (DMG, Intel and Apple Silicon) and Linux (AppImage).
 
-[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/m-ahmed-elbeskeri/pinpoint/compare/v0.3.0...v0.4.0
