@@ -11,14 +11,49 @@ interface Props {
   onOpen(path: string): void;
 }
 
-const ICON = { add: FilePlus2, modify: FilePen, delete: FileMinus2 };
+export const ICON = { add: FilePlus2, modify: FilePen, delete: FileMinus2 };
 
-function stats(f: DiffFile) {
+export function stats(f: DiffFile) {
   if (f.before == null || f.after == null || f.binary) return null;
   const p = structuredPatch('a', 'b', f.before, f.after, '', '', { context: 0 });
   let add = 0, del = 0;
   for (const h of p.hunks) for (const l of h.lines) { if (l[0] === '+') add++; else if (l[0] === '-') del++; }
   return { add, del };
+}
+
+export function fileHunks(file: DiffFile | undefined) {
+  if (!file || file.before == null || file.after == null || file.binary) return null;
+  return structuredPatch(file.path, file.path, file.before, file.after, '', '', { context: 3 }).hunks;
+}
+
+export function DiffHunks({ hunks }: { hunks: ReturnType<typeof fileHunks> }) {
+  return (
+    <div className="diff-code">
+      {hunks?.map((h, hi) => {
+        let o = h.oldStart, n = h.newStart;
+        return (
+          <div key={hi} className="hunk">
+            <div className="hunk-head">@@ −{h.oldStart},{h.oldLines} +{h.newStart},{h.newLines} @@</div>
+            {h.lines.map((l, li) => {
+              const t = l[0];
+              if (t === '\\') return null;
+              const row = (
+                <div key={li} className={`dl ${t === '+' ? 'add' : t === '-' ? 'del' : ''}`}>
+                  <span className="ln">{t === '+' ? '' : o}</span>
+                  <span className="ln">{t === '-' ? '' : n}</span>
+                  <span className="sign">{t === ' ' ? '' : t === '-' ? '−' : '+'}</span>
+                  <code>{l.slice(1) || ' '}</code>
+                </div>
+              );
+              if (t !== '+') o++;
+              if (t !== '-') n++;
+              return row;
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function DiffViewer({ runId, initialPath, onClose, onReverted, onOpen }: Props) {
@@ -48,10 +83,7 @@ export function DiffViewer({ runId, initialPath, onClose, onReverted, onOpen }: 
   const allStats = useMemo(() => new Map((files || []).map((f) => [f.path, stats(f)])), [files]);
   const file = files?.find((f) => f.path === sel);
 
-  const hunks = useMemo(() => {
-    if (!file || file.before == null || file.after == null || file.binary) return null;
-    return structuredPatch(file.path, file.path, file.before, file.after, '', '', { context: 3 }).hunks;
-  }, [file]);
+  const hunks = useMemo(() => fileHunks(file), [file]);
 
   const revert = async (paths: string[] | null, force = false) => {
     setBusy(true);
@@ -114,33 +146,7 @@ export function DiffViewer({ runId, initialPath, onClose, onReverted, onOpen }: 
                   {file.binary ? <div className="diff-empty">Binary file: no text diff.</div>
                     : file.tooLarge && !hunks ? <div className="diff-empty">File too large to show a diff.</div>
                       : hunks && hunks.length === 0 ? <div className="diff-empty">No text changes (whitespace or metadata only).</div>
-                        : (
-                          <div className="diff-code">
-                            {hunks?.map((h, hi) => {
-                              let o = h.oldStart, n = h.newStart;
-                              return (
-                                <div key={hi} className="hunk">
-                                  <div className="hunk-head">@@ −{h.oldStart},{h.oldLines} +{h.newStart},{h.newLines} @@</div>
-                                  {h.lines.map((l, li) => {
-                                    const t = l[0];
-                                    if (t === '\\') return null;
-                                    const row = (
-                                      <div key={li} className={`dl ${t === '+' ? 'add' : t === '-' ? 'del' : ''}`}>
-                                        <span className="ln">{t === '+' ? '' : o}</span>
-                                        <span className="ln">{t === '-' ? '' : n}</span>
-                                        <span className="sign">{t === ' ' ? '' : t === '-' ? '−' : '+'}</span>
-                                        <code>{l.slice(1) || ' '}</code>
-                                      </div>
-                                    );
-                                    if (t !== '+') o++;
-                                    if (t !== '-') n++;
-                                    return row;
-                                  })}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                        : <DiffHunks hunks={hunks} />}
                 </>
               )}
             </div>

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown, ArrowLeft, ArrowRight, Check, Globe, Loader2, Monitor,
-  Plus, RotateCw, Send, Smartphone, Square, Tablet,
-  Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight,
-  AppWindow, Boxes, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Globe, Loader2, Monitor,
+  Plus, RotateCw, Smartphone, Square, Tablet,
+  Bug, Brain, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
+  Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
+  AppWindow, Boxes, GitCompareArrows, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
 } from './components/icons';
 import { SweepView } from './components/SweepView';
 import { ReviewPanel } from './components/ReviewPanel';
@@ -20,8 +21,14 @@ import { Welcome } from './components/Welcome';
 import { ContextSheet, type ContextTab } from './components/ContextSheet';
 import { ContextBar } from './components/ContextBar';
 import { DiffViewer } from './components/DiffViewer';
+import { BranchCompare } from './components/BranchCompare';
 import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
+import { ThreadSidebar, type RunningTask } from './components/ThreadSidebar';
+import { SideChat } from './components/SideChat';
+import { useComposerAssist, type SlashCommand } from './components/ComposerAssist';
+import { AgentPicker } from './components/AgentPicker';
+import { CommandPalette, type Command } from './components/CommandPalette';
 import { GitPanel } from './components/GitPanel';
 import { CompareView, type CompareTarget } from './components/CompareView';
 import { diffOverlay, looksSame } from './lib/pixeldiff';
@@ -33,13 +40,13 @@ import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverl
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  OtherChat,
+  OtherChat, ChatMeta, HarnessInfo, TermSession, ApprovalDecision,
   A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowResult, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
   GitStatus, PageEnv, Rect, RevertResult, ReviewComment, RouteInfo, Settings, SourceInfo, SweepPage, Tool,
 } from './lib/types';
 
 import { makeTab, matchRoute, normalizeUrl, pairs, partitionOf, tabLabel, type Tab } from './lib/urls';
-import { chatTitle, finalizeItems, healChat, mergeDeltas, mergeRequests, splitMemory, type AgentRequest, type ParkedChat, type RunMeta } from './lib/chat';
+import { applyPlan, chatTitle, expireApprovals, finalizeItems, healChat, mergeDeltas, mergeRequests, needsInput, splitMemory, type AgentRequest, type ParkedChat, type RunMeta } from './lib/chat';
 import { describe, handoffMarkdown, toPlaywright } from './lib/handoff';
 import { clampRect, errText, readImage, stripAnsi } from './lib/util';
 import { useShapes } from './lib/useShapes';
@@ -57,6 +64,9 @@ export const isMac = api.platform === 'darwin';
 export const MOD = isMac ? '⌘' : 'Ctrl';
 document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
+
+const THREADS_W = 248;
+export const combo = (k: string, shift = false) => isMac ? `⌘${shift ? '⇧' : ''}${k}` : `Ctrl+${shift ? 'Shift+' : ''}${k}`;
 
 const MATCH_ROUNDS = 3;
 const MATCH_GOAL = 3;
@@ -76,6 +86,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [agents, setAgents] = useState<Record<AgentId, { ok: boolean; version?: string }> | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const [harnesses, setHarnesses] = useState<HarnessInfo[]>([]);
   const [urlInput, setUrlInput] = useState('');
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTab, setActiveTab] = useState('');
@@ -126,6 +137,12 @@ export default function App() {
   const [devRunning, setDevRunning] = useState(false);
   const [devInfo, setDevInfo] = useState<DevDetection | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sides, setSides] = useState<{ id: string; title: string; seed: string | null; running: boolean }[]>([]);
+  const [activeSide, setActiveSide] = useState<string | null>(null);
+  const [askAside, setAskAside] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [terms, setTerms] = useState<TermSession[]>([]);
+  const [paletteChats, setPaletteChats] = useState<ChatMeta[]>([]);
   const [toast, setToast] = useState<string | null>(null);
 
   const [chatId, setChatId] = useState<string | null>(null);
@@ -136,6 +153,7 @@ export default function App() {
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
   const [sheet, setSheet] = useState<ContextTab | null>(null);
   const [diffView, setDiffView] = useState<{ runId: string; path?: string } | null>(null);
+  const [branchCompare, setBranchCompare] = useState<{ base?: string; remote?: boolean } | null>(null);
   const { consoleLog, netFails, consoleRef, netRef, onConsole, clearDiagnostics } = usePageProblems();
   const { requests, requestsRef, onRequest, clearRequests } = useRequests();
   const [mocks, setMocks] = useState<Mock[]>([]);
@@ -227,15 +245,32 @@ export default function App() {
     });
     api.detectAgents().then(setAgents);
     api.modelCatalog().then(setCatalog);
+    api.listAgents().then(setHarnesses);
   }, []);
 
   const saveSettings = useCallback(async (patch: Partial<Settings>) => {
     const next = await api.setSettings(patch);
     setSettings(next);
-    if ('claudePath' in patch || 'codexPath' in patch) api.detectAgents().then(setAgents);
+    if ('claudePath' in patch || 'codexPath' in patch || 'agentPaths' in patch || 'customAgents' in patch) {
+      api.detectAgents().then(setAgents);
+      api.listAgents().then(setHarnesses);
+    }
   }, []);
 
   const projectDir = settings?.projectDir || '';
+  const theme = settings?.theme || 'dark';
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const apply = () => {
+      const light = theme === 'light' || (theme === 'system' && mq.matches);
+      document.documentElement.dataset.theme = light ? 'light' : 'dark';
+      api.setWindowTheme(light).catch(() => {});
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [theme]);
+  const wantChat = useRef<string | null>(null);
   const refreshRoutes = useCallback(() => { api.listRoutes().then(setRoutes).catch(() => setRoutes([])); }, []);
   const refreshGit = useCallback(async () => { await api.gitStatus().then(setGitStatus).catch(() => setGitStatus(null)); }, []);
 
@@ -248,7 +283,10 @@ export default function App() {
     refreshRoutes();
     refreshGit();
     api.listChats().then(async (list) => {
-      const last = list[0] ? await api.loadChat(list[0].id) : null;
+      const want = wantChat.current;
+      wantChat.current = null;
+      const pick = (want && list.find((c) => c.id === want)) || list[0];
+      const last = pick ? await api.loadChat(pick.id) : null;
       if (last) {
         setChatId(last.id); setChatCreated(last.createdAt); setChat(healChat(last.items)); setSession(last.session); setDesignAtStart(last.designAtStart ?? null);
       } else {
@@ -267,11 +305,16 @@ export default function App() {
   }, [chat, session, chatId, projectDir, designAtStart]);
 
   const parked = useRef(new Map<string, ParkedChat>());
+  // A desktop notification, only when the window isn't the one you're looking at.
+  const notify = (body: string) => {
+    if (document.hasFocus()) return;
+    try { new Notification('Pinpoint', { body }); } catch { /* notifications unavailable */ }
+  };
   const [others, setOthers] = useState<OtherChat[]>([]);
   const chatRef = useRef(chat);
   chatRef.current = chat;
   const syncOthers = (finished?: ParkedChat, seen?: string) => setOthers((o) => [
-    ...[...parked.current.values()].map((p) => ({ id: p.id, title: chatTitle(p.items), running: true })),
+    ...[...parked.current.values()].map((p) => ({ id: p.id, title: chatTitle(p.items), running: true, needsInput: needsInput(p.items) })),
     ...o.filter((x) => !x.running && !parked.current.has(x.id) && x.id !== seen && x.id !== finished?.id),
     ...(finished ? [{ id: finished.id, title: chatTitle(finished.items), running: false }] : []),
   ]);
@@ -336,14 +379,22 @@ export default function App() {
       case 'git': refreshGit(); break;
       case 'text': { const m = splitMemory(e.text); p.items = finalizeItems(p.items, 'text', m.text, m.extra); break; }
       case 'thinking': p.items = finalizeItems(p.items, 'thinking', e.text); break;
-      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running' }); break;
+      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits }); break;
+      case 'plan': p.items = applyPlan(p.items, e.steps); break;
+      case 'approval':
+        add({ kind: 'approval', id: uid(), runId: e.runId, approvalId: e.approvalId, tool: e.tool, detail: e.detail, status: 'pending' });
+        syncOthers();
+        notify(`${chatTitle(p.items)} needs your OK: ${e.tool}`);
+        flash(`Another chat is waiting for your OK: ${chatTitle(p.items)}`);
+        break;
       case 'tool_result':
         p.items = p.items.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output } : it));
         break;
       case 'error': add({ kind: 'error', id: uid(), text: e.text }); break;
       case 'done':
+        notify(`${e.ok ? 'Finished' : 'Stopped'}: ${chatTitle(p.items)}`);
         p.items = [
-          ...p.items.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'ok' as const }
+          ...expireApprovals(p.items).map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'ok' as const }
             : (it.kind === 'text' || it.kind === 'thinking') && it.streaming ? { ...it, streaming: false } : it)),
           { kind: 'done', id: uid(), runId: e.runId, ok: e.ok, cost: e.cost, durationMs: e.durationMs, changes: e.changes || [], commit: e.commit || null },
         ];
@@ -452,7 +503,7 @@ export default function App() {
     const ann: Annotation = { id: uid(), n, kind: 'flow', note: '', color: colorFor(n), steps: rec.steps, startUrl: rec.startUrl, ...(seen && (seen.errors.length || seen.failed.length) && { seen: { errors: seen.errors.slice(-6), failed: seen.failed.slice(-6) } }) };
     setAnnotations((prev) => [...prev, ann]);
     setActiveId(ann.id);
-    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus({ preventScroll: true }), 50);
   };
   const replayFlow = async (flow: { steps: FlowStep[]; startUrl: string }): Promise<FlowResult | null> => {
     const b = browser.current;
@@ -537,7 +588,7 @@ export default function App() {
   const askA11y = () => {
     setIncludeA11y(true);
     setInstruction((t) => (t.trim() ? t : 'Fix the accessibility problems listed in the diagnostics.'));
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
 
   const [measured, setMeasured] = useState<{ origin: string; tab: string; build: BuildKind } | null>(null);
@@ -929,7 +980,7 @@ export default function App() {
         + (s.storybook ? 'Follow the conventions of the existing stories.' : "Storybook isn't set up in this project: say what installing it would add and ask before doing it."),
       );
       setPopover(null);
-      setTimeout(() => composerRef.current?.focus(), 50);
+      setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
     } catch (e) { flash(errText(e)); }
   };
 
@@ -972,7 +1023,7 @@ export default function App() {
       setAnnotations((prev) => [...prev, ann]);
       setActiveId(ann.id);
       (mode === 'sketch' ? sketch : page).reset();
-      setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
+      setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus({ preventScroll: true }), 50);
     } finally { setBusy(null); }
   };
 
@@ -991,7 +1042,7 @@ export default function App() {
     if (!added.length) return;
     setAnnotations((prev) => [...prev, ...added]);
     setActiveId(added[added.length - 1].id);
-    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${added[0].id}"]`)?.focus(), 50);
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${added[0].id}"]`)?.focus({ preventScroll: true }), 50);
   };
   const onPaste = (e: React.ClipboardEvent) => {
     const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
@@ -1446,7 +1497,7 @@ export default function App() {
     }
     if (added.length) setAnnotations((prev) => [...prev, ...added]);
     if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
 
   useEffect(() => {
@@ -1476,7 +1527,7 @@ export default function App() {
     setReviewComments((cs) => cs.filter((c) => !ids.has(c.id)));
     setReviewOpen(false);
     if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
 
   const diffMockup = async () => {
@@ -1543,7 +1594,7 @@ export default function App() {
     setAnnotations((prev) => [...prev, ann]);
     setActiveId(ann.id);
     if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
-    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus(), 50);
+    setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${ann.id}"]`)?.focus({ preventScroll: true }), 50);
   };
   const replayRequest = async (r: NetRequest) => {
     const res = await browser.current?.sendRequest({ method: r.method, url: r.url, body: r.reqBody });
@@ -1552,7 +1603,7 @@ export default function App() {
   const buildMock = (m: Mock) => {
     setInstruction(`Build the endpoint ${m.method === 'ANY' ? 'GET' : m.method} ${m.path} in this project's backend. It should answer with status ${m.status} and a body shaped like this (the page is being developed against it as a mock):\n\n${m.body}\n\nFollow how the existing endpoints are written and registered, use real data where the project has it, and tell me when I can switch the mock off.`);
     if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
 
   const openFile = (path: string, line?: number) => {
@@ -1572,9 +1623,85 @@ export default function App() {
     } catch (e) { flash(errText(e)); }
   };
   const newChat = () => {
+    if (job || !chatRef.current.length) return;
     if (!leaveChat()) return;
     setChat([]); setSession(null); setChatId(null); setDesignAtStart(null);
     syncOthers();
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30);
+  };
+  const newChatRef = useRef(newChat);
+  newChatRef.current = newChat;
+  useEffect(() => {
+    if (paletteOpen && projectDir) api.listChats().then(setPaletteChats).catch(() => setPaletteChats([]));
+  }, [paletteOpen, projectDir]);
+  useEffect(() => {
+    if (!projectDir) return;
+    const tick = () => api.termList().then(setTerms).catch(() => {});
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
+  }, [projectDir]);
+  // What the side chat gets to know about the main conversation: the last few requests and replies.
+  const sideContext = () => {
+    const lines: string[] = [];
+    for (const it of chatRef.current.slice(-24)) {
+      if (it.kind === 'user') lines.push(`User: ${[it.text, ...it.annotations.map((a) => a.note)].filter(Boolean).join(' / ')}`);
+      else if (it.kind === 'text') lines.push(`Agent: ${it.text}`);
+      else if (it.kind === 'done') lines.push(`(Run ${it.ok ? 'finished' : 'failed'}; changed ${it.changes.map((c) => c.path).join(', ') || 'nothing'})`);
+    }
+    const page = navRef.current.url ? `Page open in the browser: ${navRef.current.url}\n` : '';
+    return (page + lines.join('\n')).slice(-4000);
+  };
+  const onChatMouseUp = () => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() || '';
+    if (!text || !sel?.rangeCount) { setAskAside(null); return; }
+    const r = sel.getRangeAt(0).getBoundingClientRect();
+    setAskAside({ text: text.slice(0, 1500), x: Math.round(r.left + r.width / 2), y: Math.round(r.top) });
+  };
+  const newSide = (seed?: string) => {
+    if (!settingsRef.current?.projectDir) return;
+    const id = `side-${uid()}`;
+    setSides((list) => [...list, { id, title: 'Side chat', seed: seed ?? null, running: false }]);
+    setActiveSide(id);
+    if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
+  };
+  const newSideRef = useRef(newSide);
+  // Fade the tab strip's edges only where more tabs are hidden.
+  const tabsStrip = useRef<HTMLDivElement>(null);
+  const fadeTabs = () => {
+    const el = tabsStrip.current;
+    if (!el) return;
+    el.classList.toggle('fade-l', el.scrollLeft > 2);
+    el.classList.toggle('fade-r', el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+  useEffect(() => {
+    const el = tabsStrip.current;
+    if (!el) return;
+    fadeTabs();
+    const ro = new ResizeObserver(fadeTabs);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  useEffect(() => { tabsStrip.current?.querySelector('.ptab.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [activeSide, sides.length]);
+  newSideRef.current = newSide;
+  const patchSide = (id: string, p: Partial<(typeof sides)[number]>) => setSides((list) => list.map((x) => (x.id === id ? { ...x, ...p } : x)));
+  const closeSide = (id: string) => {
+    api.sideCancel(id).catch(() => {});
+    setSides((list) => list.filter((x) => x.id !== id));
+    if (activeSide === id) setActiveSide(null);
+  };
+  // Selected text in the chat: start a side chat about it, or quote it into a reply.
+  const fromSelection = (how: 'side' | 'reply') => {
+    const text = askAside?.text || '';
+    setAskAside(null);
+    window.getSelection()?.removeAllRanges();
+    if (!text) return;
+    if (how === 'side') { newSide(text); return; }
+    const quote = text.split('\n').map((l) => `> ${l}`).join('\n');
+    setInstruction((v) => `${v ? v.trimEnd() + '\n\n' : ''}${quote}\n\n`);
+    setActiveSide(null);
+    setTimeout(() => { const c = composerRef.current; if (c) { c.focus({ preventScroll: true }); c.selectionStart = c.selectionEnd = c.value.length; } }, 30);
   };
 
   const onMemoryAction = (id: string, action: 'save' | 'dismiss') => {
@@ -1594,7 +1721,7 @@ export default function App() {
       `${design?.exists ? 'Improve' : 'Create'} DESIGN.md at the project root: a concise design system for this project (colors, typography, spacing, radii, shadows, key components and usage rules). ` +
       'Base it on the code (theme / Tailwind config, CSS variables, shared components)' + (draft ? ' and this draft extracted from the rendered page:\n\n' + draft : '.'),
     );
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
   const flowFix = (id: string) => {
     const item = chatRef.current.find((c) => c.kind === 'done' && c.runId === id) as Extract<ChatItem, { kind: 'done' }> | undefined;
@@ -1606,7 +1733,7 @@ export default function App() {
       ...f.failed.map((x) => `- Failed request: ${x}`),
     ];
     setInstruction(`I replayed the steps I recorded after your change and it still isn't right:\n${found.join('\n')}\n\nFind why and fix it.`);
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
   const askToFix = () => {
     setIncludeDiag(true);
@@ -1617,7 +1744,7 @@ export default function App() {
     ];
     const ask = `Fix what is breaking this page:\n${list.join('\n')}\n\nThe full errors are attached. Find the cause in the code and fix that, not just the symptom, then tell me what was wrong.`;
     setInstruction((t) => (t.trim() ? t : list.length ? ask : 'Fix the errors the dev server is reporting (its output is attached).'));
-    setTimeout(() => composerRef.current?.focus(), 50);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 50);
   };
 
   const deltaBuf = useRef<{ kind: 'text' | 'thinking'; text: string }[]>([]);
@@ -1651,6 +1778,7 @@ export default function App() {
       if (p) parkedEventRef.current(p, e);
       return;
     }
+    if (e.type === 'done') { setChat(expireApprovals); notify(`${e.ok ? 'Finished' : 'Stopped'}: ${chatTitle(chatRef.current)}`); }
     const push = (item: ChatItem) => setChat((c) => {
       const last = c[c.length - 1];
       if (item.kind === 'error' && last?.kind === 'error' && last.text === item.text) return c;
@@ -1671,7 +1799,12 @@ export default function App() {
         break;
       }
       case 'thinking': finalizeBlock('thinking', e.text); break;
-      case 'tool': push({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running' }); break;
+      case 'tool': push({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits }); break;
+      case 'plan': setChat((c) => applyPlan(c, e.steps)); break;
+      case 'approval':
+        push({ kind: 'approval', id: uid(), runId: e.runId, approvalId: e.approvalId, tool: e.tool, detail: e.detail, status: 'pending' });
+        notify(`Waiting for your OK: ${e.tool}`);
+        break;
       case 'tool_result':
         setChat((c) => c.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output } : it)));
         break;
@@ -1708,7 +1841,14 @@ export default function App() {
   const refreshGitRef = useRef(refreshGit);
   refreshGitRef.current = refreshGit;
 
+  const approve = (id: string, decision: ApprovalDecision) => {
+    const item = chatRef.current.find((it) => it.id === id);
+    if (item?.kind !== 'approval' || item.status !== 'pending') return;
+    api.approve(item.runId, item.approvalId, decision).catch(() => {});
+    setChat((c) => c.map((it) => (it.id === id && it.kind === 'approval' ? { ...it, status: decision } : it)));
+  };
   const chatHandlers = {
+    onApprove: approve,
     onReload: () => browser.current?.reload(),
     onUndo: undoRun,
     onReview: (id: string, path?: string) => setDiffView({ runId: id, path }),
@@ -1760,9 +1900,11 @@ export default function App() {
     if (devCommand && !devRunning) startDev(devCommand);
   };
 
-  const pickProject = async () => {
+  const pickProject = async (known?: string) => {
     const prev = settings?.projectDir;
-    const dir = await api.pickFolder();
+    if (known && known === prev) return;
+    if (known && !leaveChat()) return;
+    const dir = await api.pickFolder(known);
     if (!dir) return;
     setSettings(await api.getSettings()); setSession(null); flash(`Project: ${dir}`);
     if (dir !== prev) {
@@ -1776,6 +1918,19 @@ export default function App() {
     }
   };
 
+  // Another worktree of the same repository: keeps the dev command and tabs, the dev server restarts there.
+  const openWorktree = async (dir: string) => {
+    if (dir === settings?.projectDir) return false;
+    if (!leaveChat()) return false;
+    const r = await api.gitOpenWorktree(dir);
+    setSettings(await api.getSettings()); setSession(null);
+    setAnnotations([]);
+    setDevLog('');
+    refreshGit();
+    flash(`Worktree: ${r.branch || r.dir}${r.restarted ? ' · dev server restarting there' : ''}`);
+    return true;
+  };
+
   const startResize = (which: 'panel' | 'drawer') => (e: React.PointerEvent) => {
     e.preventDefault();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -1783,17 +1938,18 @@ export default function App() {
     dragging.current = true;
     const grid = (e.currentTarget as HTMLElement).closest('.app') as HTMLElement | null;
     const left = settingsRef.current?.panelSide === 'left';
+    const tw = settingsRef.current?.threadsHidden ? 0 : THREADS_W;
     let last = 0, frame = 0;
     const paint = () => {
       frame = 0;
       if (!grid || !last) return;
-      if (which === 'panel') grid.style.gridTemplateColumns = left ? `${last}px 1fr` : `1fr ${last}px`;
+      if (which === 'panel') grid.style.gridTemplateColumns = left ? `${tw}px ${last}px 1fr` : `${tw}px 1fr ${last}px`;
       else grid.style.gridTemplateRows = `52px 1fr ${last}px`;
     };
     const move = (ev: PointerEvent) => {
       if (which === 'panel') {
-        const w = left ? ev.clientX : window.innerWidth - ev.clientX;
-        last = Math.round(Math.min(Math.max(300, w), Math.min(820, window.innerWidth - 480)));
+        const w = left ? ev.clientX - tw : window.innerWidth - ev.clientX;
+        last = Math.round(Math.min(Math.max(300, w), Math.min(820, window.innerWidth - tw - 480)));
       } else {
         last = Math.round(Math.min(Math.max(120, window.innerHeight - ev.clientY), window.innerHeight * 0.65));
       }
@@ -1813,7 +1969,13 @@ export default function App() {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
+  const addScribble = (points: [number, number][]) => {
+    if (points.length < 2) return;
+    page.set([...page.shapes, { id: uid(), tool: 'pen', color, size, points }]);
+    if (!page.shapes.length) flash(`Mark added. It goes with your next message (press D for arrows, boxes and text).`);
+  };
   const togglePanel = () => saveSettings({ panelHidden: !settingsRef.current?.panelHidden });
+  const toggleThreads = () => saveSettings({ threadsHidden: !settingsRef.current?.threadsHidden });
 
   const handleKey = useCallback((key: string, e?: KeyboardEvent) => {
     const m = modeRef.current;
@@ -1834,7 +1996,11 @@ export default function App() {
       const t = e.target as HTMLElement;
       const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
       const m = modeRef.current;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { togglePanel(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { if (e.shiftKey) toggleThreads(); else togglePanel(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') { setPaletteOpen((o) => !o); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { setDrawerOpen((o) => !o); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') { newChatRef.current(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') { newSideRef.current(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') { navigator.clipboard?.writeText(layoutReport()); flash('Layout report copied. Paste it wherever you report the problem.'); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') { newTab(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing && (m === 'draw' || m === 'sketch')) {
@@ -1866,6 +2032,7 @@ export default function App() {
   };
 
   const agentReady = settings && agents ? agents[settings.agent]?.ok : true;
+  const agentName = harnesses.find((h) => h.id === settings?.agent)?.name || (settings?.agent === 'codex' ? 'Codex' : 'Claude Code');
   const deviceScale = !device.on || !avail.w ? 1
     : device.zoom === 'fit' ? Math.min(1, avail.w / device.w, device.h ? avail.h / device.h : 1) : device.zoom;
   const deviceH = device.h || avail.h / deviceScale;
@@ -1888,23 +2055,102 @@ export default function App() {
     return { left: Math.min(Math.max(8, popover.rect.x), fw - w - 8), top, width: w };
   }, [popover, toolSection, popAnn?.kind, popAnn?.element?.component?.uses]);
 
+  const planMode = settings?.agent === 'codex' ? settings.codexSandbox === 'read-only' : settings?.agent === 'claude' ? settings.claudePermission === 'plan' : false;
+  const setPlanMode = (on: boolean) => saveSettings(settingsRef.current?.agent === 'codex' ? { codexSandbox: on ? 'read-only' : 'workspace-write' } : { claudePermission: on ? 'plan' : 'acceptEdits' });
+  const slashCommands: SlashCommand[] = [
+    { name: 'new', hint: 'Start a new chat', icon: SquarePen, run: newChat },
+    { name: 'side', hint: 'Ask something in a side chat', icon: MessageSquare, run: (rest) => newSide(rest || undefined) },
+    { name: 'annotate', hint: 'Click or draw on the page (S)', icon: MousePointerClick, run: () => setMode('select') },
+    { name: 'draw', hint: 'Arrows, boxes and text on the page (D)', icon: PenTool, run: () => setMode('draw') },
+    { name: 'sketch', hint: 'Sketch on a blank board (K)', icon: SquarePen, run: () => setMode('sketch') },
+    { name: 'browse', hint: 'Use the page normally (V)', icon: MousePointer2, run: () => setMode('browse') },
+    ...(settings?.agent === 'claude' || settings?.agent === 'codex' ? [
+      { name: 'plan', hint: planMode ? 'Plan only is on' : 'Plan only: the agent proposes, changes nothing', icon: Brain, run: () => { setPlanMode(true); flash('Plan only: the agent will propose changes without making them. /edit to switch back.'); } },
+      { name: 'edit', hint: planMode ? 'Let the agent edit files again' : 'Edit files is on', icon: PenTool, run: () => { setPlanMode(false); flash('The agent can edit files again.'); } },
+    ] : []),
+    { name: 'terminal', hint: 'Show the terminal (Ctrl+J)', icon: TerminalSquare, run: () => setDrawerOpen(true) },
+    { name: 'theme', hint: 'Switch light / dark', icon: Palette, run: () => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' }) },
+    { name: 'settings', hint: 'Open settings', icon: SettingsIcon, run: () => setSettingsOpen(true) },
+  ];
+  const assist = useComposerAssist(composerRef, instruction, setInstruction, slashCommands);
+
+  const tasks: RunningTask[] = [
+    ...(runId ? [{ id: `chat:${chatId}`, kind: 'chat' as const, label: chatTitle(chat) || 'This chat', status: 'running' as const, onStop: cancel }] : []),
+    ...others.filter((o) => o.running).map((o) => ({ id: `chat:${o.id}`, kind: 'chat' as const, label: o.title || 'Untitled', status: 'running' as const, onOpen: () => openChat(o.id), onStop: () => { const r = parked.current.get(o.id)?.runId; if (r) api.cancelAgent(r); } })),
+    ...bgRuns.map((r) => ({
+      id: `bg:${r.id}`, kind: 'bg' as const, label: r.title, status: r.status,
+      detail: r.status === 'running' ? r.step || 'background' : r.status === 'done' ? `${r.files?.length || 0} files · apply?` : 'failed',
+      onOpen: r.status === 'done' && r.files?.length ? () => api.bgDiff(r.id).then((text) => setPatchView({ title: r.title, text })) : undefined,
+      onStop: r.status === 'running' ? () => discardBg(r) : undefined,
+    })),
+    ...sides.filter((x) => x.running).map((x) => ({ id: x.id, kind: 'side' as const, label: x.title, status: 'running' as const, onOpen: () => setActiveSide(x.id), onStop: () => api.sideCancel(x.id) })),
+    ...(devRunning ? [{ id: 'dev', kind: 'dev' as const, label: devCommand || 'Dev server', status: 'running' as const, onOpen: () => { setDrawerOpen(true); setDrawerTab('dev'); }, onStop: () => api.stopDev() }] : []),
+    ...terms.filter((t) => !t.exited).map((t) => ({ id: `term:${t.id}`, kind: 'term' as const, label: t.name || t.shell, status: 'running' as const, onOpen: () => { setDrawerOpen(true); setDrawerTab('term'); } })),
+  ];
+
+  const commands: Command[] = !settings ? [] : [
+    { id: 'chat:aside', group: 'Chat', label: 'New side chat', hint: 'ask without touching this chat', icon: MessageSquare, keys: combo('A', true), disabled: !projectDir, run: () => newSide() },
+    ...sides.map((x) => ({ id: `chat:${x.id}`, group: 'Chat', label: x.title, hint: 'side chat', icon: MessageSquare, run: () => setActiveSide(x.id) })),
+    { id: 'chat:new', group: 'Chat', label: 'New chat', icon: SquarePen, keys: combo('O', true), disabled: !!job || !chat.length, run: newChat },
+    ...paletteChats.filter((c) => c.id !== chatId).map((c) => ({ id: `chat:${c.id}`, group: 'Chat', label: c.title || 'Untitled', hint: others.find((o) => o.id === c.id)?.running ? 'working' : 'open chat', icon: MessageSquare, disabled: !!job, run: () => openChat(c.id) })),
+    { id: 'view:threads', group: 'View', label: settings.threadsHidden ? 'Show chats sidebar' : 'Hide chats sidebar', icon: PanelLeft, keys: combo('B', true), run: toggleThreads },
+    { id: 'view:panel', group: 'View', label: settings.panelHidden ? 'Show agent panel' : 'Hide agent panel', icon: PanelLeft, keys: combo('B'), run: togglePanel },
+    { id: 'view:term', group: 'View', label: drawerOpen ? 'Hide terminal and logs' : 'Show terminal and logs', icon: TerminalSquare, keys: combo('J'), run: () => setDrawerOpen(!drawerOpen) },
+    { id: 'mode:browse', group: 'Mode', label: 'Browse the page', icon: MousePointer2, keys: 'V', run: () => setMode('browse') },
+    { id: 'mode:select', group: 'Mode', label: 'Annotate: click an element or drag to draw', icon: MousePointerClick, keys: 'S', run: () => setMode('select') },
+    { id: 'mode:draw', group: 'Mode', label: 'Draw on the page', icon: PenTool, keys: 'D', run: () => setMode('draw') },
+    { id: 'mode:sketch', group: 'Mode', label: 'Sketch on a blank board', icon: SquarePen, keys: 'K', run: () => setMode('sketch') },
+    { id: 'mode:rec', group: 'Mode', label: rec ? 'Stop recording' : 'Record an interaction', icon: CircleDot, disabled: !/^(https?|file):/.test(nav.url), run: toggleRecording },
+    { id: 'page:tab', group: 'Page', label: 'New tab', icon: Plus, keys: combo('T'), run: () => newTab() },
+    { id: 'page:reload', group: 'Page', label: 'Reload page', icon: RotateCw, run: () => browser.current?.reload() },
+    ...QUICK_SIZES.map((q) => ({ id: `page:size:${q.w}`, group: 'Page', label: q.w ? `Preview at ${q.label.split(' (')[0]}` : 'Preview at full window size', icon: q.icon, run: () => { setMulti(false); setDevice(q.w ? { on: true, w: q.w, h: q.h, zoom: device.zoom, touch: device.touch } : DEVICE_OFF); } })),
+    { id: 'page:multi', group: 'Page', label: 'Phone, tablet and desktop side by side', icon: Columns3, disabled: !/^(https?|file):/.test(nav.url), run: () => setMulti(true) },
+    { id: 'page:freeze', group: 'Page', label: frozen ? 'Unfreeze the page' : 'Freeze the page', icon: Snowflake, keys: 'F', run: () => setFrozen(!frozen) },
+    { id: 'page:sweep', group: 'Page', label: 'Check every page for problems', icon: ShieldCheck, disabled: !projectDir || !/^https?:/.test(nav.url), run: () => setSweepOpen(true) },
+    { id: 'page:engines', group: 'Page', label: 'See this page in WebKit and Firefox', icon: AppWindow, disabled: !/^https?:/.test(nav.url), run: () => setEnginesOpen(true) },
+    { id: 'page:components', group: 'Page', label: 'Components workspace', icon: Boxes, disabled: !projectDir || !/^https?:/.test(nav.url), run: () => setWsOpen(true) },
+    { id: 'page:devtools', group: 'Page', label: 'Page DevTools', icon: Bug, run: () => browser.current?.devtools() },
+    ...harnesses.map((h) => ({ id: `agent:${h.id}`, group: 'Agent', label: `Use ${h.name}`, hint: agents && !agents[h.id]?.ok ? 'not installed' : agents?.[h.id]?.version, icon: Zap, disabled: settings.agent === h.id || !!runId, run: () => saveSettings({ agent: h.id }) })),
+    { id: 'git:changes', group: 'Project', label: 'Branch changes and PR preview', hint: 'compare with any base branch', icon: GitCompareArrows, disabled: !gitStatus?.repo, run: () => setBranchCompare({}) },
+    { id: 'proj:design', group: 'Project', label: 'Design rules', icon: Palette, disabled: !projectDir, run: () => setSheet('design') },
+    { id: 'proj:memory', group: 'Project', label: 'Project memory', icon: Brain, disabled: !projectDir, run: () => setSheet('memory') },
+    { id: 'proj:open', group: 'Project', label: 'Open project folder…', icon: FolderOpen, run: () => pickProject() },
+    ...(settings.recentProjects || []).filter((d) => d !== projectDir).map((d) => ({ id: `proj:${d}`, group: 'Project', label: `Switch to ${d.split(/[\\/]/).pop()}`, hint: d, icon: FolderOpen, disabled: !!job, run: () => pickProject(d) })),
+    ...(['system', 'light', 'dark'] as const).map((t) => ({ id: `app:theme:${t}`, group: 'App', label: `Theme: ${t === 'system' ? 'match the system' : t}`, icon: Palette, disabled: theme === t, run: () => saveSettings({ theme: t }) })),
+    { id: 'app:settings', group: 'App', label: 'Settings', icon: SettingsIcon, run: () => setSettingsOpen(true) },
+    { id: 'app:layout', group: 'App', label: 'Copy layout report', icon: ClipboardCopy, keys: combo('L', true), run: () => { navigator.clipboard?.writeText(layoutReport()); flash('Layout report copied.'); } },
+  ];
+
   if (!settings) return <div className="boot"><Loader2 className="spin" /></div>;
 
   const left = settings.panelSide === 'left';
+  const threadsOn = !settings.threadsHidden;
+  const tw = threadsOn ? THREADS_W : 0;
   const pw = settings.panelHidden ? 0 : panelWidth ?? settings.panelWidth ?? 400;
   const dh = drawerHeight ?? settings.drawerHeight ?? 240;
-  const row2 = left ? "'panel stage'" : "'stage panel'";
-  const row3 = left ? "'panel drawer'" : "'drawer panel'";
+  const row2 = left ? "'threads panel stage'" : "'threads stage panel'";
+  const row3 = left ? "'threads panel drawer'" : "'threads drawer panel'";
   const gridStyle: React.CSSProperties = {
-    gridTemplateColumns: left ? `${pw}px 1fr` : `1fr ${pw}px`,
+    gridTemplateColumns: left ? `${tw}px ${pw}px 1fr` : `${tw}px 1fr ${pw}px`,
     gridTemplateRows: drawerOpen ? `52px 1fr ${dh}px` : '52px 1fr',
-    gridTemplateAreas: `'top top' ${row2}${drawerOpen ? ' ' + row3 : ''}`,
+    gridTemplateAreas: `'threads top top' ${row2}${drawerOpen ? ' ' + row3 : ''}`,
   };
 
   return (
-    <div className={`app ${resizing ? 'resizing' : ''}`} style={gridStyle}>
+    <div className={`app ${resizing ? 'resizing' : ''} ${threadsOn ? 'threads-on' : ''}`} style={gridStyle}>
+      {threadsOn && (
+        <ThreadSidebar
+          mod={MOD} projectDir={projectDir} recentProjects={settings.recentProjects || []}
+          chatId={chatId} currentTitle={chat.length ? chatTitle(chat) : ''} currentRunning={!!runId} currentNeedsInput={needsInput(chat)}
+          others={others} tasks={tasks} refreshKey={`${chatId}:${chat.length}:${others.map((o) => o.id + o.running).join()}`} disabled={!!job}
+          onOpen={openChat} onDelete={deleteChat} onNew={newChat} onPickProject={pickProject}
+          onOpenIn={(dir, id) => { wantChat.current = id; pickProject(dir); }}
+          onSettings={() => setSettingsOpen(true)} onPalette={() => setPaletteOpen(true)} onHide={toggleThreads}
+        />
+      )}
       <TopBar
-        mod={MOD} projectDir={settings.projectDir} onPickProject={pickProject}
+        threadsHidden={!threadsOn} onToggleThreads={toggleThreads} onPalette={() => setPaletteOpen(true)}
+        mod={MOD} projectDir={settings.projectDir} onPickProject={() => pickProject()}
         mode={mode} setMode={setMode}
         recording={!!rec} canRecord={/^(https?|file):/.test(nav.url)} onToggleRecording={toggleRecording}
         update={update} onInstallUpdate={() => api.updateInstall()}
@@ -1961,6 +2207,11 @@ export default function App() {
               />
             )}
           </form>
+          {projectDir && (
+            <div className="nav-pins">
+              <PinsChip projectDir={projectDir} url={nav.url} title={nav.title} flash={flash} onCompare={(images, title) => setCompare({ images, labels: ['Pinned', 'Now'], title })} />
+            </div>
+          )}
           <ProfileMenu profiles={profiles} current={tab?.profile || ''} onPick={(p) => tab && setTabProfile(tab.id, p)} onSave={saveProfiles} />
           <div className="vp-toggles">
             <button type="button" className={wsOpen ? 'on' : ''} onClick={() => { if (wsOpen) browser.current?.closeWorkspace(); setWsOpen(!wsOpen); }} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Components: render any component from the project on its own, with its props and variants"><Boxes size={14} /></button>
@@ -1997,6 +2248,7 @@ export default function App() {
                   partition={partitionOf(t.profile)}
                   initialUrl={t.initialUrl}
                   onManip={(m) => { if (here()) onManip(m); }}
+                  onScribble={(points) => { if (here()) addScribble(points); }}
                   onPicked={(el) => { if (here()) onPicked(el); }}
                   onNavigate={(s) => {
                     patchTab(t.id, s);
@@ -2020,6 +2272,9 @@ export default function App() {
             {rec && <div className="frozen-tag rec"><CircleDot size={12} /> Recording · {rec.steps.length} step{rec.steps.length === 1 ? '' : 's'} <button onClick={toggleRecording}>Stop</button></div>}
             {isolated && <div className="frozen-tag iso">Showing one element on its own <button onClick={() => isolate(null)}>Show page</button></div>}
 
+            {mode === 'select' && page.shapes.length > 0 && (
+              <DrawSurface shapes={page.shapes} onChange={page.set} tool={tool} color={color} size={size} passive />
+            )}
             {mode === 'draw' && (
               <DrawSurface shapes={page.shapes} onChange={page.set} tool={tool} color={color} size={size} />
             )}
@@ -2080,7 +2335,7 @@ export default function App() {
               />
             )}
 
-            {mode === 'select' && !popover && <div className="mode-hint">Click any element to annotate it · ↑/↓ pick parent/child · Alt measures from the selected one · F freezes open menus · Esc to exit</div>}
+            {mode === 'select' && !popover && <div className="mode-hint">Click an element to annotate it · drag to draw on the page · ↑/↓ pick parent/child · Alt measures from the selected one · F freezes open menus · Esc to exit</div>}
 
             {(!nav.url || nav.url === 'about:blank') && mode !== 'sketch' && (
               <Welcome
@@ -2126,9 +2381,15 @@ export default function App() {
           {multi && <MultiView url={nav.url} onNavigate={go} onPick={(w, h) => { setMulti(false); setDevice({ on: true, w, h, zoom: 'fit', touch: device.touch }); }} onClose={() => setMulti(false)} />}
         </div>
       </main>
+      {askAside && (
+        <div className="ask-aside" style={{ left: askAside.x, top: askAside.y }} onMouseDown={(e) => e.preventDefault()}>
+          <button onClick={() => fromSelection('side')} title="Start a side chat about this"><MessageSquare size={12} /> Side chat</button>
+          <button onClick={() => fromSelection('reply')} title="Quote this in your next message"><CornerDownRight size={12} /> Reply</button>
+        </div>
+      )}
 
       <aside
-        className={`panel ${left ? 'left' : 'right'}`}
+        className={`panel ${left ? 'left' : 'right'} ${activeSide ? 'side-active' : ''}`}
         style={settings.panelHidden ? { display: 'none' } : undefined}
         onDragOver={(e) => { if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) { e.preventDefault(); setDragOver(true); } }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
@@ -2142,22 +2403,30 @@ export default function App() {
           title="Drag to resize · double-click to reset"
         />
         <div className="panel-head">
-          <div className="seg agent-seg">
-            {(['claude', 'codex'] as AgentId[]).map((a) => (
-              <button
-                key={a} className={`${settings.agent === a ? 'on' : ''} ${agents && !agents[a]?.ok ? 'missing' : ''}`}
-                onClick={() => saveSettings({ agent: a })} disabled={!!runId}
-                title={agents && !agents[a]?.ok ? "Its CLI wasn't found. Install it or set its path in Settings." : agents?.[a]?.version}
-              >
-                {a === 'claude' ? 'Claude Code' : 'Codex'}
-              </button>
+          <div className="panel-tabs" ref={tabsStrip} onScroll={fadeTabs} onWheel={(e) => { if (e.deltaY && !e.deltaX) e.currentTarget.scrollLeft += e.deltaY; }}>
+            <button className={`ptab ${activeSide ? '' : 'on'}`} onClick={() => setActiveSide(null)} title={chatTitle(chat) || 'This chat'}>
+              {runId ? <Loader2 size={12} className="spin" /> : <MessageSquare size={12} />}<span>Chat</span>
+            </button>
+            {sides.map((x) => (
+              <div key={x.id} className={`ptab side ${activeSide === x.id ? 'on' : ''}`} onClick={() => setActiveSide(x.id)} title={x.title}>
+                {x.running ? <Loader2 size={12} className="spin" /> : <CornerDownRight size={12} />}<span>{x.title}</span>
+                <button className="ptab-x" onClick={(e) => { e.stopPropagation(); closeSide(x.id); }} title="Close side chat"><X size={11} /></button>
+              </div>
             ))}
+            <button className="ptab-new" onClick={() => newSide()} disabled={!projectDir} title={`New side chat: ask without touching this chat (${combo('A', true)})`}><Plus size={13} /></button>
           </div>
           <div className="spacer" />
-          {projectDir && <ChatHistory currentId={chatId} disabled={!!job} others={others} onOpen={openChat} onDelete={deleteChat} />}
-          <button className="btn ghost xs" onClick={newChat} disabled={!!job || !chat.length} title={runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'}><Plus size={13} /><span className="btn-text">New chat</span></button>
+          {projectDir && !threadsOn && <ChatHistory currentId={chatId} disabled={!!job} others={others} onOpen={openChat} onDelete={deleteChat} />}
+          <button className="btn ghost xs" onClick={newChat} disabled={!!job || !chat.length} title={`${runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
         </div>
-        {others.length > 0 && (
+        {sides.map((x) => (
+          <SideChat
+            key={x.id} sideId={x.id} active={activeSide === x.id} agentName={agentName}
+            seed={x.seed} onSeedUsed={() => patchSide(x.id, { seed: null })} getContext={sideContext}
+            onTitle={(title) => patchSide(x.id, { title })} onRunning={(running) => patchSide(x.id, { running })}
+          />
+        ))}
+        {others.length > 0 && !threadsOn && (
           <div className="other-chats">
             {others.map((o) => (
               <button key={o.id} className={o.running ? 'running' : 'finished'} onClick={() => openChat(o.id)} title={o.running ? 'Still working. Click to look.' : 'Finished. Click to see the result.'}>
@@ -2168,14 +2437,14 @@ export default function App() {
           </div>
         )}
 
-        <div className="chat" onScroll={onChatScroll} onWheel={onChatWheel}>
+        <div className="chat" onScroll={(e) => { onChatScroll(e); if (askAside) setAskAside(null); }} onWheel={onChatWheel} onMouseUp={onChatMouseUp}>
           {chat.length === 0 ? (
-            <EmptyChat agentName={settings.agent === 'claude' ? 'Claude Code' : 'Codex'} cliMissing={!!agents && !agentReady} setMode={setMode} />
+            <EmptyChat agentName={agentName} cliMissing={!!agents && !agentReady} />
           ) : <ChatList items={chat} actions={chatActions} root={root} gitRepo={!!gitStatus?.repo} busy={!!runId || !!job} />}
           {(runId || job) && (
             <div className="working">
               <Loader2 size={14} className="spin" />{' '}
-              {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${settings.agent === 'claude' ? 'Claude Code' : 'Codex'} is ${runMeta?.verify ? 'checking the result' : runMeta?.match ? `matching the mockup, round ${runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}
+              {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${agentName} is ${runMeta?.verify ? 'checking the result' : runMeta?.match ? `matching the mockup, round ${runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}
             </div>
           )}
           {away && chat.length > 0 && (
@@ -2196,8 +2465,7 @@ export default function App() {
           {projectDir && (
             <ContextBar
               lead={<>
-                <GitPanel status={gitStatus} refresh={refreshGit} settings={settings} saveSettings={saveSettings} busy={!!runId} prDefaults={prDefaults} flash={flash} />
-                <PinsChip projectDir={projectDir} url={nav.url} title={nav.title} flash={flash} onCompare={(images, title) => setCompare({ images, labels: ['Pinned', 'Now'], title })} />
+                <GitPanel status={gitStatus} refresh={refreshGit} settings={settings} saveSettings={saveSettings} busy={!!runId} prDefaults={prDefaults} flash={flash} onOpenWorktree={openWorktree} onCompare={(base, remote) => setBranchCompare({ base, remote })} onSwitched={() => { if (/^file:/.test(navRef.current.url)) browser.current?.reload(); }} />
               </>}
               route={currentRoute}
               console={consoleLog} network={netFails}
@@ -2218,14 +2486,18 @@ export default function App() {
           />
 
           <div className="composer-box">
+            {assist.popover}
+            {planMode && !runId && <button className="plan-pill" onClick={() => setPlanMode(false)} title="The agent proposes changes without making them. Click to let it edit files.">Plan only ×</button>}
             <textarea
               ref={composerRef}
               value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
+              onChange={(e) => { setInstruction(e.target.value); assist.track(); }}
+              onSelect={assist.track}
               placeholder={runId
                 ? `Steer the agent: Enter adds it after the current step · ${MOD}+Enter interrupts now`
-                : annotations.length ? 'Anything else? (optional)' : chat.length ? 'Follow up…' : 'Describe the change, or select/draw on the page first…'}
+                : annotations.length ? 'Anything else? (optional)' : chat.length ? 'Follow up…  (@ a file, / for commands)' : 'Describe the change, or point at the page first…  (@ a file, / for commands)'}
               onKeyDown={(e) => {
+                if (assist.onKeyDown(e)) return;
                 if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
                 e.preventDefault();
                 send(runId && (e.ctrlKey || e.metaKey) ? 'now' : 'queue');
@@ -2240,17 +2512,23 @@ export default function App() {
               {!runId && <VariantsMenu value={settings.variants || 0} set={(n) => saveSettings({ variants: n })} />}
               {runId
                 ? <span className="steer-hint"><kbd>↵</kbd> after this step <kbd>{MOD}↵</kbd> now</span>
-                : <AgentControls settings={settings} catalog={catalog} onChange={saveSettings} />}
+                : <>
+                  <AgentPicker
+                    value={settings.agent} harnesses={harnesses} agents={agents} disabled={!!runId}
+                    onPick={(agent) => saveSettings({ agent })} onSetup={() => setSettingsOpen(true)}
+                  />
+                  <AgentControls settings={settings} catalog={catalog} onChange={saveSettings} harness={harnesses.find((h) => h.id === settings.agent)} />
+                </>}
               {runId ? (
                 <div className="run-actions">
-                  <button className="icon-btn stop-btn" onClick={cancel} title="Stop the agent"><Square size={13} /></button>
+                  <button className="icon-btn stop-btn" onClick={cancel} title="Stop the agent"><Square size={11} weight="fill" /></button>
                   <button className="btn sm ghost send-btn" disabled={!canSend} onClick={() => send('now')} title={`Interrupt the current step and send now (${MOD}+Enter)`}><Zap size={13} /><span className="btn-text">Now</span></button>
                   <button className="btn primary sm send-btn" disabled={!canSend} onClick={() => send('queue')} title="Send after the agent's current step (Enter)"><CornerDownRight size={13} /><span className="btn-text">Steer</span></button>
                 </div>
               ) : (
                 <div className="run-actions">
                   <button className="icon-btn bg-btn" disabled={!canSend || !!bgBlocked} onClick={() => send('bg')} title={bgBlocked || 'Run in the background: in a separate copy of the project, so you can keep working and send more'}><SquareStack size={15} /></button>
-                  <button className="btn primary sm send-btn" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><Send size={13} /><span className="btn-text">Send</span></button>
+                  <button className="btn primary sm send-btn round" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><ArrowUp size={15} weight="bold" /><span className="sr-only">Send</span></button>
                 </div>
               )}
             </div>
@@ -2342,7 +2620,11 @@ export default function App() {
           onOpen={openFile}
         />
       )}
-      {settingsOpen && <SettingsModal settings={settings} agents={agents} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}
+      {branchCompare && gitStatus?.repo && (
+        <BranchCompare status={gitStatus} initialBase={branchCompare.base} initialRemote={branchCompare.remote} prDefaults={prDefaults} flash={flash} onOpen={openFile} onClose={() => { setBranchCompare(null); refreshGit(); }} />
+      )}
+      {settingsOpen && <SettingsModal settings={settings} agents={agents} harnesses={harnesses} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}
+      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

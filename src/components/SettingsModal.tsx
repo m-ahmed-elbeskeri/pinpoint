@@ -1,20 +1,25 @@
 import { useState } from 'react';
-import { PanelLeft, PanelRight, X } from './icons';
-import type { AgentId, Settings } from '../lib/types';
+import { PanelLeft, PanelRight, Plus, Trash2, X } from './icons';
+import type { AgentId, CustomAgent, HarnessInfo, Settings } from '../lib/types';
 
 interface Props {
   settings: Settings;
   agents: Record<AgentId, { ok: boolean; version?: string }> | null;
+  harnesses: HarnessInfo[];
   onSave(patch: Partial<Settings>): void;
   onClose(): void;
 }
 
-export function SettingsModal({ settings, agents, onSave, onClose }: Props) {
+export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: Props) {
   const [s, setS] = useState(settings);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
   const status = (id: AgentId) => agents?.[id]?.ok
     ? <span className="pill ok">{agents[id].version}</span>
     : <span className="pill bad">not found</span>;
+  const setIn = (k: 'agentPaths' | 'agentModels', id: string, v: string) => setS({ ...s, [k]: { ...s[k], [id]: v } });
+  const customs = s.customAgents || [];
+  const setCustom = (i: number, patch: Partial<CustomAgent>) => set('customAgents', customs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const builtins = harnesses.filter((h) => h.id !== 'claude' && h.id !== 'codex' && !h.custom);
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -25,13 +30,40 @@ export function SettingsModal({ settings, agents, onSave, onClose }: Props) {
         </div>
 
         <section>
-          <h4>Claude Code {status('claude')}</h4>
-          <label>CLI path<input value={s.claudePath} onChange={(e) => set('claudePath', e.target.value)} placeholder="claude" /></label>
+          <h4>Agents</h4>
+          <p className="hint">Pinpoint runs any of these coding-agent CLIs headless in your project. Install one and it shows up here; set a path if it isn't on your PATH.</p>
+          <div className="harness-row">
+            <span className="harness-name">Claude Code {status('claude')}</span>
+            <input value={s.claudePath} onChange={(e) => set('claudePath', e.target.value)} placeholder="claude" spellCheck={false} title="CLI path" />
+          </div>
+          <div className="harness-row">
+            <span className="harness-name">Codex {status('codex')}</span>
+            <input value={s.codexPath} onChange={(e) => set('codexPath', e.target.value)} placeholder="codex" spellCheck={false} title="CLI path" />
+          </div>
+          {builtins.map((h) => (
+            <div key={h.id} className="harness-row">
+              <span className="harness-name">{h.name} {status(h.id)}</span>
+              <input value={s.agentPaths?.[h.id] || ''} onChange={(e) => setIn('agentPaths', h.id, e.target.value)} placeholder={h.bin} spellCheck={false} title="CLI path" />
+              <input value={s.agentModels?.[h.id] || ''} onChange={(e) => setIn('agentModels', h.id, e.target.value)} placeholder="default model" spellCheck={false} title="Model passed to the CLI (blank uses its own default)" />
+            </div>
+          ))}
         </section>
 
         <section>
-          <h4>Codex {status('codex')}</h4>
-          <label>CLI path<input value={s.codexPath} onChange={(e) => set('codexPath', e.target.value)} placeholder="codex" /></label>
+          <h4>Custom agents</h4>
+          <p className="hint">Any other CLI that takes a prompt and edits files. Use <code>{'{prompt}'}</code> and <code>{'{model}'}</code> in the arguments. JSON event streams from Claude-, Gemini-, Cursor- or OpenCode-style CLIs are read as steps; anything else is shown as the reply.</p>
+          {customs.map((c, i) => (
+            <div key={c.id} className="custom-agent">
+              <div className="harness-row">
+                <input value={c.name} onChange={(e) => setCustom(i, { name: e.target.value })} placeholder="Name" />
+                <input value={c.command} onChange={(e) => setCustom(i, { command: e.target.value })} placeholder="Command, e.g. my-agent" spellCheck={false} />
+                {c.command && status(c.id)}
+                <button className="icon-btn xs" onClick={() => set('customAgents', customs.filter((_, j) => j !== i))} title="Remove"><Trash2 size={13} /></button>
+              </div>
+              <input className="mono" value={c.args} onChange={(e) => setCustom(i, { args: e.target.value })} placeholder="Arguments, e.g. run --json {prompt}" spellCheck={false} />
+            </div>
+          ))}
+          <button className="btn xs" onClick={() => set('customAgents', [...customs, { id: `custom-${Date.now().toString(36)}`, name: '', command: '', args: '{prompt}' }])}><Plus size={12} /> Add custom agent</button>
         </section>
 
         <section>
@@ -50,6 +82,14 @@ export function SettingsModal({ settings, agents, onSave, onClose }: Props) {
 
         <section>
           <h4>Layout</h4>
+          <div className="setting-row">
+            <span>Theme</span>
+            <div className="seg">
+              {(['system', 'light', 'dark'] as const).map((t) => (
+                <button key={t} className={(s.theme || 'dark') === t ? 'on' : ''} onClick={() => set('theme', t)}>{t === 'system' ? 'System' : t === 'light' ? 'Light' : 'Dark'}</button>
+              ))}
+            </div>
+          </div>
           <div className="setting-row">
             <span>Sidebar position</span>
             <div className="seg">

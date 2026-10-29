@@ -5,6 +5,7 @@ export {
   WarningIcon as AlertTriangle,
   AppWindowIcon as AppWindow,
   ArrowDownIcon as ArrowDown,
+  ArrowUpIcon as ArrowUp,
   ArrowLeftIcon as ArrowLeft,
   ArrowRightIcon as ArrowRight,
   ArrowUpRightIcon as ArrowUpRight,
@@ -20,6 +21,7 @@ export {
   CaretRightIcon as ChevronRight,
   CircleIcon as Circle,
   RecordIcon as CircleDot,
+  CommandIcon as Command,
   CopyIcon as ClipboardCopy,
   ClockIcon as Clock,
   SquareSplitHorizontalIcon as Columns2,
@@ -52,6 +54,7 @@ export {
   StackIcon as Layers,
   LightbulbIcon as Lightbulb,
   LinkIcon as Link2,
+  KeyboardIcon as Keyboard,
   CircleNotchIcon as Loader2,
   ChatIcon as MessageSquare,
   MonitorIcon as Monitor,
@@ -101,6 +104,9 @@ export {
   WrenchIcon as Wrench,
   XIcon as X,
   XCircleIcon as XCircle,
+  TreeStructureIcon as Worktree,
+  ArchiveIcon as Archive,
+  GitMergeIcon as GitMerge,
   LightningIcon as Zap,
 } from '@phosphor-icons/react';
 

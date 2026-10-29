@@ -1,6 +1,10 @@
 export type Mode = 'browse' | 'select' | 'draw' | 'sketch';
 export type Tool = 'pen' | 'highlighter' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'eraser';
-export type AgentId = 'claude' | 'codex';
+export type AgentId = 'claude' | 'codex' | (string & {});
+
+export interface AccessOption { value: string; label: string; desc?: string }
+export interface HarnessInfo { id: AgentId; name: string; bin: string; custom?: boolean; steerable?: boolean; resumes?: boolean; access?: AccessOption[]; defaultAccess?: string }
+export interface CustomAgent { id: string; name: string; command: string; args: string }
 
 export interface Shape {
   id: string;
@@ -145,11 +149,17 @@ export interface Annotation {
   reorder?: { from: number; to: number; count: number; before?: string | null };
 }
 
+export interface PlanStep { text: string; status: 'pending' | 'in_progress' | 'completed' }
+export interface ToolEdit { old: string; new: string }
+export type ApprovalDecision = 'allow' | 'always' | 'deny';
+
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later'; variants?: number; background?: boolean }
   | { kind: 'text'; id: string; text: string; streaming?: boolean }
   | { kind: 'thinking'; id: string; text: string; streaming?: boolean }
-  | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string }
+  | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string; edits?: ToolEdit[] }
+  | { kind: 'plan'; id: string; steps: PlanStep[] }
+  | { kind: 'approval'; id: string; runId: string; approvalId: string; tool: string; detail: string; status: 'pending' | ApprovalDecision | 'expired' }
   | { kind: 'error'; id: string; text: string }
   | { kind: 'status'; id: string; text: string }
   | {
@@ -169,19 +179,39 @@ export type ChatItem =
   | { kind: 'memory'; id: string; text: string; status: 'pending' | 'saved' | 'dismissed' };
 
 export interface ModelOption { id: string; label: string; desc?: string; efforts: string[]; defaultEffort?: string }
-export type ModelCatalog = Record<AgentId, { models: ModelOption[]; defaultLabel: string; defaultModel?: string; defaultEffort?: string }>;
+export type ModelCatalog = Partial<Record<AgentId, { models: ModelOption[]; defaultLabel: string; defaultModel?: string; defaultEffort?: string }>>;
 
 export interface GitCommit { hash: string; subject: string }
 export interface GitStatus {
   repo: boolean; root?: string; branch?: string; defaultBranch?: string; remote?: string | null; hasCommits?: boolean;
-  dirty?: number; ahead?: number; behind?: number; upstream?: boolean;
+  dirty?: number; ahead?: number; behind?: number; upstream?: boolean; linked?: boolean;
+  upstreamName?: string | null; gone?: boolean; fetchedAt?: number;
   gh: { installed: boolean; authed: boolean; user: string | null };
 }
+
+export interface GitBranchInfo {
+  name: string; remote: boolean; subject: string; when: number; current: boolean;
+  ahead: number; behind: number; gone: boolean; worktree: string | null; parked: number;
+}
+export interface GitWorktree { path: string; open: string; branch: string | null; main: boolean; current: boolean }
+export interface GitPull { number: number; state: 'OPEN' | 'DRAFT' | 'MERGED' | 'CLOSED'; url: string; title: string }
+export interface BranchCompare {
+  sub: string; branch: string; base: string; ref: string; mergeBase: string; working: boolean; total: number; behind: number;
+  files: CompareFile[];
+  incomingFiles: CompareFile[];
+  commits: GitLogEntry[];
+  incoming: GitLogEntry[];
+  conflicts: string[] | null;
+  remote: boolean;
+}
+export type CompareFile = DiffFile & { from?: string; untracked?: boolean };
+export interface GitLogEntry { hash: string; subject: string; author: string; when: number }
+export interface GitSwitchResult { branch?: string; worktree?: string; parked?: number; restored?: boolean; conflict?: string | null }
 
 export interface TermShell { id: string; name: string; path: string; args: string[] }
 export interface TermSession { id: string; shell: string; name: string; exited: boolean; cols: number; rows: number }
 
-export interface OtherChat { id: string; title: string; running: boolean }
+export interface OtherChat { id: string; title: string; running: boolean; needsInput?: boolean }
 
 export interface FileChange { path: string; kind: 'add' | 'modify' | 'delete'; reverted?: boolean; add?: number; del?: number }
 
@@ -225,6 +255,10 @@ export interface Settings {
   agent: AgentId;
   claudePath: string;
   codexPath: string;
+  agentPaths?: Record<string, string>;
+  agentModels?: Record<string, string>;
+  agentAccess?: Record<string, string>;
+  customAgents?: CustomAgent[];
   claudePermission: 'plan' | 'acceptEdits' | 'bypassPermissions';
   codexSandbox: 'read-only' | 'workspace-write' | 'danger-full-access';
   claudeModel: string;
@@ -240,6 +274,8 @@ export interface Settings {
   terminalShell?: string;
   serverLog?: string;
   panelHidden: boolean;
+  threadsHidden?: boolean;
+  theme?: 'system' | 'dark' | 'light';
   drawerHeight: number;
   useDesign: boolean;
   useMemory: boolean;
@@ -265,7 +301,9 @@ export type AgentEvent =
   | { runId: string; type: 'text_delta'; text: string }
   | { runId: string; type: 'thinking_delta'; text: string }
   | { runId: string; type: 'thinking'; text: string }
-  | { runId: string; type: 'tool'; id: string; name: string; detail: string }
+  | { runId: string; type: 'tool'; id: string; name: string; detail: string; edits?: ToolEdit[] }
+  | { runId: string; type: 'plan'; steps: PlanStep[] }
+  | { runId: string; type: 'approval'; approvalId: string; tool: string; detail: string }
   | { runId: string; type: 'tool_result'; id: string; ok: boolean; text: string }
   | { runId: string; type: 'file'; path: string; kind: string }
   | { runId: string; type: 'log'; text: string }
@@ -273,6 +311,9 @@ export type AgentEvent =
   | { runId: string; type: 'done'; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; commit?: GitCommit | null }
   | { runId: string; type: 'git'; branch: string }
   | { runId: string; type: 'routes'; results: RouteCheckResult[]; perf?: { before: PerfMetrics; after: PerfMetrics } | null };
+
+export type SideEvent = DistributiveOmit<AgentEvent, 'runId'> & { sideId: string; sessionId?: string };
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 export type DevEvent =
   | { type: 'log'; text: string }
@@ -290,7 +331,10 @@ export interface PinpointAPI {
   setSettings(patch: Partial<Settings>): Promise<Settings>;
   detectAgents(): Promise<Record<AgentId, { ok: boolean; version?: string }>>;
   modelCatalog(): Promise<ModelCatalog>;
-  pickFolder(): Promise<string | null>;
+  listAgents(): Promise<HarnessInfo[]>;
+  projectFiles(): Promise<string[]>;
+  setWindowTheme(light: boolean): Promise<boolean>;
+  pickFolder(known?: string): Promise<string | null>;
   openPath(p: string): Promise<string>;
   siteHints(): Promise<{ homepage: string | null }>;
   capture(webContentsId: number, rect?: Rect, jpeg?: boolean): Promise<string>;
@@ -369,6 +413,7 @@ export interface PinpointAPI {
   openHandoff(): Promise<Handoff | null>;
   handoffIssue(args: { title: string; body: string; attach?: { name: string; data: Handoff } }): Promise<{ url: string; gist: string | null }>;
   listChats(): Promise<ChatMeta[]>;
+  listChatsFor(dir: string): Promise<ChatMeta[]>;
   loadChat(id: string): Promise<Chat | null>;
   saveChat(chat: Chat): Promise<boolean>;
   deleteChat(id: string): Promise<boolean>;
@@ -385,10 +430,26 @@ export interface PinpointAPI {
   gitBranch(hint?: string): Promise<{ branch: string }>;
   gitCommitRun(runId: string): Promise<GitCommit>;
   gitCommitAll(message: string): Promise<GitCommit>;
-  gitOpenPR(args: { title: string; body: string; draft?: boolean; shots?: { runId: string; label: string }[] }): Promise<{ url: string; existed: boolean; shots?: number }>;
+  gitOpenPR(args: { title: string; body: string; draft?: boolean; base?: string; shots?: { runId: string; label: string }[] }): Promise<{ url: string; existed: boolean; shots?: number }>;
+  gitBranches(): Promise<{ branches: GitBranchInfo[]; worktrees: GitWorktree[] }>;
+  gitPulls(): Promise<Record<string, GitPull>>;
+  gitCompare(args: { base: string; working?: boolean; remote?: boolean }): Promise<BranchCompare>;
+  gitFetch(): Promise<GitStatus>;
+  gitPull(): Promise<GitStatus>;
+  gitPush(): Promise<GitStatus>;
+  gitOpenUrl(url: string): Promise<boolean>;
+  gitSwitch(name: string): Promise<GitSwitchResult>;
+  gitNewBranch(name: string): Promise<{ branch: string }>;
+  gitWorktreeAdd(args: { branch: string; create?: boolean }): Promise<{ open: string; existed: boolean }>;
+  gitWorktreeRemove(dir: string): Promise<{ branch: string | null }>;
+  gitOpenWorktree(dir: string): Promise<{ dir: string; branch: string | null; restarted: boolean }>;
   saveShot(runId: string, name: string, dataUrl: string): Promise<boolean>;
   runShots(runId: string, names?: string[]): Promise<Record<string, string>>;
   onAgentEvent(cb: (e: AgentEvent) => void): () => void;
+  approve(runId: string, approvalId: string, decision: ApprovalDecision): Promise<boolean>;
+  sideAsk(args: { sideId: string; question: string; context: string; sessionId: string | null }): Promise<boolean>;
+  sideCancel(sideId: string): Promise<boolean>;
+  onSideEvent(cb: (e: SideEvent) => void): () => void;
   startDev(command: string): Promise<boolean>;
   detectDev(): Promise<DevDetection>;
   stopDev(): Promise<boolean>;

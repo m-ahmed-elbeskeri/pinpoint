@@ -1,4 +1,5 @@
-import { Blend, ClipboardCopy, PenTool, Square, X } from './icons';
+import { useState } from 'react';
+import { Blend, ClipboardCopy, ImagePlus, PenTool, X } from './icons';
 import { describe } from '../lib/handoff';
 import type { Annotation } from '../lib/types';
 
@@ -30,6 +31,7 @@ const PLACEHOLDER: Record<Annotation['kind'], string> = {
 };
 
 export function AnnotationList(p: Props) {
+  const [open, setOpen] = useState<string | null>(null);
   const pending = p.pageMarks + p.sketchMarks;
   if (!p.annotations.length && !pending) return null;
   return (
@@ -37,13 +39,19 @@ export function AnnotationList(p: Props) {
       {p.annotations.map((a) => {
         const d = describe(a, p.root);
         return (
-          <div key={a.id} className={`ann ${p.activeId === a.id ? 'active' : ''}`} onClick={() => p.onFocus(a)}>
-            <div className="ann-thumb">
-              {a.image ? <img src={a.image} alt="" /> : a.kind === 'request' ? <b className="ann-code">{a.request?.status || 'ERR'}</b> : <Square size={16} />}
-              <span className="badge" style={{ background: a.color }}>{a.n}</span>
-            </div>
+          <div key={a.id} className={`ann compact ${p.activeId === a.id ? 'active' : ''} ${open === a.id ? 'expanded' : ''}`} onClick={() => p.onFocus(a)}>
             <div className="ann-body">
-              <div className="ann-title"><span className="mono">{d.title}</span><span className="ann-sub">{d.sub}</span></div>
+              <div className="ann-title">
+                <span className="badge sm" style={{ background: a.color }}>{a.n}</span>
+                <span className="mono">{d.title}</span>
+                <span className="ann-sub">{a.kind === 'request' ? `${a.request?.status || 'ERR'} · ` : ''}{d.sub}</span>
+                {a.image && (
+                  <button className={`icon-btn xs ann-img ${open === a.id ? 'on' : ''}`} title={open === a.id ? 'Hide the image' : 'Show the image'} onClick={(e) => { e.stopPropagation(); setOpen(open === a.id ? null : a.id); }}>
+                    <ImagePlus size={13} />
+                  </button>
+                )}
+              </div>
+              {a.image && <div className="ann-thumb"><img src={a.image} alt="" /></div>}
               <textarea
                 data-note={a.id}
                 rows={1}

@@ -20,8 +20,28 @@ function imageBlocks(images = []) {
   return out;
 }
 
-function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
-  const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--verbose', '--permission-mode', settings.claudePermission || 'acceptEdits'];
+const EDIT_CAP = 6000;
+const clipEdit = (s) => (typeof s === 'string' ? (s.length > EDIT_CAP ? s.slice(0, EDIT_CAP) + '\n…' : s) : '');
+
+// What an Edit / MultiEdit / Write step changed, so the chat can show a small diff.
+function editsOf(name, input = {}) {
+  if (name === 'Edit') return [{ old: clipEdit(input.old_string), new: clipEdit(input.new_string) }];
+  if (name === 'MultiEdit') return (input.edits || []).slice(0, 20).map((e) => ({ old: clipEdit(e.old_string), new: clipEdit(e.new_string) }));
+  if (name === 'Write') return [{ old: '', new: clipEdit(input.content) }];
+  return undefined;
+}
+
+const PLAN_STATUS = { pending: 'pending', in_progress: 'in_progress', completed: 'completed' };
+
+// Remembering "Always" for a run: per tool, and per command name for shell commands.
+const approvalKey = (tool, input = {}) => (/^(Bash|PowerShell)$/.test(tool) ? `${tool}:${String(input.command || '').trim().split(/\s+/)[0]}` : tool);
+
+function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askApproval }) {
+  const mode = settings.claudePermission || 'acceptEdits';
+  const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--verbose', '--permission-mode', mode];
+  // In "Edit files" mode, anything beyond edits (commands, web…) is asked about in the chat instead of being refused.
+  if (askApproval && mode === 'acceptEdits') args.push('--permission-prompt-tool', 'stdio');
+  const allowed = new Set();
   if (sessionId) args.push('--resume', sessionId);
   if (settings.claudeModel) args.push('--model', settings.claudeModel);
   if (settings.claudeEffort) args.push('--effort', settings.claudeEffort);
@@ -55,6 +75,25 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
       else if (ev.delta?.type === 'thinking_delta') onEvent({ type: 'thinking_delta', text: ev.delta.thinking });
       return;
     }
+    if (m.type === 'control_request' && m.request?.subtype === 'can_use_tool') {
+      const { tool_name: tool, input = {}, permission_suggestions: suggestions } = m.request;
+      const reply = (decision) => write({
+        type: 'control_response',
+        response: {
+          subtype: 'success', request_id: m.request_id,
+          response: decision === 'deny'
+            ? { behavior: 'deny', message: 'The user declined this. Do something else or ask them.' }
+            : { behavior: 'allow', updatedInput: input, ...(decision === 'always' && suggestions ? { updatedPermissions: suggestions } : {}) },
+        },
+      });
+      const key = approvalKey(tool, input);
+      if (allowed.has(key)) return reply('allow');
+      Promise.resolve(askApproval ? askApproval({ tool, detail: toolDetail(input) || JSON.stringify(input).slice(0, 300) }) : 'deny').then((decision) => {
+        if (decision === 'always') allowed.add(key);
+        reply(decision);
+      });
+      return;
+    }
     if (m.type === 'system' && m.subtype === 'init') {
       totals.sessionId = m.session_id;
       onEvent({ type: 'session', sessionId: m.session_id, model: m.model });
@@ -63,7 +102,10 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent }) {
       for (const b of m.message.content) {
         if (b.type === 'text' && b.text?.trim()) onEvent({ type: 'text', text: b.text });
         else if (b.type === 'thinking' && b.thinking?.trim()) onEvent({ type: 'thinking', text: b.thinking });
-        else if (b.type === 'tool_use') onEvent({ type: 'tool', id: b.id, name: b.name, detail: toolDetail(b.input) });
+        else if (b.type === 'tool_use' && b.name === 'TodoWrite') {
+          const steps = (b.input?.todos || []).map((t) => ({ text: t.status === 'in_progress' ? t.activeForm || t.content : t.content, status: PLAN_STATUS[t.status] || 'pending' }));
+          if (steps.length) onEvent({ type: 'plan', steps });
+        } else if (b.type === 'tool_use') onEvent({ type: 'tool', id: b.id, name: b.name, detail: toolDetail(b.input), edits: editsOf(b.name, b.input) });
       }
     } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
       if (m.parent_tool_use_id) return;

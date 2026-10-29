@@ -1,12 +1,12 @@
-import { memo, useEffect, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+  ExternalLink, ShieldCheck, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
 } from './icons';
 import { flowVerdict } from '../lib/flow';
-import type { BuildSize, ChatItem, DiffFile, FileChange, FlowResult, PerfMetrics, RevertResult } from '../lib/types';
+import type { ApprovalDecision, BuildSize, ChatItem, ToolEdit, DiffFile, FileChange, FlowResult, PerfMetrics, RevertResult } from '../lib/types';
 
 const diffCache = new Map<string, Promise<DiffFile[]>>();
 const loadDiff = (runId: string) => {
@@ -327,20 +327,39 @@ export function shortPath(p: string, root: string) {
   return r && n.toLowerCase().startsWith(r.toLowerCase() + '/') ? n.slice(r.length + 1) : n;
 }
 
+// Lines of a step's change, as unified-diff lines: from the edit itself (Claude) or the diff it printed (Codex).
+function stepDiff(item: Extract<ChatItem, { kind: 'tool' }>): string[] | null {
+  if (item.edits?.length) {
+    return item.edits.flatMap((e: ToolEdit, i) => [
+      ...(i ? ['@@'] : []),
+      ...structuredPatch('a', 'b', e.old, e.new, '', '', { context: 2 }).hunks.flatMap((h) => h.lines),
+    ]);
+  }
+  if (item.output && /^(@@ |diff --git|--- |\+\+\+ )/m.test(item.output)) return item.output.split('\n');
+  return null;
+}
+
 function ToolRow({ item, root }: { item: Extract<ChatItem, { kind: 'tool' }>; root: string }) {
   const [open, setOpen] = useState(false);
   const Icon = toolIcon(item.name);
+  const diff = useMemo(() => stepDiff(item), [item.edits, item.output]);
+  const added = diff?.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length ?? 0;
+  const removed = diff?.filter((l) => l.startsWith('-') && !l.startsWith('---')).length ?? 0;
   return (
     <div className={`tool-row ${item.status}`}>
-      <button className="tool-head" onClick={() => item.output && setOpen(!open)}>
+      <button className="tool-head" onClick={() => (item.output || diff) && setOpen(!open)}>
         <Icon size={13} className="tool-icon" />
         <span className="tool-name">{item.name}</span>
         <span className="tool-detail">{shortPath(item.detail, root)}</span>
+        {diff && (added > 0 || removed > 0) && <span className="df-stat"><i className="add">+{added}</i><i className="del">−{removed}</i></span>}
         {item.status === 'running' ? <Loader2 size={13} className="spin" />
           : item.status === 'error' ? <XCircle size={13} className="err" /> : null}
-        {item.output ? <ChevronRight size={13} className={`chev ${open ? 'open' : ''}`} /> : null}
+        {item.output || diff ? <ChevronRight size={13} className={`chev ${open ? 'open' : ''}`} /> : null}
       </button>
-      {open && item.output && <pre className="tool-output">{item.output}</pre>}
+      {open && diff && (
+        <pre className="tool-output step-diff">{diff.map((l, i) => <span key={i} className={l.startsWith('@@') ? 'meta' : l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : ''}>{l + '\n'}</span>)}</pre>
+      )}
+      {open && !diff && item.output && <pre className="tool-output">{item.output}</pre>}
     </div>
   );
 }
@@ -370,6 +389,7 @@ interface ItemProps {
   onCommit(runId: string): void;
   onCompare(runId: string, pair?: string): void;
   onPickVariant(itemId: string, runId: string): void;
+  onApprove(itemId: string, decision: ApprovalDecision): void;
   onMeasureBuild(runId: string): void;
   onOpenLocal(): void;
   onFlowFix(runId: string): void;
@@ -385,7 +405,25 @@ const STEER_TAG = {
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
 
-export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
+function Attachments({ annotations }: { annotations: Extract<ChatItem, { kind: 'user' }>['annotations'] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const shown = annotations.find((a) => a.id === open);
+  return (
+    <>
+      <div className="msg-attachments compact">
+        {annotations.map((a) => (
+          <button key={a.id} className={`msg-att ${open === a.id ? 'on' : ''}`} title={a.note || (a.image ? 'Show the image' : '')} disabled={!a.image} onClick={() => setOpen(open === a.id ? null : a.id)}>
+            <span className="badge sm" style={{ background: a.color }}>{a.n}</span>
+            {a.kind === 'flow' ? `${a.steps?.length || 0} steps` : a.kind === 'request' ? `${a.request?.method} ${a.request?.status || 'ERR'}` : a.kind}
+          </button>
+        ))}
+      </div>
+      {shown?.image && <img className="msg-att-full" src={shown.image} alt="" onClick={() => setOpen(null)} />}
+    </>
+  );
+}
+
+export function ChatItemView({ item, live, onForceSteer, onApprove, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
   const [loadStats, setLoadStats] = useState(false);
   switch (item.kind) {
     case 'user': {
@@ -404,16 +442,7 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
           )}
           {item.background && <div className="steer-tag"><Layers size={11} /> Running in the background</div>}
           {item.variants && <div className="steer-tag"><Layers size={11} /> {item.variants} variants</div>}
-          {item.annotations.length > 0 && (
-            <div className="msg-attachments">
-              {item.annotations.map((a) => (
-                <div key={a.id} className="msg-att" title={a.note}>
-                  {a.image ? <img src={a.image} alt="" /> : <div className="msg-att-empty">{a.kind === 'flow' ? `${a.steps?.length || 0} steps` : a.kind === 'request' ? `${a.request?.method} ${a.request?.status || 'ERR'}` : ''}</div>}
-                  <span className="badge" style={{ background: a.color }}>{a.n}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {item.annotations.length > 0 && <Attachments annotations={item.annotations} />}
           {item.text && <div className="msg-text">{item.text}</div>}
           {item.annotations.filter((a) => a.note.trim()).map((a) => (
             <div key={a.id} className="msg-note"><span className="badge sm" style={{ background: a.color }}>{a.n}</span>{a.note}</div>
@@ -427,6 +456,40 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
       return <Thinking text={item.text} streaming={item.streaming} />;
     case 'tool':
       return <ToolRow item={item} root={root} />;
+    case 'plan': {
+      const done = item.steps.filter((x) => x.status === 'completed').length;
+      return (
+        <div className={`plan-card ${live ? 'live' : ''}`}>
+          <div className="plan-head"><b>Plan</b><span>{done} of {item.steps.length} done</span></div>
+          <ol>
+            {item.steps.map((x, i) => (
+              <li key={i} className={x.status}>
+                <i className="plan-mark">{x.status === 'completed' ? <Check size={11} weight="bold" /> : x.status === 'in_progress' && live ? <Loader2 size={11} className="spin" /> : null}</i>
+                <span>{x.text}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      );
+    }
+    case 'approval': {
+      const pending = item.status === 'pending';
+      const said = { allow: 'Allowed once', always: 'Always allowed for this run', deny: 'Denied', expired: 'Not answered before the run ended', pending: '' }[item.status];
+      return (
+        <div className={`approval ${item.status}`}>
+          <div className="approval-head"><ShieldCheck size={14} /><span><b>{item.tool}</b>{pending ? ' needs your OK' : ''}</span>{!pending && <span className="approval-said">{said}</span>}</div>
+          {item.detail && <pre className="approval-detail">{shortPath(item.detail, root)}</pre>}
+          {pending && (
+            <div className="approval-actions">
+              <button className="btn xs primary" onClick={() => onApprove(item.id, 'allow')}>Allow once</button>
+              <button className="btn xs" onClick={() => onApprove(item.id, 'always')} title="Don't ask again for this during the run">Always</button>
+              <div className="spacer" />
+              <button className="btn xs ghost" onClick={() => onApprove(item.id, 'deny')}>Deny</button>
+            </div>
+          )}
+        </div>
+      );
+    }
     case 'status':
       return <div className="msg status">{item.text}</div>;
     case 'error':
@@ -503,8 +566,8 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
             <div className="no-visual">
               <EyeOff size={14} />
               <div>
-                <b>No visible change on this page</b>
-                <span>The files were edited, but the page looks the same as before{moved.length ? ' (other pages did change, below)' : ''}. The change may not apply to what's on screen, may be overridden by another style, or may only show in another state or size.</span>
+                <b>No visible change on this page{moved.length ? ' · other pages changed' : ''}</b>
+                <span className="why">The files were edited, but the page looks the same as before. The change may not apply to what's on screen, may be overridden by another style, or may only show in another state or size.</span>
               </div>
             </div>
           )}
@@ -513,7 +576,8 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
               <EyeOff size={14} />
               <div>
                 <b>{item.unseen === 'live' ? "Not visible here yet: you're on the live site" : 'Not visible here yet: this is a built copy'}</b>
-                <span>{item.unseen === 'live' ? 'The files in your project were edited. The deployed page will show the change once you deploy it.' : 'The files were edited, but this page is served from a build made earlier. It shows the change once it is rebuilt.'} <button className="link-btn" onClick={onOpenLocal}>See it locally</button></span>
+                <span className="why">{item.unseen === 'live' ? 'The files in your project were edited. The deployed page will show the change once you deploy it.' : 'The files were edited, but this page is served from a build made earlier. It shows the change once it is rebuilt.'}</span>
+                <span><button className="link-btn" onClick={onOpenLocal}>See it locally</button></span>
               </div>
             </div>
           )}
@@ -580,10 +644,70 @@ export function ChatItemView({ item, live, onForceSteer, root, busy, onReload, o
 export type ChatActions = Omit<ItemProps, 'item' | 'live' | 'root' | 'busy' | 'gitRepo'>;
 
 const ChatRow = memo(ChatItemView);
+
+const isStep = (it: ChatItem) => it.kind === 'tool' || it.kind === 'thinking';
+const STEP_KINDS: [RegExp, string, string][] = [
+  [/^(Edit|MultiEdit|NotebookEdit|Write)$/, 'edit', 'edits'],
+  [/^Read$/, 'read', 'reads'],
+  [/^(Grep|Glob|LS|Search)$/, 'search', 'searches'],
+  [/^(Bash|Shell|PowerShell)$/, 'command', 'commands'],
+];
+
+function stepSummary(steps: ChatItem[]) {
+  const counts = new Map<string, number>();
+  for (const s of steps) {
+    if (s.kind !== 'tool') continue;
+    const k = STEP_KINDS.find(([re]) => re.test(s.name));
+    const key = k ? k[1] : 'other';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts].filter(([k]) => k !== 'other').map(([k, n]) => {
+    const kind = STEP_KINDS.find((x) => x[1] === k)!;
+    return `${n} ${n === 1 ? kind[1] : kind[2]}`;
+  }).join(' · ');
+}
+
+function WorkLog({ steps, live, root, actions, busy, gitRepo }: { steps: ChatItem[]; live: boolean; root: string; actions: ChatActions; busy: boolean; gitRepo: boolean }) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const shown = open ?? live;
+  const tools = steps.filter((s) => s.kind === 'tool');
+  const failed = tools.some((t) => t.kind === 'tool' && t.status === 'error');
+  const last = [...tools].reverse()[0];
+  const summary = stepSummary(steps);
+  return (
+    <div className={`work-log ${shown ? 'open' : ''} ${live ? 'live' : ''}`}>
+      <button className="work-head" onClick={() => setOpen(!shown)}>
+        {live ? <Loader2 size={13} className="spin" /> : <Wrench size={13} className="work-icon" />}
+        <span className="work-title">{live ? 'Working' : 'Worked'} · {tools.length} step{tools.length === 1 ? '' : 's'}</span>
+        <span className="work-sum">{live && !shown && last?.kind === 'tool' ? `${last.name} ${shortPath(last.detail, root)}` : summary}</span>
+        {failed && <XCircle size={13} className="err" />}
+        <ChevronRight size={13} className={`chev ${shown ? 'open' : ''}`} />
+      </button>
+      {shown && <div className="work-body">{steps.map((s) => <ChatRow key={s.id} item={s} live={false} root={root} busy={busy} gitRepo={gitRepo} {...actions} />)}</div>}
+    </div>
+  );
+}
+
 export const ChatList = memo(function ChatList({ items, actions, root, busy, gitRepo }: {
   items: ChatItem[]; actions: ChatActions; root: string; busy: boolean; gitRepo: boolean;
 }) {
   let lastDone = -1;
   if (busy) items.forEach((it, i) => { if (it.kind === 'done') lastDone = i; });
-  return <>{items.map((item, i) => <ChatRow key={item.id} item={item} live={busy && i > lastDone && item.kind === 'user'} root={root} busy={busy} gitRepo={gitRepo} {...actions} />)}</>;
+  const out: ReactNode[] = [];
+  for (let i = 0; i < items.length;) {
+    if (isStep(items[i])) {
+      let j = i;
+      while (j < items.length && isStep(items[j])) j++;
+      const steps = items.slice(i, j);
+      if (steps.filter((s) => s.kind === 'tool').length >= 3) {
+        out.push(<WorkLog key={`log-${steps[0].id}`} steps={steps} live={busy && j === items.length} root={root} actions={actions} busy={busy} gitRepo={gitRepo} />);
+        i = j;
+        continue;
+      }
+    }
+    const item = items[i];
+    out.push(<ChatRow key={item.id} item={item} live={busy && i > lastDone && (item.kind === 'user' || item.kind === 'plan')} root={root} busy={busy} gitRepo={gitRepo} {...actions} />);
+    i++;
+  }
+  return <>{out}</>;
 });

@@ -24,10 +24,25 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "  while ((i = buf.indexOf(String.fromCharCode(10))) >= 0) {",
   "    const line = buf.slice(0, i); buf = buf.slice(i + 1);",
   "    let m; try { m = JSON.parse(line); } catch { continue; }",
+    "    if (m.type === 'control_response' && m.response && m.response.request_id === 'perm-1') {",
+  "      const ok = m.response.response.behavior === 'allow';",
+  "      emit({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'bash-1', is_error: !ok, content: ok ? 'tests passed' : 'denied' }] } });",
+  "      emit({ type: 'assistant', message: { content: [{ type: 'text', text: ok ? 'Permission granted, tests ran.' : 'Permission denied, skipped.' }] } });",
+  "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'todo-2', name: 'TodoWrite', input: { todos: [{ content: 'Change the heading', status: 'completed', activeForm: 'Changing' }, { content: 'Run the tests', status: 'completed', activeForm: 'Running' }] } }] } });",
+  "      emit({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 300, num_turns: 1 });",
+  "      continue;",
+  "    }",
   "    if (m.type !== 'user') continue;",
   "    const text = m.message.content.filter((c) => c.type === 'text').map((c) => c.text).join(' ');",
   "    const word = (text.match(/(slow|quick)-(\\w+)/) || [])[0] || 'other';",
-  "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in' });",
+    "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in' });",
+  "    if (word === 'quick-ask') {",
+  "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: { todos: [{ content: 'Change the heading', status: 'completed', activeForm: 'Changing' }, { content: 'Run the tests', status: 'in_progress', activeForm: 'Running the tests' }] } }] } });",
+  "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'edit-1', name: 'Edit', input: { file_path: 'index.html', old_string: '<h1>Home</h1>', new_string: '<h1>Welcome home</h1>' } }] } });",
+  "      emit({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'edit-1', content: 'ok' }] } });",
+  "      emit({ type: 'control_request', request_id: 'perm-1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'npm test' } } });",
+  "      continue;",
+  "    }",
   "    emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'Starting on ' + word + '.' }] } });",
   "    setTimeout(() => {",
   "      fs.writeFileSync(path.join(process.cwd(), word + '.txt'), 'done');",
@@ -63,7 +78,7 @@ server.listen(0, '127.0.0.1', () => {
     };
     const newChat = () => ui(`[...document.querySelectorAll('.panel-head .btn')].find((b) => /New chat/.test(b.textContent)).click(); 0`);
     const userText = () => ui(`[...document.querySelectorAll('.chat .msg.user')].map((m) => m.textContent).join(' | ')`);
-    const chips = () => ui(`[...document.querySelectorAll('.other-chats button')].map((b) => b.className + ':' + b.textContent).join(' | ')`);
+    const chips = () => ui(`[...document.querySelectorAll('.threads .thread:not(.on)')].filter((t) => t.matches('.running, .finished')).map((t) => (t.classList.contains('running') ? 'running' : 'finished') + ':' + t.querySelector('.thread-title').textContent).join(' | ')`);
     const errors = [];
     host.on('console-message', (e) => { if ((e.level === 'error' || e.level === 3) && !/Security Warning/.test(e.message)) errors.push(e.message.slice(0, 200)); });
 
@@ -85,14 +100,14 @@ server.listen(0, '127.0.0.1', () => {
       log('its file was written', fs.existsSync(path.join(proj, 'quick-beta.txt')));
       log('the first chat was still working then', !fs.existsSync(path.join(proj, 'slow-alpha.txt')) && /running:slow-alpha/.test(await chips()), await chips());
 
-      log('the first chat is marked finished when its agent is done', !!(await until(`document.querySelector('.other-chats button.finished') ? 1 : 0`, 15000)), await chips());
+      log('the first chat is marked finished when its agent is done', !!(await until(`document.querySelector('.threads .thread.finished') ? 1 : 0`, 15000)), await chips());
       log('its file was written too', fs.existsSync(path.join(proj, 'slow-alpha.txt')));
       const saved = () => fs.readdirSync(path.join(proj, '.pinpoint', 'chats')).map((f) => JSON.parse(fs.readFileSync(path.join(proj, '.pinpoint', 'chats', f), 'utf8')));
       await sleep(900);
       const alpha = saved().find((c) => /slow-alpha/.test(c.title));
       log('and saved with its result', !!alpha && alpha.items.some((i) => i.kind === 'done') && alpha.items.some((i) => i.kind === 'text' && /Wrote slow-alpha/.test(i.text)), alpha ? alpha.items.map((i) => i.kind).join() : 'not saved');
 
-      await ui(`document.querySelector('.other-chats button').click(); 0`);
+      await ui(`document.querySelector('.threads .thread.finished').click(); 0`);
       await sleep(700);
       log('opening it shows its whole conversation', (await userText()).includes('slow-alpha') && (await ui(`document.querySelectorAll('.chat .done-card').length`)) === 1 && /Wrote slow-alpha/.test(await ui(`document.querySelector('.chat').innerText`)), await userText());
       log('its result lists only the file it wrote itself', /Changed 1 file/.test(await ui(`document.querySelector('.chat .done-card').innerText`)) && !/quick-beta/.test(await ui(`document.querySelector('.chat .done-card').innerText`)), await ui(`document.querySelector('.chat .done-card').innerText.slice(0, 80)`));
@@ -101,13 +116,12 @@ server.listen(0, '127.0.0.1', () => {
       await send('slow-gamma please');
       await until(`document.querySelector('.chat .working') ? 1 : 0`, 8000);
       await sleep(500);
-      await ui(`document.querySelector('.dd .icon-btn[title="Chat history"]').click(); 0`);
       await sleep(500);
-      log('the history lists both chats', (await ui(`document.querySelectorAll('.history-item').length`)) === 2);
+      log('the sidebar lists both chats', (await ui(`document.querySelectorAll('.history-item').length`)) === 2);
       await ui(`[...document.querySelectorAll('.history-item')].find((i) => /quick-beta/.test(i.textContent)).click(); 0`);
       await sleep(700);
       log('switching to the other chat leaves the first working', (await userText()).includes('quick-beta') && /running/.test(await chips()) && !(await ui(`!!document.querySelector('.chat .working')`)), await chips());
-      await ui(`document.querySelector('.other-chats button.running').click(); 0`);
+      await ui(`document.querySelector('.threads .thread.running:not(.on)').click(); 0`);
       await sleep(600);
       log('coming back shows it still working, with what it has said so far', (await ui(`!!document.querySelector('.chat .working')`)) && /Starting on slow-gamma/.test(await ui(`document.querySelector('.chat').innerText`)));
       log('and it finishes on screen', await until(`document.querySelectorAll('.chat .done-card').length === 2 ? 1 : 0`, 15000) === 1, await ui(`document.querySelectorAll('.chat .done-card').length`));
@@ -174,6 +188,61 @@ server.listen(0, '127.0.0.1', () => {
       log('pressing it interrupts the agent and marks the message as sent', forced === 1, await ui(`[...document.querySelectorAll('.msg.user.steer .steer-tag')].pop().textContent`));
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 20000);
       log('finished runs offer no Send now button', (await ui(`document.querySelectorAll('.steer-now').length`)) === 0);
+
+      const mainBefore = await userText();
+      await ui(`document.querySelector('.ptab-new').click(); 0`);
+      await sleep(300);
+      log('a side chat opens as a tab in the chat panel', await ui(`document.querySelectorAll('.ptab.side.on').length === 1 && !!document.querySelector('.side-chat:not(.hidden)') && getComputedStyle(document.querySelector('.chat')).display === 'none'`));
+      await ui(`(() => { const t = document.querySelector('.side-chat:not(.hidden) .side-foot textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'quick-aside what is this?'); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await sleep(150);
+      await ui(`document.querySelector('.side-chat:not(.hidden) .side-send').click(); 0`);
+      const answer = await until(`/Wrote /.test(document.querySelector('.side-chat:not(.hidden) .side-body')?.innerText || '') ? document.querySelector('.side-chat:not(.hidden) .side-body').innerText : ''`, 15000);
+      log('a side question gets its answer in the side chat', /Starting on/.test(answer || '') && /Wrote /.test(answer || ''), answer);
+      await sleep(400);
+      log('and leaves the main chat alone', (await userText()) === mainBefore && !(await ui(`document.querySelector('.chat').innerText.includes('quick-aside')`)));
+      log('the tab is named after the question', /quick-aside/.test(await ui(`document.querySelector('.ptab.side').textContent`)));
+      await ui(`document.querySelector('.ptab-new').click(); 0`);
+      await sleep(200);
+      log('several side chats can be open, each starting empty', (await ui(`document.querySelectorAll('.ptab.side').length`)) === 2 && /Ask about/.test(await ui(`document.querySelector('.side-chat:not(.hidden) .side-body').innerText`)));
+      await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);
+      await sleep(200);
+      log('the Chat tab brings the main chat back', await ui(`getComputedStyle(document.querySelector('.chat')).display !== 'none' && !document.querySelector('.side-chat:not(.hidden)')`));
+      log('nothing is left under Running once the side question is answered', (await until(`document.querySelector('.threads .task') ? 0 : 1`, 5000)) === 1, await ui(`[...document.querySelectorAll('.threads .task')].map((t) => t.textContent).join(' | ')`));
+
+      await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);
+      const cardsBeforeAsk = await ui(`document.querySelectorAll('.chat .done-card').length`);
+      await send('quick-ask please');
+      const asked = await until(`document.querySelector('.chat .approval.pending')?.innerText || ''`, 8000);
+      log('the agent asking to run a command shows an approval card', /Bash/.test(asked || '') && /npm test/.test(asked || '') && /Allow once/.test(asked || ''), asked);
+      log('the chat is marked as needing you in the sidebar', /needs you/.test(await ui(`document.querySelector('.thread.on')?.textContent || ''`)));
+      log('the plan shows as a checklist with progress', (await ui(`document.querySelectorAll('.chat .plan-card li').length`)) === 2 && /1 of 2 done/.test(await ui(`document.querySelector('.chat .plan-card').innerText`)));
+      await ui(`document.querySelector('.chat .approval.pending .btn.primary').click(); 0`);
+      const after = await until(`document.querySelectorAll('.chat .done-card').length > ${cardsBeforeAsk} ? document.querySelector('.chat').innerText : ''`, 8000);
+      log('allowing it lets the agent carry on', /Permission granted/.test(after || ''), (after || '').slice(-200));
+      log('the card records the answer', /Allowed once/.test(await ui(`document.querySelector('.chat .approval').innerText`)));
+      log('the plan updates in place', (await ui(`document.querySelectorAll('.chat .plan-card').length`)) === 1 && /2 of 2 done/.test(await ui(`document.querySelector('.chat .plan-card').innerText`)));
+      await ui(`[...document.querySelectorAll('.chat .tool-row .tool-head')].find((h) => /Edit/.test(h.textContent)).click(); 0`);
+      await sleep(200);
+      log('an edit step opens to a red/green diff', (await ui(`document.querySelectorAll('.chat .step-diff .add').length`)) === 1 && /Welcome home/.test(await ui(`document.querySelector('.chat .step-diff .add').textContent`)) && (await ui(`document.querySelectorAll('.chat .step-diff .del').length`)) === 1);
+
+      const typeIn = (text) => ui(`(() => { const t = document.querySelector('.composer-box textarea'); t.focus(); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ${JSON.stringify(text)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      const key = (k) => ui(`document.querySelector('.composer-box textarea').dispatchEvent(new KeyboardEvent('keydown', { key: '${k}', bubbles: true, cancelable: true })); 0`);
+      await typeIn('look at @ind');
+      const files = await until(`[...document.querySelectorAll('.assist-item')].map((b) => b.textContent).join(' | ')`, 5000);
+      log('typing @ lists matching project files', /index\.html/.test(files || ''), files);
+      await key('Tab');
+      await sleep(200);
+      log('picking one puts its path in the message', (await ui(`document.querySelector('.composer-box textarea').value`)) === 'look at @index.html ', await ui(`document.querySelector('.composer-box textarea').value`));
+      await typeIn('/pla');
+      const cmds = await until(`[...document.querySelectorAll('.assist-item')].map((b) => b.textContent).join(' | ')`, 3000);
+      log('typing / lists commands', /\/plan/.test(cmds || ''), cmds);
+      await key('Enter');
+      await sleep(400);
+      log('a command runs and clears the box', (await ui(`document.querySelector('.composer-box textarea').value`)) === '' && JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8')).claudePermission === 'plan' && !!(await ui(`!!document.querySelector('.plan-pill')`)));
+      await ui(`document.querySelector('.plan-pill').click(); 0`);
+      await sleep(300);
+      log('the Plan only pill switches it back off', JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8')).claudePermission === 'acceptEdits');
+
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }
     } catch (e) { log('exception', false, e.stack); }

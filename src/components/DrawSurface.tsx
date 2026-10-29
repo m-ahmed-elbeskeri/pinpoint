@@ -9,9 +9,10 @@ interface Props {
   color: string;
   size: number;
   board?: boolean;
+  passive?: boolean;
 }
 
-export function DrawSurface({ shapes, onChange, tool, color, size, board }: Props) {
+export function DrawSurface({ shapes, onChange, tool, color, size, board, passive }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef<Shape | null>(null);
@@ -120,7 +121,7 @@ export function DrawSurface({ shapes, onChange, tool, color, size, board }: Prop
   const cursor = tool === 'text' ? 'text' : tool === 'eraser' ? 'cell' : 'crosshair';
 
   return (
-    <div ref={wrap} className={`draw-surface ${board ? 'board' : ''}`} style={{ cursor }}>
+    <div ref={wrap} className={`draw-surface ${board ? 'board' : ''}`} style={passive ? { pointerEvents: 'none' } : { cursor }}>
       <canvas
         ref={canvas}
         style={{ width: dims.w, height: dims.h }}

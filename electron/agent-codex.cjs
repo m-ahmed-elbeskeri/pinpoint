@@ -64,6 +64,11 @@ function runCodex(opts) {
       case 'item/reasoning/textDelta':
         if (p?.delta) onEvent({ type: 'thinking_delta', text: p.delta });
         break;
+      case 'turn/plan/updated': {
+        const steps = (p?.plan || []).map((x) => ({ text: x.step || '', status: x.status === 'completed' ? 'completed' : /progress/i.test(x.status || '') ? 'in_progress' : 'pending' }));
+        if (steps.length) onEvent({ type: 'plan', steps });
+        break;
+      }
       case 'turn/started':
         activeTurn = p.turn?.id || activeTurn;
         break;
@@ -126,7 +131,19 @@ function runCodex(opts) {
       if (m.error) pnd.reject(new Error(m.error.message || JSON.stringify(m.error)));
       else pnd.resolve(m.result);
     } else if (m.id != null && m.method) {
-      if (/requestApproval|Approval$/.test(m.method)) send({ id: m.id, result: { decision: settings.codexSandbox === 'read-only' ? 'decline' : 'accept' } });
+      if (/requestApproval|Approval$/.test(m.method)) {
+        // New-style methods ("item/…/requestApproval") answer accept/acceptForSession/decline; the older ones approved/approved_for_session/denied.
+        const v2 = m.method.includes('/');
+        const word = { allow: v2 ? 'accept' : 'approved', always: v2 ? 'acceptForSession' : 'approved_for_session', deny: v2 ? 'decline' : 'denied' };
+        const q = m.params || {};
+        const cmd = Array.isArray(q.command) ? q.command.join(' ') : q.command;
+        const tool = /patch|fileChange/i.test(m.method) ? 'Edit files' : 'Shell';
+        const detail = cmd || Object.keys(q.fileChanges || q.changes || {}).join(', ') || q.reason || '';
+        const ask = opts.askApproval && settings.codexSandbox !== 'read-only'
+          ? Promise.resolve(opts.askApproval({ tool, detail: q.reason && cmd ? `${cmd}  (${q.reason})` : detail }))
+          : Promise.resolve(settings.codexSandbox === 'read-only' ? 'deny' : 'allow');
+        ask.then((d) => send({ id: m.id, result: { decision: word[d] || word.deny } }));
+      }
       else send({ id: m.id, error: { code: -32601, message: `Pinpoint does not handle ${m.method}` } });
     } else if (m.method) {
       onNotification(m.method, m.params);
@@ -160,7 +177,7 @@ function runCodex(opts) {
       initialized = true;
       clearTimeout(timer);
       send({ method: 'initialized' });
-      const common = { cwd, sandbox: settings.codexSandbox || 'workspace-write', approvalPolicy: 'never', ...(settings.codexModel ? { model: settings.codexModel } : {}) };
+      const common = { cwd, sandbox: settings.codexSandbox || 'workspace-write', approvalPolicy: opts.askApproval && settings.codexSandbox === 'workspace-write' ? 'on-request' : 'never', ...(settings.codexModel ? { model: settings.codexModel } : {}) };
       const th = sessionId
         ? await request('thread/resume', { threadId: sessionId, ...common })
         : await request('thread/start', common);

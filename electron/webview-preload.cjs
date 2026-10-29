@@ -536,9 +536,50 @@ function manipUp() {
   ipcRenderer.sendToHost('manip', { uid, kind: 'reorder', from: rec.order.from, to: now.indexOf(m.el), count: now.length, before: label });
 }
 
+// In select mode a press-and-drag that isn't on a resize/move handle draws a freehand mark instead of picking.
+let scribble = null;
+function scribbleDown(e) {
+  if (mode !== 'select' || e.button !== 0 || manip) return;
+  scribble = { points: [[e.clientX, e.clientY]], canvas: null };
+}
+function scribbleMove(e) {
+  if (!scribble || mode !== 'select') return;
+  if (!(e.buttons & 1)) { endScribble(); return; }
+  const [x0, y0] = scribble.points[0];
+  if (!scribble.canvas) {
+    if (Math.hypot(e.clientX - x0, e.clientY - y0) < 8) return;
+    const c = document.createElement('canvas');
+    c.width = innerWidth * devicePixelRatio; c.height = innerHeight * devicePixelRatio;
+    c.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483647';
+    document.documentElement.appendChild(c);
+    const ctx = c.getContext('2d');
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+    ctx.strokeStyle = '#ff4f3a'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    scribble.canvas = c;
+    hidden = true; renderHover();
+  }
+  const [px, py] = scribble.points[scribble.points.length - 1];
+  scribble.points.push([e.clientX, e.clientY]);
+  const ctx = scribble.canvas.getContext('2d');
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(e.clientX, e.clientY); ctx.stroke();
+}
+function endScribble() {
+  const s = scribble;
+  scribble = null;
+  if (!s || !s.canvas) return;
+  suppressClick = true;
+  setTimeout(() => { suppressClick = false; }, 80);
+  hidden = false;
+  ipcRenderer.sendToHost('scribble', { points: s.points });
+  setTimeout(() => s.canvas.remove(), 120);
+}
+
 window.addEventListener('pointerdown', manipDown, true);
+window.addEventListener('pointerdown', scribbleDown, true);
 window.addEventListener('pointermove', manipMove, true);
+window.addEventListener('pointermove', scribbleMove, true);
 window.addEventListener('pointerup', manipUp, true);
+window.addEventListener('pointerup', endScribble, true);
 
 for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'dblclick', 'contextmenu', 'auxclick', 'submit']) {
   window.addEventListener(t, swallow, true);

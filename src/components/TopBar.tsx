@@ -1,5 +1,5 @@
 import {
-  Brain, Bug, CircleDot, Download, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PanelRight,
+  Brain, Bug, CircleDot, Download, FolderOpen, Search, MousePointer2, MousePointerClick, Palette, PanelLeft, PanelRight,
   PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare,
 } from './icons';
 import type { ContextTab } from './ContextSheet';
@@ -7,12 +7,15 @@ import type { Mode, UpdateState } from '../lib/types';
 
 const MODES: { id: Mode; label: string; icon: typeof MousePointer2; key: string; hint: string }[] = [
   { id: 'browse', label: 'Browse', icon: MousePointer2, key: 'V', hint: 'Use the site normally' },
-  { id: 'select', label: 'Select', icon: MousePointerClick, key: 'S', hint: 'Click elements to annotate them' },
+  { id: 'select', label: 'Annotate', icon: MousePointerClick, key: 'S', hint: 'Click an element to annotate it, or drag to draw on the page' },
   { id: 'draw', label: 'Draw', icon: PenTool, key: 'D', hint: 'Draw on top of the page' },
   { id: 'sketch', label: 'Sketch', icon: SquarePen, key: 'K', hint: 'Sketch a new idea on a blank board' },
 ];
 
 interface Props {
+  threadsHidden: boolean;
+  onToggleThreads(): void;
+  onPalette(): void;
   mod: string;
   projectDir: string;
   onPickProject(): void;
@@ -43,12 +46,16 @@ export function TopBar(p: Props) {
   const u = p.update;
   return (
     <header className="topbar">
-      <button className="project-btn" onClick={p.onPickProject} title={p.projectDir || 'Choose the project folder the agent edits'}>
-        <FolderOpen size={14} />
-        <span>{p.projectDir ? p.projectDir.split(/[\\/]/).pop() : 'Open project'}</span>
-      </button>
-
-      <div className="tb-div" />
+      {p.threadsHidden && (
+        <>
+          <button className="icon-btn threads-toggle" onClick={p.onToggleThreads} title={`Show chats (${p.mod}+Shift+B)`}><PanelLeft size={16} /></button>
+          <button className="project-btn" onClick={p.onPickProject} title={p.projectDir || 'Choose the project folder the agent edits'}>
+            <FolderOpen size={14} />
+            <span>{p.projectDir ? p.projectDir.split(/[\\/]/).pop() : 'Open project'}</span>
+          </button>
+          <div className="tb-div" />
+        </>
+      )}
 
       <div className="seg mode-seg">
         {MODES.map((m) => (
@@ -60,6 +67,12 @@ export function TopBar(p: Props) {
           <CircleDot size={15} /><span>{p.recording ? 'Stop' : 'Record'}</span>
         </button>
       </div>
+
+      <div className="spacer" />
+
+      <button className="cmd-pill" onClick={p.onPalette} title={`Search chats and run commands (${p.mod}+K)`}>
+        <Search size={13} /><span>Search or run a command</span><kbd>{p.mod === '⌘' ? '⌘K' : 'Ctrl K'}</kbd>
+      </button>
 
       <div className="spacer" />
 

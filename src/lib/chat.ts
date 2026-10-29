@@ -1,7 +1,7 @@
 import type { Breakpoint } from '../components/DeviceBar';
 import type { FrameTarget } from '../components/BrowserView';
 import { uid } from './draw';
-import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, FlowResult, NetworkFailure, PageEnv, RequestNote } from './types';
+import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, FlowResult, NetworkFailure, PageEnv, PlanStep, RequestNote } from './types';
 
 export interface AgentRequest {
   url: string; title: string; viewport: { width: number; height: number; responsive?: boolean };
@@ -70,9 +70,27 @@ export function healChat(items: ChatItem[]): ChatItem[] {
   const list = once.length === items.length ? items : once;
   let lastUser = -1;
   list.forEach((it, i) => { if (it.kind === 'user') lastUser = i; });
-  if (lastUser < 0 || list.slice(lastUser).some((it) => it.kind === 'done' || noted(it))) return list;
+  if (lastUser < 0 || list.slice(lastUser).some((it) => it.kind === 'done' || noted(it))) return expireApprovals(list);
   return [
-    ...list.map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
+    ...expireApprovals(list).map((it) => (it.kind === 'tool' && it.status === 'running' ? { ...it, status: 'error' as const } : it)),
     { kind: 'error', id: uid(), text: INTERRUPTED },
   ];
 }
+
+// The agent's to-do list belongs to the current turn: update that turn's plan card, or add one.
+export function applyPlan(items: ChatItem[], steps: PlanStep[]): ChatItem[] {
+  let start = 0;
+  items.forEach((it, i) => { if (it.kind === 'user') start = i; });
+  const at = items.findIndex((it, i) => i >= start && it.kind === 'plan');
+  if (at >= 0) return items.map((it, i) => (i === at ? { ...it, steps } : it));
+  return [...items, { kind: 'plan', id: uid(), steps }];
+}
+
+// Questions the agent asked but never got an answer to (the run ended first).
+export function expireApprovals(items: ChatItem[]): ChatItem[] {
+  return items.some((it) => it.kind === 'approval' && it.status === 'pending')
+    ? items.map((it) => (it.kind === 'approval' && it.status === 'pending' ? { ...it, status: 'expired' as const } : it))
+    : items;
+}
+
+export const needsInput = (items: ChatItem[]) => items.some((it) => it.kind === 'approval' && it.status === 'pending');

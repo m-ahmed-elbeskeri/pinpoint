@@ -49,7 +49,7 @@ export function ChatHistory({ currentId, disabled, others, onOpen, onDelete }: P
                   : <MessageSquare size={14} className="dd-item-icon" />}
               <span className="dd-item-text">
                 <span>{c.title || 'Untitled'}</span>
-                <small>{ago(c.updatedAt)} · {c.count} item{c.count === 1 ? '' : 's'}{c.agent ? ` · ${c.agent === 'codex' ? 'Codex' : 'Claude Code'}` : ''}</small>
+                <small>{ago(c.updatedAt)} · {c.count} item{c.count === 1 ? '' : 's'}{c.agent ? ` · ${c.agent === 'codex' ? 'Codex' : c.agent === 'claude' ? 'Claude Code' : c.agent}` : ''}</small>
               </span>
               <button className="icon-btn xs" title="Delete chat" onClick={(e) => { e.stopPropagation(); onDelete(c.id); setChats(chats.filter((x) => x.id !== c.id)); }}>
                 <Trash2 size={12} />

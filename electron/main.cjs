@@ -3,7 +3,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
-const { runAgent, detectAgents, modelCatalog } = require('./agents.cjs');
+const { runAgent, detectAgents, modelCatalog, harnessList } = require('./agents.cjs');
+const { agentName: harnessName } = require('./harnesses.cjs');
 const { buildPrompt, buildSteerPrompt, buildVerifyPrompt } = require('./prompt.cjs');
 const snapshot = require('./snapshot.cjs');
 const runs = require('./runs.cjs');
@@ -157,11 +158,47 @@ ipcMain.handle('settings:get', () => loadSettings());
 ipcMain.handle('settings:set', (_e, patch) => saveSettings(patch));
 ipcMain.handle('agents:detect', () => detectAgents(loadSettings()));
 ipcMain.handle('agents:models', () => modelCatalog());
+ipcMain.handle('agents:list', () => harnessList(loadSettings()));
+// Files for @-mentions in the composer: git's view of the project when it's a repo, otherwise a capped walk.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.pinpoint', 'dist', 'build', 'out', '.next', '.nuxt', '.svelte-kit', '.turbo', 'coverage', '.cache', 'vendor', 'target']);
+ipcMain.handle('project:files', async () => {
+  const root = loadSettings().projectDir;
+  if (!root || !fs.existsSync(root)) return [];
+  const listed = await new Promise((resolve) => {
+    require('node:child_process').execFile('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: root, windowsHide: true, timeout: 8000, maxBuffer: 32 * 1024 * 1024 }, (err, out) => resolve(err ? null : String(out).split('\n').filter(Boolean)));
+  });
+  if (listed) return listed.slice(0, 30000);
+  const out = [];
+  const walk = (dir, rel) => {
+    if (out.length >= 20000) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') && e.name !== '.env.example') continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name), r); } else out.push(r);
+    }
+  };
+  walk(root, '');
+  return out;
+});
+// Keep the native window buttons (Windows / Linux title-bar overlay) in step with the app theme.
+ipcMain.handle('window:theme', (_e, light) => {
+  try { win?.setTitleBarOverlay?.(light ? { color: '#ffffff', symbolColor: '#4b4b55' } : { color: '#0b0b0d', symbolColor: '#a3a3ad' }); } catch { /* not supported on this platform */ }
+  try { win?.setBackgroundColor(light ? '#ffffff' : '#0b0b0d'); } catch { /* ignore */ }
+  return true;
+});
 
-ipcMain.handle('dialog:pickFolder', async () => {
-  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
-  if (r.canceled || !r.filePaths[0]) return null;
-  const dir = r.filePaths[0];
+ipcMain.handle('dialog:pickFolder', async (_e, known) => {
+  let dir = '';
+  if (known) {
+    if (!loadSettings().recentProjects.includes(known) || !fs.existsSync(known)) return null;
+    dir = known;
+  } else {
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    dir = r.filePaths[0];
+  }
   const s = loadSettings();
   const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8);
   const switched = path.resolve(dir) !== path.resolve(s.projectDir || '.');
@@ -535,7 +572,7 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
     } catch (err) { send({ type: 'log', text: `git branch failed: ${err.message}` }); }
   }
 
-  const agentName = settings.agent === 'codex' ? 'Codex' : 'Claude Code';
+  const agentName = harnessName(settings);
   const snap = await snapshot.takeAsync(cwd);
   othersWrote.set(runId, new Map());
   let routes = null;
@@ -581,9 +618,19 @@ ipcMain.handle('agent:run', async (e, { runId, request, sessionId, check }) => {
         });
     }
   };
-  const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, onEvent });
+  // Permission questions from the agent become a card in the chat; the run waits for the answer.
+  let approvalSeq = 0;
+  const askApproval = ({ tool, detail }) => new Promise((resolve) => {
+    const approvalId = `a${++approvalSeq}`;
+    approvals.set(`${runId}:${approvalId}`, resolve);
+    send({ type: 'approval', approvalId, tool, detail: String(detail || '').slice(0, 600) });
+  });
+  const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, requestDir: files.dir, onEvent, askApproval });
   active.set(runId, handle);
-  handle.done.finally(() => { active.delete(runId); othersWrote.delete(runId); });
+  handle.done.finally(() => {
+    active.delete(runId); othersWrote.delete(runId);
+    for (const [key, resolve] of approvals) if (key.startsWith(`${runId}:`)) { approvals.delete(key); resolve('deny'); }
+  });
   return { requestDir: files.dir };
 });
 
@@ -618,12 +665,54 @@ ipcMain.handle('agent:nudge', (_e, runId) => {
   return !!handle.interrupt('Stop the step you were on. Act now on the message I sent you a moment ago, the one that was waiting behind that step.', []);
 });
 
+// Side chat: a quick question to the same agent, read-only, in its own session. It never snapshots,
+// records a run or touches the main chat.
+const sideRuns = new Map();
+function readOnly(settings) {
+  const id = settings.agent;
+  const h = harnessList(settings).find((x) => x.id === id);
+  const first = h?.access?.[0]?.value;
+  return { ...settings, claudePermission: 'plan', codexSandbox: 'read-only', agentAccess: { ...settings.agentAccess, ...(first ? { [id]: first } : {}) }, gitAutoCommit: false };
+}
+ipcMain.handle('side:ask', (e, { sideId, question, context, sessionId }) => {
+  const settings = loadSettings();
+  const cwd = settings.projectDir;
+  if (!cwd || !fs.existsSync(cwd)) throw new Error('Pick a project folder first.');
+  project.ensureDir(cwd);
+  const requestDir = path.join(cwd, '.pinpoint', 'side', `${sideId}-${Date.now().toString(36)}`);
+  fs.mkdirSync(requestDir, { recursive: true });
+  const prompt = [
+    'This is a quick side question about this project, asked next to the main conversation.',
+    'Do not edit, create or delete any files and do not run commands that change anything. Look at whatever you need, then answer briefly and plainly.',
+    !sessionId && context ? `\nWhat the main conversation has been about (for reference only):\n<main-chat>\n${context}\n</main-chat>` : '',
+    `\nQuestion: ${question}`,
+  ].join('\n');
+  const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('side:event', { sideId, ...evt }); };
+  sideRuns.get(sideId)?.kill();
+  const handle = runAgent({ settings: readOnly(settings), cwd, prompt, images: [], sessionId: sessionId || null, requestDir, onEvent: send });
+  sideRuns.set(sideId, handle);
+  handle.done.finally(() => { if (sideRuns.get(sideId) === handle) sideRuns.delete(sideId); });
+  return true;
+});
+ipcMain.handle('side:cancel', (_e, sideId) => { sideRuns.get(sideId)?.kill(); return true; });
+
+const approvals = new Map();
+ipcMain.handle('agent:approve', (_e, { runId, approvalId, decision }) => {
+  const resolve = approvals.get(`${runId}:${approvalId}`);
+  if (!resolve) return false;
+  approvals.delete(`${runId}:${approvalId}`);
+  resolve(['allow', 'always', 'deny'].includes(decision) ? decision : 'deny');
+  return true;
+});
+
 ipcMain.handle('agent:cancel', (_e, runId) => {
   active.get(runId)?.kill();
   return true;
 });
 
 ipcMain.handle('chats:list', () => project.listChats(projectDir()));
+// Another recent project's chats, for the sidebar's project tree. Only folders already in the recent list.
+ipcMain.handle('chats:listFor', (_e, dir) => (loadSettings().recentProjects.includes(dir) ? project.listChats(dir) : []));
 ipcMain.handle('chats:load', (_e, id) => project.loadChat(projectDir(), id));
 ipcMain.handle('chats:save', (_e, chat) => project.saveChat(projectDir(), chat));
 ipcMain.handle('chats:delete', (_e, id) => project.deleteChat(projectDir(), id));
@@ -764,9 +853,10 @@ ipcMain.handle('bg:start', async (e, { id, request }) => {
     try { designSystem = designsystem.inspect(root); } catch {  }
     const prompt = buildPrompt({ request: moved, files, projectDir: run.cwd, followUp: false, design: design?.exists ? design.content : '', memory, designSystem });
     entry.handle = runAgent({
-      settings, cwd: run.cwd, prompt, images: files.images, sessionId: null,
+      settings, cwd: run.cwd, prompt, images: files.images, sessionId: null, requestDir: files.dir,
       onEvent: async (evt) => {
         if (evt.type === 'text') entry.text = evt.text;
+        else if (evt.type === 'text_delta') entry.text += evt.text;
         else if (evt.type === 'tool') bgSend(e.sender, { id, type: 'step', text: `${evt.name} ${path.basename(String(evt.detail || ''))}`.trim() });
         else if (evt.type === 'error') bgSend(e.sender, { id, type: 'step', text: evt.text });
         if (evt.type !== 'done') return;
@@ -948,6 +1038,31 @@ ipcMain.handle('git:commitRun', async (_e, runId) => {
   return commit;
 });
 ipcMain.handle('git:commitAll', (_e, message) => gitx.commitAll(projectDir(), message));
+const notWhileRunning = () => { if (active.size) throw new Error('An agent is editing this project. Wait for it to finish before switching.'); };
+ipcMain.handle('git:branches', () => gitx.branches(projectDir()));
+ipcMain.handle('git:pulls', () => gitx.pulls(projectDir()));
+ipcMain.handle('git:compare', (_e, args) => gitx.compare(projectDir(), args));
+ipcMain.handle('git:fetch', () => gitx.fetchOrigin(projectDir()));
+ipcMain.handle('git:pull', () => { notWhileRunning(); return gitx.pull(projectDir()); });
+ipcMain.handle('git:push', () => gitx.push(projectDir()));
+ipcMain.handle('git:openUrl', (_e, url) => { if (/^https:\/\/github\.com\//.test(url)) shell.openExternal(url); return true; });
+ipcMain.handle('git:switch', (_e, name) => { notWhileRunning(); return gitx.switchBranch(projectDir(), name); });
+ipcMain.handle('git:newBranch', (_e, name) => { notWhileRunning(); return gitx.newBranch(projectDir(), name); });
+ipcMain.handle('git:worktreeAdd', (_e, args) => gitx.addWorktree(projectDir(), args));
+ipcMain.handle('git:worktreeRemove', (_e, dir) => gitx.removeWorktree(projectDir(), dir));
+// Opens another worktree of the same repository in place: same dev command and tabs, dev server restarted there.
+ipcMain.handle('git:openWorktree', async (e, dir) => {
+  notWhileRunning();
+  const tree = await gitx.findTree(projectDir(), dir);
+  if (!tree) throw new Error('That worktree no longer exists.');
+  if (!fs.existsSync(tree.open)) throw new Error(`${tree.open} doesn't exist in that worktree.`);
+  const wasRunning = !!devProc && devProc.exitCode === null;
+  killTree(devProc); devProc = null; killTree(storyProc); storyProc = null;
+  saveSettings({ projectDir: tree.open });
+  const { devCommand } = loadSettings();
+  if (wasRunning && devCommand) { await pause(1500); startDevServer(e.sender, devCommand); }
+  return { dir: tree.open, branch: tree.branch, restarted: wasRunning && !!devCommand };
+});
 ipcMain.handle('git:pr', async (_e, { shots, ...args }) => {
   const root = projectDir();
   const pairs = (shots || []).slice(-4).flatMap((s) => {

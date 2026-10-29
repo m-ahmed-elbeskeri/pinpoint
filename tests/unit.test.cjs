@@ -64,5 +64,86 @@ const prop = (n) => card.props.find((p) => p.name === n);
 check('components found with their export kind', found.length === 2 && card && !card.isDefault && found.find((c) => c.name === 'Page').isDefault, JSON.stringify(found.map((c) => c.name)));
 check('prop types and defaults read from the source', prop('title').type === 'string' && prop('title').required && prop('size').type === 'enum' && prop('size').options.join() === 'sm,md,lg' && prop('size').default === 'md' && prop('featured').type === 'boolean' && prop('count').type === 'number' && prop('children').type === 'node' && !prop('onClick'), JSON.stringify(card.props));
 
-console.log(`${pass} pass, ${failed} fail`);
-process.exit(failed ? 1 : 0);
+const { translate } = require(path.join(repo, 'electron', 'agent-generic.cjs'));
+const { harnesses, splitArgs } = require(path.join(repo, 'electron', 'harnesses.cjs'));
+const tr = (lines) => { const st = { sessionId: null, sawText: false }; return lines.flatMap((l) => translate(l, st) || [{ type: 'unknown' }]); };
+const types = (evts) => evts.map((e) => e.type).join();
+let ev = tr([{ type: 'init', session_id: 'g1', model: 'gemini' }, { type: 'message', role: 'assistant', content: 'Hi', delta: true }, { type: 'tool_use', tool_name: 'replace', tool_id: 't1', parameters: { file_path: 'a.css' } }, { type: 'tool_result', tool_id: 't1', status: 'success', output: 'ok' }, { type: 'result', status: 'success' }]);
+check('gemini stream: session, text, tool and result', types(ev) === 'session,text_delta,tool,tool_result' && ev[2].detail === 'a.css', types(ev));
+ev = tr([{ type: 'system', subtype: 'init', session_id: 'c1' }, { type: 'tool_call', subtype: 'started', call_id: 'k', tool_call: { readToolCall: { args: { path: 'x.ts' } } } }, { type: 'tool_call', subtype: 'completed', call_id: 'k', tool_call: { readToolCall: { args: { path: 'x.ts' }, result: { success: { content: 'abc' } } } } }, { type: 'assistant', message: { content: [{ type: 'text', text: 'Done' }] } }]);
+check('cursor stream: tool calls named and paired', types(ev) === 'session,tool,tool_result,text' && ev[1].name === 'Read' && ev[1].detail === 'x.ts' && ev[2].ok, types(ev));
+ev = tr([{ type: 'tool_use', sessionID: 'o1', part: { type: 'tool', tool: 'edit', callID: 'e', state: { status: 'completed', input: { filePath: 'b.tsx' }, output: 'ok' } } }, { type: 'text', sessionID: 'o1', part: { type: 'text', text: 'Edited' } }]);
+check('opencode stream: completed tool and text', types(ev) === 'session,tool,tool_result,text', types(ev));
+ev = tr([{ type: 'result', is_error: true, result: 'quota' }]);
+check('errors in a result are reported', ev[0].type === 'error' && ev[0].text === 'quota', JSON.stringify(ev));
+check('unknown JSON is left for plain-text handling', translate({ hello: 1 }, { sessionId: null }) === null);
+check('custom args: placeholders and quoting', JSON.stringify(harnesses({ customAgents: [{ id: 'x', name: 'X', command: 'x', args: 'run "a b" --m {model} {prompt}' }] }).find((h) => h.id === 'x').args({ prompt: 'P', model: 'M' })) === '["run","a b","--m","M","P"]' && splitArgs('').length === 0);
+check('custom args without {prompt} get it appended', harnesses({ customAgents: [{ id: 'y', name: 'Y', command: 'y', args: '--json' }] }).find((h) => h.id === 'y').args({ prompt: 'P' }).join() === '--json,P');
+
+
+
+// Branches and worktrees: switching parks uncommitted work per branch, compare shows what a PR would contain.
+(async () => {
+  const gitx = require(path.join(repo, 'electron', 'git.cjs'));
+  const { execFileSync } = require('child_process');
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-git-'));
+  const g = (...a) => execFileSync('git', a, { cwd: top, encoding: 'utf8' }).trim();
+  const read = (n) => fs.readFileSync(path.join(top, n), 'utf8').replace(/\r\n/g, '\n');
+  g('init', '-b', 'main'); g('config', 'user.email', 't@t'); g('config', 'user.name', 't'); g('config', 'core.autocrlf', 'false');
+  fs.writeFileSync(path.join(top, 'a.txt'), 'one\n'); g('add', '-A'); g('commit', '-m', 'first');
+  g('switch', '-c', 'feature');
+  fs.writeFileSync(path.join(top, 'a.txt'), 'one\ntwo\n'); g('commit', '-am', 'second');
+  fs.writeFileSync(path.join(top, 'a.txt'), 'one\ntwo\nwip\n'); fs.writeFileSync(path.join(top, 'new.txt'), 'n\n');
+  let r = await gitx.switchBranch(top, 'main');
+  check('switching parks uncommitted work, untracked files included', r.parked === 2 && read('a.txt') === 'one\n' && !fs.existsSync(path.join(top, 'new.txt')), JSON.stringify(r));
+  const listed = await gitx.branches(top);
+  check('the branch list shows where work is parked', listed.branches.find((b) => b.name === 'feature')?.parked === 1 && listed.branches.find((b) => b.name === 'main')?.current, JSON.stringify(listed.branches));
+  r = await gitx.switchBranch(top, 'feature');
+  check('switching back brings the parked work back', r.restored && read('a.txt').endsWith('wip\n') && fs.existsSync(path.join(top, 'new.txt')) && !g('stash', 'list'), JSON.stringify(r));
+  const c = await gitx.compare(top, { base: 'main', working: true });
+  check('compare: commits and files against the base, uncommitted included', c.commits.length === 1 && c.files.map((x) => x.path).sort().join() === 'a.txt,new.txt' && c.files.find((x) => x.path === 'a.txt').before === 'one\n' && c.conflicts?.length === 0, JSON.stringify({ ...c, files: c.files.map((x) => x.path) }));
+  const c2 = await gitx.compare(top, { base: 'main', working: false });
+  check('compare: committed work only', c2.files.length === 1 && c2.files[0].after === 'one\ntwo\n', JSON.stringify(c2.files));
+  g('add', '-A'); g('commit', '-m', 'wip');
+  g('switch', 'main'); fs.writeFileSync(path.join(top, 'a.txt'), 'uno\n'); g('commit', '-am', 'clash'); g('switch', 'feature');
+  const c3 = await gitx.compare(top, { base: 'main', working: false });
+  check('compare: conflicts with the base are found', c3.conflicts?.join() === 'a.txt' && c3.behind === 1, JSON.stringify(c3.conflicts));
+  const w = await gitx.addWorktree(top, { branch: 'side', create: true });
+  check('a new branch can get its own worktree folder', fs.existsSync(path.join(w.open, 'a.txt')) && !!(await gitx.branches(top)).branches.find((b) => b.name === 'side')?.worktree, w.open);
+  r = await gitx.switchBranch(top, 'side');
+  check('a branch open in another worktree is opened there, not checked out twice', !!r.worktree && path.resolve(r.worktree) === path.resolve(w.open), JSON.stringify(r));
+  await gitx.removeWorktree(top, w.open);
+  check('removing a worktree keeps its branch', !fs.existsSync(w.open) && g('branch', '--list', 'side').includes('side'));
+
+  // Against origin: publish, see what's new there, pull it, compare with the remote copy.
+  const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-origin-'));
+  execFileSync('git', ['init', '-q', '--bare', bare]);
+  g('remote', 'add', 'origin', bare);
+  let st = await gitx.status(top);
+  check('a branch that was never pushed is local only', !st.upstream && !st.gone, JSON.stringify(st));
+  st = await gitx.push(top);
+  check('publishing sets up tracking', st.upstream && st.upstreamName === 'origin/feature' && st.ahead === 0 && st.behind === 0, JSON.stringify(st));
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-clone-'));
+  execFileSync('git', ['clone', '-q', '-b', 'feature', bare, other]);
+  const o = (...a) => execFileSync('git', a, { cwd: other, encoding: 'utf8' }).trim();
+  o('config', 'user.email', 'o@o'); o('config', 'user.name', 'o');
+  fs.writeFileSync(path.join(other, 'b.txt'), 'from elsewhere\n'); o('add', '-A'); o('commit', '-qm', 'teammate'); o('push', '-q');
+  fs.writeFileSync(path.join(top, 'a.txt'), read('a.txt') + 'local wip\n');
+  st = await gitx.fetchOrigin(top);
+  check('fetching shows what is new on origin', st.behind === 1 && st.ahead === 0 && st.fetchedAt > Date.now() - 60000, JSON.stringify(st));
+  const vs = await gitx.compare(top, { remote: true, working: true });
+  check('compare with origin: what you would pull and your local edits', vs.remote && vs.incoming.length === 1 && vs.commits.length === 0 && vs.files.map((x) => x.path).join() === 'a.txt' && vs.incomingFiles.map((x) => x.path).join() === 'b.txt' && vs.incomingFiles[0].kind === 'add' && vs.conflicts?.length === 0, JSON.stringify({ ...vs, files: vs.files.map((x) => x.path) }));
+  st = await gitx.pull(top);
+  check('pulling fast-forwards and keeps uncommitted edits', st.behind === 0 && fs.existsSync(path.join(top, 'b.txt')) && read('a.txt').endsWith('local wip\n'), JSON.stringify(st));
+  g('commit', '-qam', 'mine'); o('commit', '-qm', 'theirs', '--allow-empty'); o('push', '-q');
+  await gitx.fetchOrigin(top);
+  check('pushing is refused while origin has commits you lack', /Pull first/.test(await gitx.push(top).then(() => '', (e) => e.message)));
+  check('pulling refuses to merge when both sides moved', /both moved on/.test(await gitx.pull(top).then(() => '', (e) => e.message)));
+  fs.rmSync(other, { recursive: true, force: true });
+  fs.rmSync(bare, { recursive: true, force: true });
+  fs.rmSync(top, { recursive: true, force: true });
+  fs.rmSync(top + '.worktrees', { recursive: true, force: true });
+})().catch((e) => check('git branches and worktrees', false, e.stack)).finally(() => {
+  console.log(`${pass} pass, ${failed} fail`);
+  process.exit(failed ? 1 : 0);
+});

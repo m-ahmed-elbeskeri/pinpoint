@@ -5,6 +5,8 @@ const path = require('node:path');
 const { isWin } = require('./cli.cjs');
 const { runClaude } = require('./agent-claude.cjs');
 const { runCodex } = require('./agent-codex.cjs');
+const { runGeneric } = require('./agent-generic.cjs');
+const { harnesses, harness, binOf } = require('./harnesses.cjs');
 
 function detectOne(bin) {
   return new Promise((resolve) => {
@@ -15,12 +17,25 @@ function detectOne(bin) {
 }
 
 async function detectAgents(settings) {
-  const [claude, codex] = await Promise.all([detectOne(settings.claudePath), detectOne(settings.codexPath)]);
-  return { claude, codex };
+  const list = harnesses(settings);
+  const [claude, codex, ...rest] = await Promise.all([detectOne(settings.claudePath), detectOne(settings.codexPath), ...list.map((h) => detectOne(binOf(settings, h)))]);
+  return { claude, codex, ...Object.fromEntries(list.map((h, i) => [h.id, rest[i]])) };
 }
 
 function runAgent(opts) {
-  return opts.settings.agent === 'codex' ? runCodex(opts) : runClaude(opts);
+  const id = opts.settings.agent;
+  if (id === 'codex') return runCodex(opts);
+  const h = id === 'claude' ? null : harness(opts.settings, id);
+  return h ? runGeneric(h, opts) : runClaude(opts);
+}
+
+// What the renderer needs to list and configure every harness.
+function harnessList(settings) {
+  return [
+    { id: 'claude', name: 'Claude Code', bin: 'claude', steerable: true },
+    { id: 'codex', name: 'Codex', bin: 'codex', steerable: true },
+    ...harnesses(settings).map((h) => ({ id: h.id, name: h.name, bin: h.bin, custom: !!h.custom, access: h.access, defaultAccess: h.defaultAccess, resumes: !!h.resumes })),
+  ];
 }
 
 const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -70,4 +85,4 @@ function modelCatalog() {
   };
 }
 
-module.exports = { runAgent, detectAgents, modelCatalog };
+module.exports = { runAgent, detectAgents, modelCatalog, harnessList };

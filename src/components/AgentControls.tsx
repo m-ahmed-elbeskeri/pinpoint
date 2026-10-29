@@ -1,7 +1,7 @@
 import { ShieldCheck } from './icons';
 import { Dropdown, type DropdownItem } from './Dropdown';
 import { ModelPicker } from './ModelPicker';
-import type { ModelCatalog, Settings } from '../lib/types';
+import type { HarnessInfo, ModelCatalog, Settings } from '../lib/types';
 
 const EFFORT_INFO: Record<string, { label: string; desc: string }> = {
   minimal: { label: 'Minimal', desc: 'Almost no reasoning' },
@@ -30,10 +30,32 @@ interface Props {
   catalog: ModelCatalog | null;
   onChange(patch: Partial<Settings>): void;
   disabled?: boolean;
+  harness?: HarnessInfo;
 }
 
-export function AgentControls({ settings, catalog, onChange, disabled }: Props) {
+export function AgentControls({ settings, catalog, onChange, disabled, harness }: Props) {
   const agent = settings.agent;
+  if (agent !== 'claude' && agent !== 'codex') {
+    const access = harness?.access || [];
+    const model = settings.agentModels?.[agent];
+    return (
+      <div className="agent-controls">
+        {model && <span className="harness-model" title="Model (change it in Settings)">{model}</span>}
+        {access.length > 0 && (
+          <Dropdown
+            className="dd-access"
+            icon={<ShieldCheck size={12} />}
+            title="Access"
+            value={settings.agentAccess?.[agent] || harness?.defaultAccess || access[0].value}
+            items={access}
+            onChange={(v) => onChange({ agentAccess: { ...settings.agentAccess, [agent]: v } })}
+            disabled={disabled}
+            align="right"
+          />
+        )}
+      </div>
+    );
+  }
   const cat = catalog?.[agent];
   const modelKey = agent === 'claude' ? 'claudeModel' : 'codexModel';
   const effortKey = agent === 'claude' ? 'claudeEffort' : 'codexEffort';
@@ -82,7 +104,7 @@ export function AgentControls({ settings, catalog, onChange, disabled }: Props) 
         icon={<ShieldCheck size={12} />}
         title="Access"
         value={access}
-        items={[...ACCESS[agent]]}
+        items={[...ACCESS[agent as keyof typeof ACCESS]]}
         onChange={(v) => onChange({ [accessKey]: v } as Partial<Settings>)}
         disabled={disabled}
         align="right"

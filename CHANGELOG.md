@@ -4,6 +4,33 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-29
+
+### Added
+
+- **A new look, closer to t3code and Codex.** A sidebar on the left lists your projects and their chats, grouped by day, with search; other projects expand to show their chats. A **Running** section lists what's in flight: working chats, background runs, side chats, the dev server and terminals, each with jump-to and stop. Quieter neutral colours, with yellow kept for the logo, pins and the annotate outline.
+- **Light theme.** Choose System, Light or Dark in Settings, from the command palette or with `/theme`.
+- **Command palette.** Ctrl/Cmd+K finds chats and runs commands. New shortcuts: Ctrl/Cmd+Shift+O new chat, Ctrl/Cmd+J terminal, Ctrl/Cmd+Shift+B chats sidebar, Ctrl/Cmd+Shift+A side chat.
+- **More coding agents.** Besides Claude Code and Codex: Gemini CLI, Qwen Code, Cursor Agent, OpenCode, Amp, Factory Droid, GitHub Copilot CLI, Goose and Aider, plus any other CLI added as a custom agent in Settings. Pick the agent from a dropdown in the composer.
+- **Approvals in the chat.** When Claude Code (in Edit files mode) or Codex wants to run something it isn't allowed to yet, a card asks: Allow once, Always or Deny. The chat shows **needs you** in the sidebar, and a desktop notification appears if the window is in the background.
+- **Live plan.** The agent's to-do list shows as a checklist pinned at the top of the chat while it works.
+- **Diffs in edit steps.** Edit steps show their line counts and open to a red/green diff. Runs of tool steps fold into one **Worked · N steps** row.
+- **@ files and / commands.** Type `@` in the composer to pick a project file, or `/` for commands such as `/plan`, `/edit`, `/side`, `/draw` and `/settings`. `/plan` puts the agent in Plan only, shown as a pill on the composer.
+- **Side chats.** Ask a quick question in a tab next to your chat without touching it: the same agent, read-only, in its own session. Several can be open. Select text in the chat to start a side chat about it, or to quote it in a reply.
+- **Annotate by clicking or dragging.** In Annotate mode (formerly Select), a click picks an element and a drag draws a mark.
+- **Branches, worktrees and pull requests in the git panel.** Switch or create branches (uncommitted changes come along, or are kept for the branch you left), open a branch in its own worktree folder, fetch, pull and push, see each branch's pull request, and compare a branch with any base: its commits, changed files and diffs, plus what's new on origin.
+
+### Changed
+
+- Annotations are compact rows; the screenshot opens when you click it.
+- **Pin** moved from the composer to the browser toolbar.
+- The start screen and empty chat are plain: no explanatory text.
+- "No visible change" and "Not visible here yet" notes are one line, with the explanation on hover.
+
+### Fixed
+
+- **The composer could jump up the panel, leaving empty space under it.** Focusing a text box scrolled the whole app; it no longer can.
+
 ## [0.6.0] - 2026-10-11
 
 ### Added

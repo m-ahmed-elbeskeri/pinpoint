@@ -95,6 +95,7 @@ interface Props {
   initialUrl: string;
   hidden?: boolean;
   partition?: string;
+  onScribble?(points: [number, number][]): void;
   onManip(m: { uid: string; kind: 'resize' | 'reorder'; width?: string | null; height?: string | null; from?: number; to?: number; count?: number; before?: string | null }): void;
   onPicked(el: PickedElement): void;
   onNavigate(state: { url: string; title: string; canBack: boolean; canForward: boolean }): void;
@@ -246,6 +247,7 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
         else if (e.channel === 'step') cb.current.onStep(data);
         else if (e.channel === 'manip') cb.current.onManip(data);
+        else if (e.channel === 'scribble') cb.current.onScribble?.(data.points);
         else if (e.channel === 'net') cb.current.onRequest(data);
         else if (e.channel === 'pointer') el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         else if (e.channel === 'hits' || e.channel === 'reply') {

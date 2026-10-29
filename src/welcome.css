@@ -2,7 +2,7 @@
   --T: 7.5s;
   --y: #ffd60a;
   --r: #ff4f3a;
-  position: absolute; inset: 0; z-index: 4; overflow: hidden; background: #0e0e10;
+  position: absolute; inset: 0; z-index: 4; overflow: hidden; background: var(--bg);
   display: grid; place-items: center; padding: 40px;
   container: welcome / inline-size;
 }
