@@ -4,6 +4,8 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-30
+
 ### Added
 
 - **Review beside the chat.** The diff docks over the page area while the chat stays usable. Each change can be kept, reverted on its own, explained in a side chat or commented on; comments go to the agent as one message.
@@ -14,7 +16,7 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ### Changed
 
-- The chat reads as one flow: steps, plan and result lose their boxes, and a finished plan folds to one line.
+- The chat reads as one flow: steps, plan and result lose their boxes, and a finished plan folds to one line, and only a result that needs a look carries an icon.
 - **Tools are tabs.** Terminal, Dev server, Network and Agent logs open as tabs beside your pages instead of a bottom drawer. Hover + to pick one; click + for a blank tab that offers them all.
 - Access levels are icons in the composer: eye for Plan only, pencil for Edit files, lightning for Full access.
 - Test conditions is a window you can drag around, open until you close it.
