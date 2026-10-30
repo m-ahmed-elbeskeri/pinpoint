@@ -3,7 +3,7 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, ShieldCheck, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+  ExternalLink, ShieldCheck, ClipboardCopy, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
 } from './icons';
 import { flowVerdict } from '../lib/flow';
 import type { ApprovalDecision, BuildSize, ChatItem, ToolEdit, DiffFile, FileChange, FlowResult, PerfMetrics, RevertResult } from '../lib/types';
@@ -351,6 +351,7 @@ function ToolRow({ item, root }: { item: Extract<ChatItem, { kind: 'tool' }>; ro
         <Icon size={13} className="tool-icon" />
         <span className="tool-name">{item.name}</span>
         <span className="tool-detail">{shortPath(item.detail, root)}</span>
+        {item.ms != null && item.ms >= 1500 && <span className="tool-ms">{secs(item.ms)}</span>}
         {diff && (added > 0 || removed > 0) && <span className="df-stat"><i className="add">+{added}</i><i className="del">−{removed}</i></span>}
         {item.status === 'running' ? <Loader2 size={13} className="spin" />
           : item.status === 'error' ? <XCircle size={13} className="err" /> : null}
@@ -364,11 +365,13 @@ function ToolRow({ item, root }: { item: Extract<ChatItem, { kind: 'tool' }>; ro
   );
 }
 
-function Thinking({ text, streaming }: { text: string; streaming?: boolean }) {
+export const secs = (ms?: number) => (!ms ? '' : ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))}s` : `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`);
+
+function Thinking({ text, streaming, ms }: { text: string; streaming?: boolean; ms?: number }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`thinking ${streaming ? 'live' : ''}`}>
-      <button onClick={() => setOpen(!open)}><Brain size={13} /> {streaming ? 'Thinking…' : 'Thought'} <ChevronRight size={12} className={`chev ${open ? 'open' : ''}`} /></button>
+      <button onClick={() => setOpen(!open)}><Brain size={13} /> <span className={streaming ? 'shimmer' : ''}>{streaming ? 'Thinking…' : ms && ms >= 1000 ? `Thought for ${secs(ms)}` : 'Thought'}</span> <ChevronRight size={12} className={`chev ${open ? 'open' : ''}`} /></button>
       {open && <div className="thinking-body">{text}</div>}
     </div>
   );
@@ -390,6 +393,8 @@ interface ItemProps {
   onCompare(runId: string, pair?: string): void;
   onPickVariant(itemId: string, runId: string): void;
   onApprove(itemId: string, decision: ApprovalDecision): void;
+  onEditMessage(text: string): void;
+  onSendText(text: string): void;
   onMeasureBuild(runId: string): void;
   onOpenLocal(): void;
   onFlowFix(runId: string): void;
@@ -404,6 +409,27 @@ const STEER_TAG = {
   now: { icon: Zap, text: 'Interrupted and sent' },
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button onClick={() => { navigator.clipboard?.writeText(text); setDone(true); setTimeout(() => setDone(false), 1200); }} title="Copy">
+      {done ? <Check size={12} /> : <ClipboardCopy size={12} />}
+    </button>
+  );
+}
+
+// After a finished run: one-click follow-ups.
+function QuickReplies({ ok, onSend }: { ok: boolean; onSend(text: string): void }) {
+  const replies = ok
+    ? ['Continue', 'Make it more subtle', 'Explain what you changed']
+    : ['Try again', 'What went wrong?', 'Try a different approach'];
+  return (
+    <div className="quick-replies">
+      {replies.map((r) => <button key={r} onClick={() => onSend(r)}>{r}</button>)}
+    </div>
+  );
+}
 
 function Attachments({ annotations }: { annotations: Extract<ChatItem, { kind: 'user' }>['annotations'] }) {
   const [open, setOpen] = useState<string | null>(null);
@@ -423,7 +449,7 @@ function Attachments({ annotations }: { annotations: Extract<ChatItem, { kind: '
   );
 }
 
-export function ChatItemView({ item, live, onForceSteer, onApprove, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
+export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
   const [loadStats, setLoadStats] = useState(false);
   switch (item.kind) {
     case 'user': {
@@ -444,6 +470,13 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, root, busy, 
           {item.variants && <div className="steer-tag"><Layers size={11} /> {item.variants} variants</div>}
           {item.annotations.length > 0 && <Attachments annotations={item.annotations} />}
           {item.text && <div className="msg-text">{item.text}</div>}
+          {item.text && (
+            <div className="msg-actions">
+              <CopyButton text={item.text} />
+              <button onClick={() => onEditMessage(item.text)} title="Put this back in the composer to edit and send"><Pencil size={12} /></button>
+              {!busy && <button onClick={() => onSendText(item.text)} title="Send it again"><RotateCw size={12} /></button>}
+            </div>
+          )}
           {item.annotations.filter((a) => a.note.trim()).map((a) => (
             <div key={a.id} className="msg-note"><span className="badge sm" style={{ background: a.color }}>{a.n}</span>{a.note}</div>
           ))}
@@ -451,9 +484,14 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, root, busy, 
       );
     }
     case 'text':
-      return <div className={`msg agent ${item.streaming ? 'streaming' : ''}`}><Markdown text={item.text} /></div>;
+      return (
+        <div className={`msg agent ${item.streaming ? 'streaming' : ''}`}>
+          <Markdown text={item.text} />
+          {!item.streaming && <div className="msg-actions"><CopyButton text={item.text} /></div>}
+        </div>
+      );
     case 'thinking':
-      return <Thinking text={item.text} streaming={item.streaming} />;
+      return <Thinking text={item.text} streaming={item.streaming} ms={item.ms} />;
     case 'tool':
       return <ToolRow item={item} root={root} />;
     case 'plan': {
@@ -464,7 +502,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, root, busy, 
           <ol>
             {item.steps.map((x, i) => (
               <li key={i} className={x.status}>
-                <i className="plan-mark">{x.status === 'completed' ? <Check size={11} weight="bold" /> : x.status === 'in_progress' && live ? <Loader2 size={11} className="spin" /> : null}</i>
+                <i className="plan-mark">{x.status === 'completed' ? <Check size={11} /> : x.status === 'in_progress' && live ? <Loader2 size={11} className="spin" /> : null}</i>
                 <span>{x.text}</span>
               </li>
             ))}
@@ -674,11 +712,14 @@ function WorkLog({ steps, live, root, actions, busy, gitRepo }: { steps: ChatIte
   const failed = tools.some((t) => t.kind === 'tool' && t.status === 'error');
   const last = [...tools].reverse()[0];
   const summary = stepSummary(steps);
+  const first = steps.find((s) => s.kind === 'tool' && s.at);
+  const ends = steps.map((s) => (s.kind === 'tool' && s.at ? s.at + (s.ms || 0) : 0));
+  const took = !live && first?.kind === 'tool' && first.at ? Math.max(...ends) - first.at : 0;
   return (
     <div className={`work-log ${shown ? 'open' : ''} ${live ? 'live' : ''}`}>
       <button className="work-head" onClick={() => setOpen(!shown)}>
         {live ? <Loader2 size={13} className="spin" /> : <Wrench size={13} className="work-icon" />}
-        <span className="work-title">{live ? 'Working' : 'Worked'} · {tools.length} step{tools.length === 1 ? '' : 's'}</span>
+        <span className={`work-title ${live ? 'shimmer' : ''}`}>{live ? 'Working' : took >= 1000 ? `Worked ${secs(took)}` : 'Worked'} · {tools.length} step{tools.length === 1 ? '' : 's'}</span>
         <span className="work-sum">{live && !shown && last?.kind === 'tool' ? `${last.name} ${shortPath(last.detail, root)}` : summary}</span>
         {failed && <XCircle size={13} className="err" />}
         <ChevronRight size={13} className={`chev ${shown ? 'open' : ''}`} />
@@ -709,5 +750,7 @@ export const ChatList = memo(function ChatList({ items, actions, root, busy, git
     out.push(<ChatRow key={item.id} item={item} live={busy && i > lastDone && (item.kind === 'user' || item.kind === 'plan')} root={root} busy={busy} gitRepo={gitRepo} {...actions} />);
     i++;
   }
+  const last = items[items.length - 1];
+  if (!busy && last?.kind === 'done' && !last.undone && !last.variant) out.push(<QuickReplies key="quick" ok={last.ok} onSend={actions.onSendText} />);
   return <>{out}</>;
 });

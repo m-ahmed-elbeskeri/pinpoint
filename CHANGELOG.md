@@ -4,6 +4,28 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+- **Message actions.** Hover a message to copy it; your own messages can also be put back in the composer to edit, or sent again.
+- **Quick replies** after a finished run: Continue, Make it more subtle, Explain what you changed (or Try again after a failure).
+- **Timers.** Steps show how long they took, thinking shows "Thought for 12s", and step groups show the total. "Working" and "Thinking" shimmer while they run.
+- **Chat menu.** Rename, pin to top, archive or export a chat as Markdown from its ⋯ menu in the sidebar.
+- **Palette search inside chats.** Type a phrase to find the chats that mention it; the commands you used last appear first.
+- **Shortcuts sheet** on `?`, and Ctrl/Cmd+, for Settings.
+- **Status bar** (off by default; turn it on from the palette): branch, dev server, page errors, agent and model, and what this chat has cost.
+
+### Changed
+
+- **Less clutter.** The page tools fold into one ⋯ that opens a labelled menu on hover and shows what's switched on. Share, variants and background runs sit behind ⋯ in the composer. DevTools moved to the palette; Settings sits in the sidebar; New chat in the chat panel hides while the sidebar has its own.
+- Shorter placeholder and hint text.
+- Desktop notifications use Pinpoint's icon and bring the window back when clicked.
+
+### Fixed
+
+- **Before and after screenshots could include Pinpoint's pins and highlights.** Captures now wait until the page has really hidden them.
+- **Bold icons didn't draw** (the Send arrow among them): the build only bundles regular and filled icons.
+- **A pinned chat that was archived couldn't be shown again.**
+
 ## [0.7.0] - 2026-10-29
 
 ### Added

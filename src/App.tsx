@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Globe, Loader2, Monitor,
   Plus, RotateCw, Smartphone, Square, Tablet,
-  Bug, Brain, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
+  Bug, Brain, Search, Keyboard, DotsThree, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
   AppWindow, Boxes, GitCompareArrows, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
 } from './components/icons';
@@ -26,6 +26,7 @@ import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
 import { ThreadSidebar, type RunningTask } from './components/ThreadSidebar';
 import { SideChat } from './components/SideChat';
+import { ShortcutsSheet, StatusBar } from './components/StatusBar';
 import { useComposerAssist, type SlashCommand } from './components/ComposerAssist';
 import { AgentPicker } from './components/AgentPicker';
 import { CommandPalette, type Command } from './components/CommandPalette';
@@ -138,11 +139,24 @@ export default function App() {
   const [devInfo, setDevInfo] = useState<DevDetection | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Rarely used controls stay folded behind a ⋯ until asked for.
+  const [pageToolsOpen, setPageToolsOpen] = useState(false);
+  const [composerMore, setComposerMore] = useState(false);
+  const [toolsHover, setToolsHover] = useState(false);
+  const toolsTimer = useRef(0);
   const [sides, setSides] = useState<{ id: string; title: string; seed: string | null; running: boolean }[]>([]);
   const [activeSide, setActiveSide] = useState<string | null>(null);
   const [askAside, setAskAside] = useState<{ text: string; x: number; y: number } | null>(null);
   const [terms, setTerms] = useState<TermSession[]>([]);
   const [paletteChats, setPaletteChats] = useState<ChatMeta[]>([]);
+  const [paletteHits, setPaletteHits] = useState<{ id: string; title: string; snippet: string }[]>([]);
+  const searchTimer = useRef(0);
+  const searchChats = (q: string) => {
+    clearTimeout(searchTimer.current);
+    if (q.length < 2) { setPaletteHits([]); return; }
+    searchTimer.current = window.setTimeout(() => api.searchChats(q).then(setPaletteHits).catch(() => setPaletteHits([])), 180);
+  };
   const [toast, setToast] = useState<string | null>(null);
 
   const [chatId, setChatId] = useState<string | null>(null);
@@ -308,7 +322,7 @@ export default function App() {
   // A desktop notification, only when the window isn't the one you're looking at.
   const notify = (body: string) => {
     if (document.hasFocus()) return;
-    try { new Notification('Pinpoint', { body }); } catch { /* notifications unavailable */ }
+    api.notify('Pinpoint', body).catch(() => {});
   };
   const [others, setOthers] = useState<OtherChat[]>([]);
   const chatRef = useRef(chat);
@@ -379,7 +393,7 @@ export default function App() {
       case 'git': refreshGit(); break;
       case 'text': { const m = splitMemory(e.text); p.items = finalizeItems(p.items, 'text', m.text, m.extra); break; }
       case 'thinking': p.items = finalizeItems(p.items, 'thinking', e.text); break;
-      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits }); break;
+      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now() }); break;
       case 'plan': p.items = applyPlan(p.items, e.steps); break;
       case 'approval':
         add({ kind: 'approval', id: uid(), runId: e.runId, approvalId: e.approvalId, tool: e.tool, detail: e.detail, status: 'pending' });
@@ -388,7 +402,7 @@ export default function App() {
         flash(`Another chat is waiting for your OK: ${chatTitle(p.items)}`);
         break;
       case 'tool_result':
-        p.items = p.items.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output } : it));
+        p.items = p.items.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output, ms: it.at ? Date.now() - it.at : undefined } : it));
         break;
       case 'error': add({ kind: 'error', id: uid(), text: e.text }); break;
       case 'done':
@@ -895,8 +909,7 @@ export default function App() {
     const pad = 20;
     const crop = clampRect({ x: fresh.rect.x - pad, y: fresh.rect.y - pad, width: fresh.rect.width + pad * 2, height: fresh.rect.height + pad * 2 }, b.size());
     let image: string | undefined;
-    b.send('hide', true);
-    await sleep(90);
+    await b.hideMarks();
     try { if (crop.width > 2 && crop.height > 2) image = await b.capture(crop); } catch {  } finally { b.send('hide', false); }
     patchAnn(id, (x) => (x.element ? { ...x, image: image ?? x.image, element: { ...x.element, styles: fresh.styles, html: fresh.html, rect: fresh.rect } } : x));
   };
@@ -998,8 +1011,7 @@ export default function App() {
     const b = browser.current;
     if (!b || !page.shapes.length) return null;
     const { width, height } = b.size();
-    b.send('hide', true);
-    await sleep(90);
+    await b.hideMarks();
     let bg: string | null = null;
     try { bg = await b.capture(); } finally { b.send('hide', false); }
     const image = await composite({ background: bg, width, height, shapes: page.shapes });
@@ -1107,7 +1119,13 @@ export default function App() {
     startRun(merged);
   }, [runId, flushTick]);
 
+  // Quick replies and Retry send a fixed text without touching what's typed in the composer.
+  const sendOverride = useRef<string | null>(null);
+  const sendText = (text: string) => { sendOverride.current = text; send(); };
   const send = async (mode: 'queue' | 'now' | 'bg' = 'queue') => {
+    const typed = sendOverride.current ?? instruction;
+    const fromBox = sendOverride.current == null;
+    sendOverride.current = null;
     if (!settings || busy || (mode !== 'bg' && job && !runRef.current)) return;
     verifyPending.current = null;
     if (mode !== 'bg') matchRef.current = null;
@@ -1125,7 +1143,7 @@ export default function App() {
       if (d) { anns.push(d); n++; page.reset(); }
       const s = await makeSketch(n);
       if (s) { anns.push(s); sketch.reset(); }
-      if (!instruction.trim() && !anns.length) { flash('Pick an element, draw, or type what you want first.'); return; }
+      if (!typed.trim() && !anns.length) { flash('Pick an element, draw, or type what you want first.'); return; }
 
       const b = browser.current!;
       const hasPage = !!navRef.current.url && navRef.current.url !== 'about:blank';
@@ -1160,7 +1178,7 @@ export default function App() {
       const request: AgentRequest = {
         url: navRef.current.url, title: navRef.current.title, viewport: { ...b.size(), responsive: device.on || undefined },
         breakpoints: device.on && breakpoints.length ? breakpoints : undefined,
-        instruction: instruction.trim(),
+        instruction: typed.trim(),
         overview,
         annotations: anns.map(({ id: _i, color: _c, ...a }) => a),
         diagnostics,
@@ -1175,7 +1193,7 @@ export default function App() {
       if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
       const thumbs = await Promise.all(anns.map(async (a) => ({ ...a, image: a.image ? await thumbnail(a.image) : undefined })));
 
-      setInstruction('');
+      if (fromBox) setInstruction('');
       setAnnotations([]);
       setActiveId(null);
       setPopover(null);
@@ -1246,8 +1264,7 @@ export default function App() {
   const cleanCapture = async (): Promise<string | null> => {
     const b = browser.current;
     if (!b) return null;
-    b.send('hide', true);
-    await sleep(90);
+    await b.hideMarks();
     try { return await b.capture(undefined, true); } catch { return null; } finally { b.send('hide', false); }
   };
 
@@ -1799,14 +1816,14 @@ export default function App() {
         break;
       }
       case 'thinking': finalizeBlock('thinking', e.text); break;
-      case 'tool': push({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits }); break;
+      case 'tool': push({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now() }); break;
       case 'plan': setChat((c) => applyPlan(c, e.steps)); break;
       case 'approval':
         push({ kind: 'approval', id: uid(), runId: e.runId, approvalId: e.approvalId, tool: e.tool, detail: e.detail, status: 'pending' });
         notify(`Waiting for your OK: ${e.tool}`);
         break;
       case 'tool_result':
-        setChat((c) => c.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output } : it)));
+        setChat((c) => c.map((it) => (it.kind === 'tool' && it.toolId === e.id ? { ...it, status: e.ok ? 'ok' : 'error', output: e.text || it.output, ms: it.at ? Date.now() - it.at : undefined } : it)));
         break;
       case 'log': addLog('agent', e.text + '\n'); break;
       case 'error': push({ kind: 'error', id: uid(), text: e.text }); break;
@@ -1849,6 +1866,12 @@ export default function App() {
   };
   const chatHandlers = {
     onApprove: approve,
+    onEditMessage: (text: string) => {
+      setInstruction(text);
+      setActiveSide(null);
+      setTimeout(() => { const c = composerRef.current; if (c) { c.focus({ preventScroll: true }); c.selectionStart = c.selectionEnd = c.value.length; } }, 30);
+    },
+    onSendText: (text: string) => sendText(text),
     onReload: () => browser.current?.reload(),
     onUndo: undoRun,
     onReview: (id: string, path?: string) => setDiffView({ runId: id, path }),
@@ -1944,7 +1967,7 @@ export default function App() {
       frame = 0;
       if (!grid || !last) return;
       if (which === 'panel') grid.style.gridTemplateColumns = left ? `${tw}px ${last}px 1fr` : `${tw}px 1fr ${last}px`;
-      else grid.style.gridTemplateRows = `52px 1fr ${last}px`;
+      else grid.style.gridTemplateRows = `52px 1fr ${last}px${settingsRef.current?.statusBar === true ? ' 24px' : ''}`;
     };
     const move = (ev: PointerEvent) => {
       if (which === 'panel') {
@@ -1997,6 +2020,8 @@ export default function App() {
       const typing = /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable;
       const m = modeRef.current;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { if (e.shiftKey) toggleThreads(); else togglePanel(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') { setSettingsOpen(true); e.preventDefault(); return; }
+      if (!typing && !e.ctrlKey && !e.metaKey && e.key === '?') { setShortcutsOpen((o) => !o); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') { setPaletteOpen((o) => !o); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { setDrawerOpen((o) => !o); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') { newChatRef.current(); e.preventDefault(); return; }
@@ -2092,6 +2117,7 @@ export default function App() {
     { id: 'chat:aside', group: 'Chat', label: 'New side chat', hint: 'ask without touching this chat', icon: MessageSquare, keys: combo('A', true), disabled: !projectDir, run: () => newSide() },
     ...sides.map((x) => ({ id: `chat:${x.id}`, group: 'Chat', label: x.title, hint: 'side chat', icon: MessageSquare, run: () => setActiveSide(x.id) })),
     { id: 'chat:new', group: 'Chat', label: 'New chat', icon: SquarePen, keys: combo('O', true), disabled: !!job || !chat.length, run: newChat },
+    ...paletteHits.filter((h) => h.id !== chatId).map((h) => ({ id: `hit:${h.id}`, group: 'In chats', label: h.title || 'Untitled', hint: h.snippet, icon: Search, disabled: !!job, run: () => openChat(h.id) })),
     ...paletteChats.filter((c) => c.id !== chatId).map((c) => ({ id: `chat:${c.id}`, group: 'Chat', label: c.title || 'Untitled', hint: others.find((o) => o.id === c.id)?.running ? 'working' : 'open chat', icon: MessageSquare, disabled: !!job, run: () => openChat(c.id) })),
     { id: 'view:threads', group: 'View', label: settings.threadsHidden ? 'Show chats sidebar' : 'Hide chats sidebar', icon: PanelLeft, keys: combo('B', true), run: toggleThreads },
     { id: 'view:panel', group: 'View', label: settings.panelHidden ? 'Show agent panel' : 'Hide agent panel', icon: PanelLeft, keys: combo('B'), run: togglePanel },
@@ -2117,6 +2143,8 @@ export default function App() {
     { id: 'proj:open', group: 'Project', label: 'Open project folder…', icon: FolderOpen, run: () => pickProject() },
     ...(settings.recentProjects || []).filter((d) => d !== projectDir).map((d) => ({ id: `proj:${d}`, group: 'Project', label: `Switch to ${d.split(/[\\/]/).pop()}`, hint: d, icon: FolderOpen, disabled: !!job, run: () => pickProject(d) })),
     ...(['system', 'light', 'dark'] as const).map((t) => ({ id: `app:theme:${t}`, group: 'App', label: `Theme: ${t === 'system' ? 'match the system' : t}`, icon: Palette, disabled: theme === t, run: () => saveSettings({ theme: t }) })),
+    { id: 'app:shortcuts', group: 'App', label: 'Keyboard shortcuts', icon: Keyboard, keys: '?', run: () => setShortcutsOpen(true) },
+    { id: 'app:statusbar', group: 'View', label: settings.statusBar ? 'Hide status bar' : 'Show status bar', icon: PanelLeft, run: () => saveSettings({ statusBar: !settings.statusBar }) },
     { id: 'app:settings', group: 'App', label: 'Settings', icon: SettingsIcon, run: () => setSettingsOpen(true) },
     { id: 'app:layout', group: 'App', label: 'Copy layout report', icon: ClipboardCopy, keys: combo('L', true), run: () => { navigator.clipboard?.writeText(layoutReport()); flash('Layout report copied.'); } },
   ];
@@ -2130,11 +2158,14 @@ export default function App() {
   const dh = drawerHeight ?? settings.drawerHeight ?? 240;
   const row2 = left ? "'threads panel stage'" : "'threads stage panel'";
   const row3 = left ? "'threads panel drawer'" : "'threads drawer panel'";
+  const statusOn = settings.statusBar === true;
   const gridStyle: React.CSSProperties = {
     gridTemplateColumns: left ? `${tw}px ${pw}px 1fr` : `${tw}px 1fr ${pw}px`,
-    gridTemplateRows: drawerOpen ? `52px 1fr ${dh}px` : '52px 1fr',
-    gridTemplateAreas: `'threads top top' ${row2}${drawerOpen ? ' ' + row3 : ''}`,
+    gridTemplateRows: `52px 1fr${drawerOpen ? ` ${dh}px` : ''}${statusOn ? ' 24px' : ''}`,
+    gridTemplateAreas: `'threads top top' ${row2}${drawerOpen ? ' ' + row3 : ''}${statusOn ? " 'threads status status'" : ''}`,
   };
+  const chatCost = chat.reduce((sum, it) => sum + (it.kind === 'done' && it.cost ? it.cost : 0), 0);
+  const modelName = settings.agent === 'claude' ? settings.claudeModel : settings.agent === 'codex' ? settings.codexModel : settings.agentModels?.[settings.agent];
 
   return (
     <div className={`app ${resizing ? 'resizing' : ''} ${threadsOn ? 'threads-on' : ''}`} style={gridStyle}>
@@ -2213,24 +2244,35 @@ export default function App() {
             </div>
           )}
           <ProfileMenu profiles={profiles} current={tab?.profile || ''} onPick={(p) => tab && setTabProfile(tab.id, p)} onSave={saveProfiles} />
-          <div className="vp-toggles">
-            <button type="button" className={wsOpen ? 'on' : ''} onClick={() => { if (wsOpen) browser.current?.closeWorkspace(); setWsOpen(!wsOpen); }} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Components: render any component from the project on its own, with its props and variants"><Boxes size={14} /></button>
-            <button type="button" onClick={() => setEnginesOpen(true)} disabled={!/^https?:/.test(nav.url)} title="Other browsers: see this page in Safari's engine (WebKit) and Firefox"><AppWindow size={14} /></button>
-            <button type="button" className={sweepOpen ? 'on' : ''} onClick={() => setSweepOpen(true)} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Check every page at phone, tablet and desktop widths for layout, loading and accessibility problems"><ShieldCheck size={14} /></button>
-            <span className="vp-sep" />
-            {QUICK_SIZES.map((q) => {
-              const on = q.w ? device.on && device.w === q.w : !device.on;
-              return <button type="button" key={q.label} className={on && !multi ? 'on' : ''} onClick={() => { setMulti(false); setDevice(q.w ? { on: true, w: q.w, h: q.h, zoom: device.zoom, touch: device.touch } : DEVICE_OFF); }} title={q.label}><q.icon size={14} /></button>;
-            })}
-            <button type="button" className={multi ? 'on' : ''} onClick={() => setMulti(!multi)} disabled={!/^(https?|file):/.test(nav.url)} title="Phone, tablet and desktop side by side"><Columns3 size={14} /></button>
-            <span className="vp-sep" />
-            <button type="button" className={frozen ? 'on' : ''} onClick={() => setFrozen(!frozen)} title="Freeze the page so open menus, tooltips and popovers stay put. Press F while pointing at the page to keep its hover state (F8 while typing)."><Snowflake size={14} /></button>
-            <ConditionsMenu
-              value={cond} set={changeConditions} onStep={stepAnimation}
-              env={env} setEnv={setEnv}
-              layout={settings.layoutOverlay !== false}
-              setLayout={(on) => { saveSettings({ layoutOverlay: on }); browser.current?.send('layout', on); }}
-            />
+          {/* Page tools: one button that shows what's on, and opens a labelled menu on hover (click pins it). */}
+          <div className={`vp-tools ${pageToolsOpen ? 'pinned' : ''}`} onMouseEnter={() => { clearTimeout(toolsTimer.current); setToolsHover(true); }} onMouseLeave={() => { toolsTimer.current = window.setTimeout(() => setToolsHover(false), 220); }}>
+            <button type="button" className={`vp-more ${pageToolsOpen || toolsHover ? 'on' : ''}`} onClick={() => setPageToolsOpen(!pageToolsOpen)} title="Page tools: sizes, side by side, components, other browsers, page check, freeze, conditions">
+              {device.on && !multi && (() => { const I = device.w < 600 ? Smartphone : device.w < 1000 ? Tablet : Monitor; return <I size={14} className="vp-state" />; })()}
+              {multi && <Columns3 size={14} className="vp-state" />}
+              {wsOpen && <Boxes size={14} className="vp-state" />}
+              {frozen && <Snowflake size={14} className="vp-state" />}
+              {(cond.stress.length > 0 || cond.network !== 'normal' || cond.anim !== 1) && <span className="vp-state-dot" title="Test conditions are on" />}
+              <DotsThree size={15} />
+            </button>
+            <div className={`vp-toggles ${pageToolsOpen || toolsHover ? 'open' : ''}`}>
+              <button type="button" className={wsOpen ? 'on' : ''} onClick={() => { if (wsOpen) browser.current?.closeWorkspace(); setWsOpen(!wsOpen); }} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Components: render any component from the project on its own, with its props and variants"><Boxes size={14} /><span className="vp-label">Components</span></button>
+              <button type="button" onClick={() => setEnginesOpen(true)} disabled={!/^https?:/.test(nav.url)} title="Other browsers: see this page in Safari's engine (WebKit) and Firefox"><AppWindow size={14} /><span className="vp-label">Other browsers</span></button>
+              <button type="button" className={sweepOpen ? 'on' : ''} onClick={() => setSweepOpen(true)} disabled={!projectDir || !/^https?:/.test(nav.url)} title="Check every page at phone, tablet and desktop widths for layout, loading and accessibility problems"><ShieldCheck size={14} /><span className="vp-label">Check every page</span></button>
+              <span className="vp-sep" />
+              {QUICK_SIZES.map((q) => {
+                const on = q.w ? device.on && device.w === q.w : !device.on;
+                return <button type="button" key={q.label} className={on && !multi ? 'on' : ''} onClick={() => { setMulti(false); setDevice(q.w ? { on: true, w: q.w, h: q.h, zoom: device.zoom, touch: device.touch } : DEVICE_OFF); }} title={q.label}><q.icon size={14} /><span className="vp-label">{q.label.split(' (')[0].replace(' × ', '×')}</span></button>;
+              })}
+              <button type="button" className={multi ? 'on' : ''} onClick={() => setMulti(!multi)} disabled={!/^(https?|file):/.test(nav.url)} title="Phone, tablet and desktop side by side"><Columns3 size={14} /><span className="vp-label">Side by side</span></button>
+              <span className="vp-sep" />
+              <button type="button" className={frozen ? 'on' : ''} onClick={() => setFrozen(!frozen)} title="Freeze the page so open menus, tooltips and popovers stay put. Press F while pointing at the page to keep its hover state (F8 while typing)."><Snowflake size={14} /><span className="vp-label">Freeze</span></button>
+              <ConditionsMenu
+                value={cond} set={changeConditions} onStep={stepAnimation}
+                env={env} setEnv={setEnv}
+                layout={settings.layoutOverlay !== false}
+                setLayout={(on) => { saveSettings({ layoutOverlay: on }); browser.current?.send('layout', on); }}
+              />
+            </div>
           </div>
         </div>
         <div className={`frame-wrap ${device.on ? 'device' : ''}`}>
@@ -2335,7 +2377,7 @@ export default function App() {
               />
             )}
 
-            {mode === 'select' && !popover && <div className="mode-hint">Click an element to annotate it · drag to draw on the page · ↑/↓ pick parent/child · Alt measures from the selected one · F freezes open menus · Esc to exit</div>}
+            {mode === 'select' && !popover && <div className="mode-hint">Click to annotate · drag to draw · Esc to exit</div>}
 
             {(!nav.url || nav.url === 'about:blank') && mode !== 'sketch' && (
               <Welcome
@@ -2417,7 +2459,7 @@ export default function App() {
           </div>
           <div className="spacer" />
           {projectDir && !threadsOn && <ChatHistory currentId={chatId} disabled={!!job} others={others} onOpen={openChat} onDelete={deleteChat} />}
-          <button className="btn ghost xs" onClick={newChat} disabled={!!job || !chat.length} title={`${runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
+          <button className={`btn ghost xs panel-new ${threadsOn ? 'quiet' : ''}`} onClick={newChat} disabled={!!job || !chat.length} title={`${runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
         </div>
         {sides.map((x) => (
           <SideChat
@@ -2444,7 +2486,7 @@ export default function App() {
           {(runId || job) && (
             <div className="working">
               <Loader2 size={14} className="spin" />{' '}
-              {job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${agentName} is ${runMeta?.verify ? 'checking the result' : runMeta?.match ? `matching the mockup, round ${runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}
+              <span className="shimmer">{job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${agentName} is ${runMeta?.verify ? 'checking the result' : runMeta?.match ? `matching the mockup, round ${runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}</span>
             </div>
           )}
           {away && chat.length > 0 && (
@@ -2457,7 +2499,7 @@ export default function App() {
           <div ref={chatEnd} />
         </div>
 
-        <div className="composer">
+        <div className={`composer ${composerMore ? 'more' : ''}`}>
           <BackgroundRuns
             runs={bgRuns} onApply={applyBg} onDiscard={discardBg}
             onDiff={(r) => api.bgDiff(r.id).then((text) => setPatchView({ title: r.title, text }))}
@@ -2495,7 +2537,7 @@ export default function App() {
               onSelect={assist.track}
               placeholder={runId
                 ? `Steer the agent: Enter adds it after the current step · ${MOD}+Enter interrupts now`
-                : annotations.length ? 'Anything else? (optional)' : chat.length ? 'Follow up…  (@ a file, / for commands)' : 'Describe the change, or point at the page first…  (@ a file, / for commands)'}
+                : annotations.length ? 'Anything else? (optional)' : chat.length ? 'Follow up' : 'Describe a change  ·  @ files  ·  / commands'}
               onKeyDown={(e) => {
                 if (assist.onKeyDown(e)) return;
                 if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
@@ -2507,6 +2549,7 @@ export default function App() {
             />
             <div className="composer-foot">
               <button className="icon-btn attach-btn" onClick={() => fileInput.current?.click()} title="Attach reference images (or paste / drop them)"><Paperclip size={15} /></button>
+              {!runId && <button className={`icon-btn composer-more ${composerMore ? 'on' : ''}`} onClick={() => setComposerMore(!composerMore)} title={composerMore ? 'Fewer options' : 'More: share, variants, run in the background'}><DotsThree size={15} /></button>}
               {!runId && <HandoffMenu hasRequest={!!(instruction.trim() || annotations.length)} canIssue={!!gitStatus?.gh.authed && !!gitStatus?.remote} onExport={exportHandoff} onCopy={copyHandoff} onIssue={issueHandoff} onImport={importHandoff} onReview={() => setReviewOpen(true)} reviewCount={reviewComments.length} reviewing={reviewing} />}
               <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) addReferences(e.target.files); e.target.value = ''; }} />
               {!runId && <VariantsMenu value={settings.variants || 0} set={(n) => saveSettings({ variants: n })} />}
@@ -2528,7 +2571,7 @@ export default function App() {
               ) : (
                 <div className="run-actions">
                   <button className="icon-btn bg-btn" disabled={!canSend || !!bgBlocked} onClick={() => send('bg')} title={bgBlocked || 'Run in the background: in a separate copy of the project, so you can keep working and send more'}><SquareStack size={15} /></button>
-                  <button className="btn primary sm send-btn round" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><ArrowUp size={15} weight="bold" /><span className="sr-only">Send</span></button>
+                  <button className="btn primary sm send-btn round" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><ArrowUp size={15} /><span className="sr-only">Send</span></button>
                 </div>
               )}
             </div>
@@ -2624,7 +2667,20 @@ export default function App() {
         <BranchCompare status={gitStatus} initialBase={branchCompare.base} initialRemote={branchCompare.remote} prDefaults={prDefaults} flash={flash} onOpen={openFile} onClose={() => { setBranchCompare(null); refreshGit(); }} />
       )}
       {settingsOpen && <SettingsModal settings={settings} agents={agents} harnesses={harnesses} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}
-      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
+      {statusOn && (
+        <StatusBar
+          branch={gitStatus?.repo ? gitStatus.branch : undefined} dirty={gitStatus?.dirty}
+          devRunning={devRunning} devCommand={devCommand}
+          errors={consoleLog.filter((c) => c.level === 'error').length}
+          agent={agentName} model={modelName || ''} cost={chatCost}
+          // The git panel keeps its own open state; its chip in the composer is the way in.
+          onBranch={() => (document.querySelector('.composer .git-wrap > .chip') as HTMLElement | null)?.click()}
+          onDev={() => { setDrawerOpen(true); setDrawerTab('dev'); }}
+          onErrors={() => browser.current?.devtools()}
+        />
+      )}
+      {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
+      {paletteOpen && <CommandPalette commands={commands} onQuery={searchChats} onClose={() => { setPaletteOpen(false); setPaletteHits([]); }} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

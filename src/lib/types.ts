@@ -156,8 +156,8 @@ export type ApprovalDecision = 'allow' | 'always' | 'deny';
 export type ChatItem =
   | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later'; variants?: number; background?: boolean }
   | { kind: 'text'; id: string; text: string; streaming?: boolean }
-  | { kind: 'thinking'; id: string; text: string; streaming?: boolean }
-  | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string; edits?: ToolEdit[] }
+  | { kind: 'thinking'; id: string; text: string; streaming?: boolean; at?: number; ms?: number }
+  | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string; edits?: ToolEdit[]; at?: number; ms?: number }
   | { kind: 'plan'; id: string; steps: PlanStep[] }
   | { kind: 'approval'; id: string; runId: string; approvalId: string; tool: string; detail: string; status: 'pending' | ApprovalDecision | 'expired' }
   | { kind: 'error'; id: string; text: string }
@@ -226,7 +226,7 @@ export interface DiffFile {
 }
 export interface RevertResult { restored: string[]; conflicts: string[]; failed: string[]; allReverted: boolean }
 
-export interface ChatMeta { id: string; title: string; createdAt: number; updatedAt: number; count: number; agent?: AgentId }
+export interface ChatMeta { id: string; title: string; createdAt: number; updatedAt: number; count: number; agent?: AgentId; renamed?: boolean; pinned?: boolean; archived?: boolean }
 export interface Chat {
   id: string; title: string; createdAt: number; updatedAt: number; agent: AgentId;
   session: { id: string; agent: AgentId } | null;
@@ -276,6 +276,7 @@ export interface Settings {
   panelHidden: boolean;
   threadsHidden?: boolean;
   theme?: 'system' | 'dark' | 'light';
+  statusBar?: boolean;
   drawerHeight: number;
   useDesign: boolean;
   useMemory: boolean;
@@ -332,6 +333,7 @@ export interface PinpointAPI {
   detectAgents(): Promise<Record<AgentId, { ok: boolean; version?: string }>>;
   modelCatalog(): Promise<ModelCatalog>;
   listAgents(): Promise<HarnessInfo[]>;
+  notify(title: string, body: string): Promise<boolean>;
   projectFiles(): Promise<string[]>;
   setWindowTheme(light: boolean): Promise<boolean>;
   pickFolder(known?: string): Promise<string | null>;
@@ -414,6 +416,9 @@ export interface PinpointAPI {
   handoffIssue(args: { title: string; body: string; attach?: { name: string; data: Handoff } }): Promise<{ url: string; gist: string | null }>;
   listChats(): Promise<ChatMeta[]>;
   listChatsFor(dir: string): Promise<ChatMeta[]>;
+  patchChat(id: string, patch: { renamed?: string | null; pinned?: boolean; archived?: boolean }): Promise<boolean>;
+  searchChats(q: string): Promise<{ id: string; title: string; updatedAt: number; snippet: string }[]>;
+  exportChat(id: string): Promise<string | null>;
   loadChat(id: string): Promise<Chat | null>;
   saveChat(chat: Chat): Promise<boolean>;
   deleteChat(id: string): Promise<boolean>;

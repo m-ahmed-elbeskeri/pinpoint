@@ -24,15 +24,15 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 ## Chat and transcript
 
-- [ ] "Thought for 12s" and per-step timers
+- [x] "Thought for 12s" and per-step timers
 - [ ] Context / token meter by the composer; cost per message, per thread, daily total
-- [ ] Message hover actions: copy, edit and resend, fork from here, retry
+- [x] Message hover actions: copy, edit and resend, retry (fork from here still open)
 - [ ] Rewind to any message (restore files to that point)
 - [ ] Subagent / parallel-task lanes
 - [ ] Live strip of files the agent is reading
 - [ ] Rate-limit and quota warnings before the limit
 - [ ] MCP / hooks status per server
-- [ ] Quick-reply chips after a result: Continue, Try again, Make it smaller
+- [x] Quick-reply chips after a result
 
 ## Composer
 
@@ -45,7 +45,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 ## Threads and workspace
 
 - [ ] Branch / worktree per thread, shown on the thread
-- [ ] Thread states: needs approval, error, unread; pin, rename, archive
+- [x] Thread states: needs approval; pin, rename, archive (error / unread still open)
 - [ ] Diff side panel next to the chat (not only a modal)
 - [ ] Accept or reject per hunk; "Explain this change"; inline review comments that feed the next message
 - [ ] Change summary at the top of a turn with jump links
@@ -58,7 +58,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 ## Sharing
 
-- [ ] Export or share a thread (Markdown, HTML)
+- [x] Export a thread as Markdown
 - [ ] Thread → PR with written description and screenshots
 - [ ] Shared project memory and rules
 - [ ] Hand a thread to a teammate
@@ -66,10 +66,10 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 ## Feel
 
 - [ ] Dock badge on done / needs input; optional sounds
-- [ ] Shortcuts sheet (`?`); density, font size and accent settings
-- [ ] Shimmer on "Thinking…"; small enter animations; animated check on completion
-- [ ] Empty states that rotate tips
-- [ ] Palette: recent section, search inside chat contents
+- [x] Shortcuts sheet (`?`) (density, font size and accent still open)
+- [x] Shimmer on "Thinking…" and "Working" (enter animations still open)
+- [x] ~~Empty states that rotate tips~~ dropped: empty states stay clean
+- [x] Palette: recent section, search inside chat contents
 - [ ] Resume card for interrupted runs
-- [ ] Status bar: branch, dev server, agent, model, tokens, errors
+- [x] Status bar: branch, dev server, errors, agent, model, cost (off by default)
 - [ ] Onboarding that detects installed CLIs and helps sign in

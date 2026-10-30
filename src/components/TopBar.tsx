@@ -1,5 +1,5 @@
 import {
-  Brain, Bug, CircleDot, Download, FolderOpen, Search, MousePointer2, MousePointerClick, Palette, PanelLeft, PanelRight,
+  Brain, CircleDot, Download, FolderOpen, Search, MousePointer2, MousePointerClick, Palette, PanelLeft, PanelRight,
   PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare,
 } from './icons';
 import type { ContextTab } from './ContextSheet';
@@ -100,9 +100,8 @@ export function TopBar(p: Props) {
         >
           <Brain size={16} />{p.memoryOn > 0 && <b className="icon-count">{p.memoryOn}</b>}
         </button>
-        <button className="icon-btn" onClick={p.onDevtools} title="Page DevTools"><Bug size={16} /></button>
         <button className={`icon-btn ${p.panelHidden ? '' : 'on'}`} onClick={p.onTogglePanel} title={`Toggle sidebar (${p.mod}+B)`}><PanelIcon size={16} /></button>
-        <button className="icon-btn" onClick={p.onSettings} title="Settings"><SettingsIcon size={16} /></button>
+        {p.threadsHidden && <button className="icon-btn" onClick={p.onSettings} title="Settings (Ctrl/⌘ ,)"><SettingsIcon size={16} /></button>}
       </div>
     </header>
   );

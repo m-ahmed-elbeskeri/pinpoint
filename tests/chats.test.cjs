@@ -59,7 +59,7 @@ const server = http.createServer((req, res) => { res.setHeader('content-type', '
 server.listen(0, '127.0.0.1', () => {
   const base = `http://127.0.0.1:${server.address().port}`;
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-ud-'));
-  fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: proj, url: base + '/', claudePath: fakeBin, agent: 'claude', autoVerify: false, variants: 0, a11yCheck: false, routeCheck: false, perfCheck: false }));
+  fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: proj, url: base + '/', claudePath: fakeBin, agent: 'claude', autoVerify: false, variants: 0, a11yCheck: false, routeCheck: false, perfCheck: false, statusBar: true }));
   process.env.PINPOINT_USER_DATA = ud;
   const { app, BrowserWindow, webContents } = require('electron');
   require(path.join(repo, 'electron', 'main.cjs'));
@@ -203,7 +203,7 @@ server.listen(0, '127.0.0.1', () => {
       log('the tab is named after the question', /quick-aside/.test(await ui(`document.querySelector('.ptab.side').textContent`)));
       await ui(`document.querySelector('.ptab-new').click(); 0`);
       await sleep(200);
-      log('several side chats can be open, each starting empty', (await ui(`document.querySelectorAll('.ptab.side').length`)) === 2 && /Ask about/.test(await ui(`document.querySelector('.side-chat:not(.hidden) .side-body').innerText`)));
+      log('several side chats can be open, each starting empty', (await ui(`document.querySelectorAll('.ptab.side').length`)) === 2 && (await ui(`document.querySelectorAll('.side-chat:not(.hidden) .side-body > *').length`)) === 0);
       await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);
       await sleep(200);
       log('the Chat tab brings the main chat back', await ui(`getComputedStyle(document.querySelector('.chat')).display !== 'none' && !document.querySelector('.side-chat:not(.hidden)')`));
@@ -242,6 +242,52 @@ server.listen(0, '127.0.0.1', () => {
       await ui(`document.querySelector('.plan-pill').click(); 0`);
       await sleep(300);
       log('the Plan only pill switches it back off', JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8')).claudePermission === 'acceptEdits');
+
+      // Batch 1: quick replies, message actions, chat menu, palette search, status bar, shortcuts.
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      log('a finished run offers quick replies', (await ui(`document.querySelectorAll('.quick-replies button').length`)) === 3);
+      await ui(`document.querySelector('.msg.user .msg-actions button:nth-child(2)').click(); 0`);
+      await sleep(150);
+      log('Edit puts a message back in the composer', (await ui(`document.querySelector('.composer-box textarea').value`)) === (await ui(`document.querySelector('.msg.user .msg-text').textContent`)));
+      await typeIn('');
+      const usersBefore = await ui(`document.querySelectorAll('.chat .msg.user').length`);
+      await ui(`document.querySelector('.quick-replies button').click(); 0`);
+      await until(`document.querySelectorAll('.chat .msg.user').length > ${usersBefore} ? 1 : 0`, 5000);
+      log('a quick reply sends that message', /Continue|Try again/.test(await ui(`[...document.querySelectorAll('.chat .msg.user')].pop().textContent`)));
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+
+      const menu = async (label) => {
+        await ui(`document.querySelector('.thread.on .thread-more').click(); 0`);
+        await sleep(150);
+        await ui(`[...document.querySelectorAll('.thread-menu button')].find((b) => b.textContent.includes(${JSON.stringify(label)})).click(); 0`);
+        await sleep(300);
+      };
+      const current = await ui(`[...document.querySelectorAll('.thread')].findIndex((t) => t.classList.contains('on'))`);
+      await menu('Rename');
+      await ui(`(() => { const i = document.querySelector('.thread-rename'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'My renamed chat'); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+      await sleep(900);
+      log('a chat can be renamed from its menu, and the name sticks', /My renamed chat/.test(await ui(`document.querySelector('.thread.on').textContent`)) && saved().some((c) => c.renamed === 'My renamed chat'), current);
+      await menu('Pin to top');
+      log('pinning puts it in a Pinned group', (await ui(`[...document.querySelectorAll('.threads-label')].some((l) => l.textContent === 'Pinned')`)) && saved().some((c) => c.pinned));
+      await menu('Archive');
+      log('archiving hides it behind Show archived', !(await ui(`!!document.querySelector('.thread.on')`)) && /Show archived \(1\)/.test(await ui(`document.querySelector('.threads-more')?.textContent || ''`)));
+      await ui(`document.querySelector('.threads-more').click(); 0`);
+      await sleep(200);
+      log('and Show archived brings it back into view', await ui(`!!document.querySelector('.thread.on')`));
+
+      await ui(`document.querySelector('.cmd-pill').click(); 0`);
+      await sleep(200);
+      await ui(`(() => { const i = document.querySelector('.cmd-input input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'Wrote quick-beta'); i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      const hits = await until(`[...document.querySelectorAll('.cmd-item')].filter((b) => /In chats/.test(b.textContent)).map((b) => b.textContent).join(' | ')`, 4000);
+      log('the palette finds chats by what was said in them', /quick-beta/.test(hits || ''), hits);
+      await ui(`document.querySelector('.cmd-input input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0`);
+      await sleep(150);
+
+      log('the status bar shows the agent', /9\.9\.9|Claude Code/.test(await ui(`document.querySelector('.statusbar')?.textContent || ''`)));
+      await ui(`document.activeElement && document.activeElement.blur(); window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true })); 0`);
+      await sleep(200);
+      log('? opens the shortcuts sheet', await ui(`!!document.querySelector('.modal.shortcuts')`));
+      await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0`);
 
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }

@@ -16,7 +16,12 @@ export interface Command {
 interface Props {
   commands: Command[];
   onClose(): void;
+  onQuery?(q: string): void;
 }
+
+const RECENT_KEY = 'pp.recentCommands';
+const readRecent = (): string[] => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
+const remember = (id: string) => { try { localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...readRecent().filter((x) => x !== id)].slice(0, 5))); } catch { /* storage off */ } };
 
 function score(c: Command, q: string) {
   if (!q) return 1;
@@ -30,13 +35,21 @@ function score(c: Command, q: string) {
   return i === q.length ? 1 : 0;
 }
 
-export function CommandPalette({ commands, onClose }: Props) {
+export function CommandPalette({ commands, onClose, onQuery }: Props) {
   const [query, setQuery] = useState('');
   const [hi, setHi] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => { onQuery?.(query.trim()); }, [query]);
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
+    if (!q) {
+      // No query: the commands you used last come first, then everything in its usual order.
+      const byId = new Map(commands.filter((c) => !c.disabled).map((c) => [c.id, c]));
+      const recent = readRecent().map((id) => byId.get(id)).filter((c): c is Command => !!c && !c.id.startsWith('hit:')).map((c) => ({ ...c, group: 'Recent' }));
+      const rest = commands.filter((c) => !c.disabled && !c.id.startsWith('hit:'));
+      return [...recent, ...rest];
+    }
     return commands
       .filter((c) => !c.disabled)
       .map((c, i) => ({ c, s: score(c, q), i }))
@@ -53,6 +66,7 @@ export function CommandPalette({ commands, onClose }: Props) {
   const run = (c: Command | undefined) => {
     if (!c) return;
     onClose();
+    remember(c.id.replace(/^Recent:/, ''));
     c.run();
   };
 
@@ -80,7 +94,7 @@ export function CommandPalette({ commands, onClose }: Props) {
             const head = !query.trim() && c.group !== lastGroup ? c.group : null;
             lastGroup = c.group;
             return (
-              <div key={c.id}>
+              <div key={`${c.group}:${c.id}`}>
                 {head && <div className="cmd-group">{head}</div>}
                 <button className={`cmd-item ${i === hi ? 'hi' : ''}`} onMouseMove={() => setHi(i)} onClick={() => run(c)}>
                   {c.icon ? <c.icon size={15} className="cmd-icon" /> : <span className="cmd-icon" />}

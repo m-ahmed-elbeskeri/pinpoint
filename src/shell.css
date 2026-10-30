@@ -400,3 +400,96 @@ html, body, #root, .app { overflow: clip; }
 .assist-sub { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--muted); direction: rtl; text-align: left; }
 .plan-pill { position: absolute; top: -11px; right: 12px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text); background: var(--bg-4); border: 1px solid var(--line-2); }
 .plan-pill:hover { border-color: var(--ring); }
+
+/* ---- message hover actions and quick replies ---- */
+.msg { position: relative; }
+.msg-actions { position: absolute; bottom: -12px; right: 6px; z-index: 2; display: none; gap: 1px; padding: 2px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line-2); box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
+.msg.agent .msg-actions { right: auto; left: 0; }
+.msg:hover .msg-actions { display: flex; }
+.msg-actions button { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: var(--muted); }
+.msg-actions button:hover { color: var(--text); background: var(--bg-4); }
+.quick-replies { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.quick-replies button { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); font-size: 12px; background: var(--bg-2); }
+.quick-replies button:hover { color: var(--text); border-color: var(--ring); }
+
+/* ---- timers and the "working" shimmer ---- */
+.tool-ms { flex-shrink: 0; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.shimmer {
+  background: linear-gradient(90deg, var(--text-2) 0%, var(--text-2) 40%, var(--text) 50%, var(--text-2) 60%, var(--text-2) 100%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@media (prefers-reduced-motion: reduce) { .shimmer { animation: none; color: var(--text-2); background: none; } }
+
+/* ---- chat menu: rename, pin, archive, export, delete ---- */
+.thread-more.open { display: grid; color: var(--text); background: var(--bg-4); }
+.thread:has(.thread-more.open) .thread-time { display: none; }
+.thread-menu {
+  position: absolute; top: calc(100% + 2px); right: 2px; z-index: 30; min-width: 190px; padding: 4px;
+  border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-2); box-shadow: 0 12px 32px rgba(0, 0, 0, .4); animation: pop .1s ease-out;
+}
+.thread-menu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 9px; border-radius: 7px; font-size: 12.5px; color: var(--text-2); text-align: left; }
+.thread-menu button:hover { background: var(--bg-4); color: var(--text); }
+.thread-menu button.danger:hover { color: var(--bad-fg, #ff8aa0); }
+.thread-rename { flex: 1; min-width: 0; height: 24px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--ring); background: var(--bg); outline: 0; font-size: 12.5px; }
+.thread-pinned { margin-right: 5px; color: var(--muted); vertical-align: -1px; }
+.threads-more { display: block; width: 100%; padding: 8px 8px 2px; text-align: left; font-size: 11.5px; color: var(--muted); }
+.threads-more:hover { color: var(--text-2); }
+.thread-x.confirm:not(.thread-more), .thread-x.confirm:not(.thread-more):hover { color: #fff; background: var(--bad); }
+
+/* ---- status bar ---- */
+.statusbar { grid-area: status; display: flex; align-items: center; gap: 2px; padding: 0 8px; min-width: 0; border-top: 1px solid var(--line); background: var(--bg-2); font-size: 11.5px; color: var(--text-2); overflow: hidden; white-space: nowrap; }
+.statusbar > button, .statusbar > span { display: flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 5px; flex-shrink: 0; }
+.statusbar > button:hover { background: var(--bg-4); color: var(--text); }
+.statusbar svg { color: var(--muted); }
+.sb-dim { color: var(--muted); }
+.sb-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
+.sb-dot.on { background: var(--ok); }
+.sb-errors, .sb-errors svg { color: var(--bad-fg, #ff8aa0); }
+
+/* ---- shortcuts sheet ---- */
+.modal.shortcuts { width: 680px; }
+.shortcut-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+.shortcut-cols section { border-bottom: 0; }
+.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 12.5px; color: var(--text-2); }
+.shortcut-keys { display: flex; gap: 3px; flex-shrink: 0; }
+
+/* ---- less clutter: secondary controls fold behind ⋯ ---- */
+/* Page tools: at rest, only what's switched on (the current size, freeze, conditions, components). */
+.vp-toggles:not(.open) > button:not(.on):not(.vp-more),
+.vp-toggles:not(.open) > .vp-sep,
+.vp-toggles:not(.open) > .cond-wrap:not(:has(> button.on)) { display: none; }
+.vp-toggles .vp-more { color: var(--muted); }
+.vp-toggles .vp-more.on { color: var(--text); background: var(--bg-4); }
+/* Composer: share, variants and background runs show with ⋯, or on their own while they're in use. */
+.composer:not(.more) .composer-foot > .git-wrap:not(:has(.on, b, .live-dot)),
+.composer:not(.more) .composer-foot .run-actions > .bg-btn { display: none; }
+.composer-more { width: 28px; height: 28px; color: var(--muted); flex-shrink: 0; }
+/* The chat panel's New chat duplicates the sidebar's while the sidebar is open. */
+.panel-new.quiet { display: none; }
+/* The "No git" chip says nothing until you look for git. */
+.composer:not(:hover) .ctx-bar .git-wrap > .chip.muted { display: none; }
+
+/* ---- page tools: one ⋯ button showing what's on; a labelled menu on hover ---- */
+.vp-tools { position: relative; flex-shrink: 0; margin-left: 2px; padding-left: 5px; border-left: 1px solid var(--line); }
+.vp-tools .vp-more { display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 6px; border-radius: 7px; color: var(--muted); }
+.vp-tools .vp-more:hover, .vp-tools .vp-more.on { color: var(--text); background: var(--bg-4); }
+.vp-state { color: var(--text-2); }
+.vp-state-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.vp-tools > .vp-toggles {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; display: none; flex-direction: column; align-items: stretch; gap: 1px;
+  min-width: 230px; margin: 0; padding: 5px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--bg-2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .45); animation: pop .1s ease-out;
+}
+.vp-tools > .vp-toggles::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+.vp-tools > .vp-toggles.open { display: flex; }
+.vp-tools > .vp-toggles > button, .vp-tools > .vp-toggles > .cond-wrap > button {
+  display: flex !important; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; height: 30px; padding: 0 9px; border-radius: 7px; color: var(--text-2); font-size: 12.5px;
+}
+.vp-tools > .vp-toggles > button:hover:not(:disabled), .vp-tools > .vp-toggles > .cond-wrap > button:hover { background: var(--bg-4); color: var(--text); }
+.vp-tools > .vp-toggles > button.on, .vp-tools > .vp-toggles > .cond-wrap > button.on { color: var(--text); background: var(--bg-3); }
+.vp-tools > .vp-toggles > .cond-wrap { display: block !important; }
+.vp-tools > .vp-toggles > .cond-wrap > button::after { content: 'Test conditions'; }
+.vp-tools > .vp-toggles > .vp-sep { display: block !important; width: auto; height: 1px; margin: 4px 2px; background: var(--line); }
+.vp-label { white-space: nowrap; }

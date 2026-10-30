@@ -87,7 +87,6 @@ export function SideChat({ sideId, active, agentName, seed, onSeedUsed, getConte
         <button className="icon-btn xs" onClick={clear} disabled={!items.length} title="Start over"><RotateCcw size={13} /></button>
       </div>
       <div className="side-body" ref={body}>
-        {items.length === 0 && <div className="side-empty">Ask about the code, the page or what the agent just did. Your main chat keeps going.</div>}
         {items.map((it) => it.kind === 'user'
           ? <div key={it.id} className="msg user side-q">{it.text}</div>
           : it.kind === 'error'
@@ -115,7 +114,7 @@ export function SideChat({ sideId, active, agentName, seed, onSeedUsed, getConte
         />
         {running
           ? <button className="icon-btn side-send stop" onClick={() => window.pinpoint.sideCancel(sideId)} title="Stop"><Square size={10} weight="fill" /></button>
-          : <button className="btn primary side-send" onClick={ask} disabled={!text.trim()} title="Ask (Enter)"><ArrowUp size={14} weight="bold" /></button>}
+          : <button className="btn primary side-send" onClick={ask} disabled={!text.trim()} title="Ask (Enter)"><ArrowUp size={14} /></button>}
       </div>
     </div>
   );

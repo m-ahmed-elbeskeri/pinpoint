@@ -37,14 +37,16 @@ export function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
   for (const d of buf) {
     const last = next[next.length - 1];
     if (last && last.kind === d.kind && last.streaming) next[next.length - 1] = { ...last, text: last.text + d.text };
-    else next.push({ kind: d.kind, id: uid(), text: d.text, streaming: true });
+    else next.push({ kind: d.kind, id: uid(), text: d.text, streaming: true, ...(d.kind === 'thinking' && { at: Date.now() }) });
   }
   return next;
 }
 export function finalizeItems(c: ChatItem[], kind: 'text' | 'thinking', text: string, extra: ChatItem[] = []): ChatItem[] {
   let i = -1;
   for (let j = c.length - 1; j >= 0; j--) { const it = c[j]; if (it.kind === kind && it.streaming) { i = j; break; } }
-  const done: ChatItem[] = text ? [{ kind, id: i >= 0 ? c[i].id : uid(), text }] : [];
+  const prev = i >= 0 ? c[i] : null;
+  const at = prev?.kind === 'thinking' ? prev.at : undefined;
+  const done: ChatItem[] = text ? [kind === 'thinking' ? { kind, id: prev?.id ?? uid(), text, at, ms: at ? Date.now() - at : undefined } : { kind, id: prev?.id ?? uid(), text }] : [];
   if (i >= 0) return [...c.slice(0, i), ...done, ...c.slice(i + 1), ...extra];
   return [...c, ...done, ...extra];
 }

@@ -18,7 +18,7 @@ function listChats(root) {
   for (const f of files) {
     try {
       const c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-      out.push({ id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent });
+      out.push({ id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent });
     } catch {  }
   }
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -33,8 +33,60 @@ function saveChat(root, chat) {
   ensureDir(root);
   fs.mkdirSync(pp(root, 'chats'), { recursive: true });
   const items = (chat.items || []).slice(-400);
-  fs.writeFileSync(pp(root, 'chats', `${safeId(chat.id)}.json`), JSON.stringify({ ...chat, items }));
+  // The app saves the conversation; names, pins and archiving set from the sidebar live in the same file and are kept.
+  const prev = loadChat(root, chat.id) || {};
+  const kept = { renamed: prev.renamed, pinned: prev.pinned, archived: prev.archived };
+  fs.writeFileSync(pp(root, 'chats', `${safeId(chat.id)}.json`), JSON.stringify({ ...chat, ...kept, items }));
   return true;
+}
+
+function patchChat(root, id, patch) {
+  const c = loadChat(root, id);
+  if (!c) return false;
+  for (const k of ['renamed', 'pinned', 'archived']) if (k in patch) c[k] = patch[k] || undefined;
+  fs.writeFileSync(pp(root, 'chats', `${safeId(id)}.json`), JSON.stringify(c));
+  return true;
+}
+
+// Chats whose words contain the query, with a snippet around the first hit.
+function searchChats(root, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (q.length < 2) return [];
+  const dir = pp(root, 'chats');
+  let files = [];
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')); } catch { return []; }
+  const out = [];
+  for (const f of files) {
+    let c;
+    try { c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { continue; }
+    for (const it of c.items || []) {
+      const text = it.kind === 'user' || it.kind === 'text' ? String(it.text || '') : '';
+      const at = text.toLowerCase().indexOf(q);
+      if (at < 0) continue;
+      const snippet = text.slice(Math.max(0, at - 40), at + q.length + 60).replace(/\s+/g, ' ').trim();
+      out.push({ id: c.id, title: c.renamed || c.title, updatedAt: c.updatedAt, snippet });
+      break;
+    }
+  }
+  return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 20);
+}
+
+// A chat as Markdown, for sharing or keeping.
+function chatMarkdown(c) {
+  const lines = [`# ${c.renamed || c.title || 'Chat'}`, '', `_${new Date(c.createdAt || Date.now()).toLocaleString()} · ${c.agent === 'codex' ? 'Codex' : c.agent === 'claude' ? 'Claude Code' : c.agent || ''}_`, ''];
+  for (const it of c.items || []) {
+    if (it.kind === 'user') {
+      lines.push('## You', '');
+      if (it.text) lines.push(it.text, '');
+      for (const a of it.annotations || []) if (a.note) lines.push(`- **${a.n}.** ${a.note}`);
+      if ((it.annotations || []).some((a) => a.note)) lines.push('');
+    } else if (it.kind === 'text') lines.push(it.text, '');
+    else if (it.kind === 'tool') lines.push(`- \`${it.name}\` ${it.detail || ''}`.trimEnd());
+    else if (it.kind === 'plan') lines.push('', ...it.steps.map((x) => `- [${x.status === 'completed' ? 'x' : ' '}] ${x.text}`), '');
+    else if (it.kind === 'done') lines.push('', `> ${it.ok ? 'Done' : 'Stopped'}${it.changes?.length ? ` · changed ${it.changes.map((x) => '`' + x.path + '`').join(', ')}` : ''}`, '');
+    else if (it.kind === 'error') lines.push(`> ⚠ ${it.text}`, '');
+  }
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
 function deleteChat(root, id) {
@@ -79,4 +131,4 @@ function writeProfiles(root, list) {
   return list;
 }
 
-module.exports = { ensureDir, listChats, loadChat, saveChat, deleteChat, readDesign, writeDesign, readMemory, writeMemory, readProfiles, writeProfiles };
+module.exports = { ensureDir, listChats, loadChat, saveChat, deleteChat, readDesign, writeDesign, readMemory, writeMemory, readProfiles, writeProfiles, patchChat, searchChats, chatMarkdown };

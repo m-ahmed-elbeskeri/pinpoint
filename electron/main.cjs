@@ -159,6 +159,15 @@ ipcMain.handle('settings:set', (_e, patch) => saveSettings(patch));
 ipcMain.handle('agents:detect', () => detectAgents(loadSettings()));
 ipcMain.handle('agents:models', () => modelCatalog());
 ipcMain.handle('agents:list', () => harnessList(loadSettings()));
+// Desktop notifications carry Pinpoint's own icon (a page-side Notification would show a generic one), and a click brings the window back.
+ipcMain.handle('app:notify', (_e, { title, body }) => {
+  const { Notification } = require('electron');
+  if (!Notification.isSupported()) return false;
+  const n = new Notification({ title: title || 'Pinpoint', body: String(body || '').slice(0, 240), icon: nativeImage.createFromPath(path.join(__dirname, 'icon.png')) });
+  n.on('click', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
+  n.show();
+  return true;
+});
 // Files for @-mentions in the composer: git's view of the project when it's a repo, otherwise a capped walk.
 const SKIP_DIRS = new Set(['node_modules', '.git', '.pinpoint', 'dist', 'build', 'out', '.next', '.nuxt', '.svelte-kit', '.turbo', 'coverage', '.cache', 'vendor', 'target']);
 ipcMain.handle('project:files', async () => {
@@ -716,6 +725,17 @@ ipcMain.handle('chats:listFor', (_e, dir) => (loadSettings().recentProjects.incl
 ipcMain.handle('chats:load', (_e, id) => project.loadChat(projectDir(), id));
 ipcMain.handle('chats:save', (_e, chat) => project.saveChat(projectDir(), chat));
 ipcMain.handle('chats:delete', (_e, id) => project.deleteChat(projectDir(), id));
+ipcMain.handle('chats:patch', (_e, { id, patch }) => project.patchChat(projectDir(), id, patch || {}));
+ipcMain.handle('chats:search', (_e, q) => project.searchChats(projectDir(), q));
+ipcMain.handle('chats:export', async (_e, id) => {
+  const c = project.loadChat(projectDir(), id);
+  if (!c) return null;
+  const name = String(c.renamed || c.title || 'chat').replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'chat';
+  const r = await dialog.showSaveDialog(win, { defaultPath: `${name}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, project.chatMarkdown(c));
+  return r.filePath;
+});
 ipcMain.handle('design:read', () => project.readDesign(projectDir()));
 ipcMain.handle('design:write', (_e, content) => project.writeDesign(projectDir(), content));
 ipcMain.handle('memory:read', () => project.readMemory(projectDir()));

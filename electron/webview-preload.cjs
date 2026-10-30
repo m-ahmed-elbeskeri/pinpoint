@@ -660,7 +660,11 @@ ipcRenderer.on('mode', (_e, m) => {
   renderMarkers();
 });
 ipcRenderer.on('markers', (_e, list) => { markers = list || []; if (!pickHold || Date.now() - pickHold > 1500) hidden = false; ensureUI(); renderMarkers(); });
-ipcRenderer.on('hide', (_e, h) => { pickHold = 0; hidden = !!h; renderMarkers(); renderHover(); });
+// With a token, answer once the markers are really off screen (two frames later), so a screenshot never catches them.
+ipcRenderer.on('hide', (_e, h, token) => {
+  pickHold = 0; hidden = !!h; renderMarkers(); renderHover();
+  if (token) requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.sendToHost('hidden', token)));
+});
 ipcRenderer.on('clean', () => { hoverEl = null; renderHover(); ipcRenderer.sendToHost('cleaned'); });
 ipcRenderer.on('tweak', (_e, { uid, prop, value }) => {
   const el = byUid(uid);

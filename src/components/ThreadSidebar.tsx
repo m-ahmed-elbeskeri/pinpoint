@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronRight, Command, FolderOpen, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, Square, SquarePen, Trash2, X } from './icons';
+import { Archive, Check, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, Square, SquarePen, Trash2, X } from './icons';
 import { Logo } from './Logo';
 import type { ChatMeta, OtherChat } from '../lib/types';
 
@@ -61,6 +61,15 @@ export function ThreadSidebar(p: Props) {
   const [chats, setChats] = useState<ChatMeta[]>([]);
   const [query, setQuery] = useState('');
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  useEffect(() => {
+    if (!menuFor) return;
+    const close = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('.thread-menu, .thread-more')) { setMenuFor(null); setConfirm(null); } };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [menuFor]);
   const [expanded, setExpanded] = useState<Record<string, ChatMeta[] | null>>({});
   const toggleProject = (dir: string) => {
     if (expanded[dir] !== undefined) { setExpanded(({ [dir]: _, ...rest }) => rest); return; }
@@ -76,24 +85,44 @@ export function ThreadSidebar(p: Props) {
   }, [p.projectDir, p.refreshKey]);
 
   const list = useMemo(() => {
-    const rows = chats.map((c) => (c.id === p.chatId ? { ...c, title: p.currentTitle || c.title } : c));
+    const rows = chats.map((c) => (c.id === p.chatId && !c.renamed ? { ...c, title: p.currentTitle || c.title } : c));
     if (p.chatId && p.currentTitle && !rows.some((c) => c.id === p.chatId)) rows.unshift({ id: p.chatId, title: p.currentTitle, createdAt: Date.now(), updatedAt: Date.now(), count: 0 });
     const q = query.trim().toLowerCase();
     return rows.filter((c) => !q || (c.title || 'Untitled').toLowerCase().includes(q)).sort((a, b) => b.updatedAt - a.updatedAt);
   }, [chats, p.chatId, p.currentTitle, query]);
 
+  const archivedCount = list.filter((c) => c.archived).length;
   const groups = useMemo(() => {
     const out: { label: string; items: ChatMeta[] }[] = [];
+    const pinned = list.filter((c) => c.pinned && !c.archived);
+    if (pinned.length) out.push({ label: 'Pinned', items: pinned });
     for (const c of list) {
-      const label = group(c.updatedAt);
+      if ((c.pinned && !c.archived) || (c.archived && !showArchived)) continue;
+      const label = c.archived ? 'Archived' : group(c.updatedAt);
       const g = out.find((x) => x.label === label);
       if (g) g.items.push(c); else out.push({ label, items: [c] });
     }
     return out;
-  }, [list]);
+  }, [list, showArchived]);
+
+  const patch = (id: string, change: { renamed?: string | null; pinned?: boolean; archived?: boolean }) => {
+    setChats((cs) => cs.map((c) => (c.id !== id ? c : {
+      ...c,
+      ...('pinned' in change && { pinned: !!change.pinned }),
+      ...('archived' in change && { archived: !!change.archived }),
+      ...('renamed' in change && { renamed: !!change.renamed, title: change.renamed || c.title }),
+    })));
+    window.pinpoint.patchChat(id, change).catch(() => {});
+  };
+  const commitRename = () => {
+    if (!renaming) return;
+    const name = renaming.value.trim();
+    patch(renaming.id, { renamed: name || null });
+    setRenaming(null);
+  };
 
   const askDelete = (id: string) => {
-    if (confirm === id) {
+    if (confirm === id || menuFor === null) {
       clearTimeout(confirmTimer.current);
       setConfirm(null);
       p.onDelete(id);
@@ -148,7 +177,7 @@ export function ThreadSidebar(p: Props) {
         )}
 
         {p.projectDir && list.length === 0 && (
-          <div className="threads-empty">{query ? 'No chats match.' : 'No chats yet. Point at something on the page and send it.'}</div>
+          <div className="threads-empty">{query ? 'No chats match' : 'No chats yet'}</div>
         )}
         {groups.map((g) => (
           <div key={g.label} className="thread-group">
@@ -167,20 +196,41 @@ export function ThreadSidebar(p: Props) {
                   title={running ? 'Working…' : finished ? 'Finished. Click to see the result.' : c.title || 'Untitled'}
                 >
                   <i className="thread-state">{running ? <Loader2 size={12} className="spin" /> : null}</i>
-                  <span className="thread-title">{c.title || 'Untitled'}</span>
+                  {renaming?.id === c.id ? (
+                    <input
+                      className="thread-rename" autoFocus value={renaming.value} onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setRenaming({ id: c.id, value: e.target.value })} onBlur={commitRename}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(null); }}
+                    />
+                  ) : <span className="thread-title">{c.pinned && <Pin size={10} className="thread-pinned" />}{c.title || 'Untitled'}</span>}
                   <span className="thread-time">{waiting ? 'needs you' : running ? 'working' : finished ? 'done' : ago(c.updatedAt)}</span>
                   <button
-                    className={`thread-x ${confirm === c.id ? 'confirm' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); askDelete(c.id); }}
-                    title={confirm === c.id ? 'Click again to delete' : 'Delete chat'}
+                    className={`thread-x thread-more ${menuFor === c.id ? 'open' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setConfirm(null); setMenuFor(menuFor === c.id ? null : c.id); }}
+                    title="More"
                   >
-                    {confirm === c.id ? <Check size={12} /> : <Trash2 size={12} />}
+                    <DotsThree size={14} />
                   </button>
+                  {menuFor === c.id && (
+                    <div className="thread-menu" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => { setMenuFor(null); setRenaming({ id: c.id, value: c.title || '' }); }}><Pencil size={13} /> Rename</button>
+                      <button onClick={() => { setMenuFor(null); patch(c.id, { pinned: !c.pinned }); }}><Pin size={13} /> {c.pinned ? 'Unpin' : 'Pin to top'}</button>
+                      <button onClick={() => { setMenuFor(null); patch(c.id, { archived: !c.archived }); }}><Archive size={13} /> {c.archived ? 'Unarchive' : 'Archive'}</button>
+                      <button onClick={() => { setMenuFor(null); window.pinpoint.exportChat(c.id).catch(() => null); }}><Download size={13} /> Export as Markdown…</button>
+                      <button className="danger" onClick={() => { if (confirm === c.id) { setMenuFor(null); askDelete(c.id); } else setConfirm(c.id); }}>
+                        <Trash2 size={13} /> {confirm === c.id ? 'Click again to delete' : 'Delete'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         ))}
+
+        {archivedCount > 0 && !query && (
+          <button className="threads-more" onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}</button>
+        )}
 
         <div className="threads-label projects">Projects</div>
         {otherProjects.map((d) => {

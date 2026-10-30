@@ -64,6 +64,8 @@ export interface BrowserHandle {
   reload(): void;
   devtools(): void;
   send(channel: string, ...args: unknown[]): void;
+  /** Hide Pinpoint's marks on the page and resolve once they're gone from the screen. */
+  hideMarks(): Promise<void>;
   capture(rect?: Rect, jpeg?: boolean): Promise<string>;
   hitTest(points: [number, number][]): Promise<ElementInfo[]>;
   locateSource(uid: string): Promise<ElementInfo['source']>;
@@ -114,6 +116,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView(props, ref) {
   const wv = useRef<WebviewEl>(null);
+  const hideSeq = useRef(0);
+  const hideWaits = useRef(new Map<string, () => void>());
   const ready = useRef(false);
   const pending = useRef(new Map<string, (data: any) => void>());
   const cb = useRef(props);
@@ -127,6 +131,16 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
     reload() { wv.current?.reload(); },
     devtools() { wv.current?.openDevTools(); },
     send(channel, ...args) { if (ready.current) wv.current?.send(channel, ...args); },
+    hideMarks() {
+      if (!ready.current || !wv.current) return Promise.resolve();
+      const token = `h${++hideSeq.current}`;
+      return new Promise<void>((resolve) => {
+        const done = () => { hideWaits.current.delete(token); resolve(); };
+        hideWaits.current.set(token, done);
+        setTimeout(done, 500);
+        wv.current!.send('hide', true, token);
+      });
+    },
     async capture(rect, jpeg) {
       const id = wv.current!.getWebContentsId();
       return window.pinpoint.capture(id, rect, jpeg);
@@ -247,6 +261,7 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         else if (e.channel === 'frozen') cb.current.onFrozen(!!data);
         else if (e.channel === 'step') cb.current.onStep(data);
         else if (e.channel === 'manip') cb.current.onManip(data);
+        else if (e.channel === 'hidden') hideWaits.current.get(data)?.();
         else if (e.channel === 'scribble') cb.current.onScribble?.(data.points);
         else if (e.channel === 'net') cb.current.onRequest(data);
         else if (e.channel === 'pointer') el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));

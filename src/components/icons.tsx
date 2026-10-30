@@ -29,6 +29,7 @@ export {
   DiamondsFourIcon as Component,
   ArrowElbowDownRightIcon as CornerDownRight,
   CpuIcon as Cpu,
+  DotsThreeIcon as DotsThree,
   DownloadSimpleIcon as Download,
   EraserIcon as Eraser,
   ArrowSquareOutIcon as ExternalLink,
