@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Globe, Loader2, Monitor,
   Plus, RotateCw, Smartphone, Square, Tablet,
-  Bug, Brain, Search, Keyboard, DotsThree, Pencil, Pin, FileText, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
+  Bug, Brain, AlertTriangle, Search, Keyboard, DotsThree, Pencil, Pin, FileText, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
   AppWindow, Boxes, GitCompareArrows, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
 } from './components/icons';
@@ -27,6 +27,7 @@ import { ChatHistory } from './components/ChatHistory';
 import { ThreadSidebar, type RunningTask } from './components/ThreadSidebar';
 import { SideChat } from './components/SideChat';
 import { ShortcutsSheet, StatusBar } from './components/StatusBar';
+import { ContextMeter, ReadingStrip } from './components/AgentStatus';
 import { useComposerAssist, type SlashCommand } from './components/ComposerAssist';
 import { AgentPicker } from './components/AgentPicker';
 import { CommandPalette, type Command } from './components/CommandPalette';
@@ -67,6 +68,10 @@ document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
 
 const THREADS_W = 248;
+const SPEND_KEY = 'pp.spend';
+const today = () => new Date().toISOString().slice(0, 10);
+const spentToday = () => { try { const s = JSON.parse(localStorage.getItem(SPEND_KEY) || '{}'); return s.day === today() ? s.total || 0 : 0; } catch { return 0; } };
+const addSpend = (cost: number) => { try { localStorage.setItem(SPEND_KEY, JSON.stringify({ day: today(), total: spentToday() + cost })); } catch { /* storage off */ } };
 const HISTORY_KEY = 'pp.promptHistory';
 const readHistory = (): string[] => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } };
 const rememberPrompt = (text: string) => {
@@ -151,9 +156,20 @@ export default function App() {
   // Rarely used controls stay folded behind a ⋯ until asked for.
   const [pageToolsOpen, setPageToolsOpen] = useState(false);
   const [composerMore, setComposerMore] = useState(false);
+  const [usage, setUsage] = useState<{ used: number; window?: number } | null>(null);
+  const [limits, setLimits] = useState<{ status: 'ok' | 'warning' | 'rejected'; used?: number; resetsAt?: number; window?: string } | null>(null);
+  const [mcp, setMcp] = useState<{ name: string; status: string }[]>([]);
   const [pastes, setPastes] = useState<{ id: string; text: string }[]>([]);
   const [pasteOpen, setPasteOpen] = useState<string | null>(null);
   const historyAt = useRef(-1);
+  useEffect(() => {
+    if (!composerMore) return;
+    const away = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('.composer-tray-wrap')) setComposerMore(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setComposerMore(false); };
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('mousedown', away); window.removeEventListener('keydown', esc); };
+  }, [composerMore]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [toolsHover, setToolsHover] = useState(false);
   const toolsTimer = useRef(0);
@@ -364,7 +380,9 @@ export default function App() {
     verifyPending.current = null;
     return true;
   };
+  const showChatReset = () => setUsage(null);
   const showChat = (c: { id: string; createdAt: number; items: ChatItem[]; session: ParkedChat['session']; designAtStart?: string | null }, running: string | null) => {
+    showChatReset();
     setChatId(c.id); setChatCreated(c.createdAt); setChat(c.items); setSession(c.session); setDesignAtStart(c.designAtStart ?? null);
     setRunId(running);
     runRef.current = running;
@@ -405,8 +423,10 @@ export default function App() {
       case 'git': refreshGit(); break;
       case 'text': { const m = splitMemory(e.text); p.items = finalizeItems(p.items, 'text', m.text, m.extra); break; }
       case 'thinking': p.items = finalizeItems(p.items, 'thinking', e.text); break;
-      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now() }); break;
+      case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now(), parent: e.parent }); break;
       case 'plan': p.items = applyPlan(p.items, e.steps); break;
+      case 'limits': setLimits(e.status === 'ok' ? null : e); break;
+      case 'mcp': setMcp(e.servers); break;
       case 'approval':
         add({ kind: 'approval', id: uid(), runId: e.runId, approvalId: e.approvalId, tool: e.tool, detail: e.detail, status: 'pending' });
         syncOthers();
@@ -1685,7 +1705,7 @@ export default function App() {
   const newChat = () => {
     if (job || !chatRef.current.length) return;
     if (!leaveChat()) return;
-    setChat([]); setSession(null); setChatId(null); setDesignAtStart(null);
+    setChat([]); setSession(null); setChatId(null); setDesignAtStart(null); setUsage(null);
     syncOthers();
     setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30);
   };
@@ -1838,6 +1858,7 @@ export default function App() {
       if (p) parkedEventRef.current(p, e);
       return;
     }
+    if (e.type === 'done' && e.cost) addSpend(e.cost);
     if (e.type === 'done') { setChat(expireApprovals); notify(`${e.ok ? 'Finished' : 'Stopped'}: ${chatTitle(chatRef.current)}`); }
     const push = (item: ChatItem) => setChat((c) => {
       const last = c[c.length - 1];
@@ -1859,8 +1880,11 @@ export default function App() {
         break;
       }
       case 'thinking': finalizeBlock('thinking', e.text); break;
-      case 'tool': push({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now() }); break;
+      case 'tool': push({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now(), parent: e.parent }); break;
       case 'plan': setChat((c) => applyPlan(c, e.steps)); break;
+      case 'usage': setUsage({ used: e.used, window: e.window }); break;
+      case 'limits': setLimits(e.status === 'ok' ? null : e); break;
+      case 'mcp': setMcp(e.servers); break;
       case 'approval':
         push({ kind: 'approval', id: uid(), runId: e.runId, approvalId: e.approvalId, tool: e.tool, detail: e.detail, status: 'pending' });
         notify(`Waiting for your OK: ${e.tool}`);
@@ -2237,6 +2261,12 @@ export default function App() {
       )}
       <TopBar
         threadsHidden={!threadsOn} onToggleThreads={toggleThreads} onPalette={() => setPaletteOpen(true)}
+        chatTools={!threadsOn && projectDir ? (
+          <>
+            <button className="icon-btn" onClick={newChat} disabled={!!job || !chat.length} title={`New chat (${combo('O', true)})`}><SquarePen size={16} /></button>
+            <ChatHistory currentId={chatId} disabled={!!job} others={others} onOpen={openChat} onDelete={deleteChat} />
+          </>
+        ) : null}
         mod={MOD} projectDir={settings.projectDir} onPickProject={() => pickProject()}
         mode={mode} setMode={setMode}
         recording={!!rec} canRecord={/^(https?|file):/.test(nav.url)} onToggleRecording={toggleRecording}
@@ -2514,8 +2544,7 @@ export default function App() {
             <button className="ptab-new" onClick={() => newSide()} disabled={!projectDir} title={`New side chat: ask without touching this chat (${combo('A', true)})`}><Plus size={13} /></button>
           </div>
           <div className="spacer" />
-          {projectDir && !threadsOn && <ChatHistory currentId={chatId} disabled={!!job} others={others} onOpen={openChat} onDelete={deleteChat} />}
-          <button className={`btn ghost xs panel-new ${threadsOn ? 'quiet' : ''}`} onClick={newChat} disabled={!!job || !chat.length} title={`${runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
+          <button className="btn ghost xs panel-new quiet" onClick={newChat} disabled={!!job || !chat.length} title={`${runId ? 'Start another chat. This one keeps working.' : session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
         </div>
         {sides.map((x) => (
           <SideChat
@@ -2535,6 +2564,7 @@ export default function App() {
           </div>
         )}
 
+        <div className="chat-wrap">
         <div className="chat" onScroll={(e) => { onChatScroll(e); if (askAside) setAskAside(null); }} onWheel={onChatWheel} onMouseUp={onChatMouseUp}>
           {chat.length === 0 ? (
             <EmptyChat agentName={agentName} cliMissing={!!agents && !agentReady} />
@@ -2545,14 +2575,15 @@ export default function App() {
               <span className="shimmer">{job || `${runMeta?.variant ? `Variant ${runMeta.variant.index} of ${runMeta.variant.total}: ` : ''}${agentName} is ${runMeta?.verify ? 'checking the result' : runMeta?.match ? `matching the mockup, round ${runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}</span>
             </div>
           )}
-          {away && chat.length > 0 && (
+          <div ref={chatEnd} />
+        </div>
+        {away && chat.length > 0 && (
             <div className="to-latest">
               <button className={away.fresh ? 'fresh' : ''} onClick={toLatest} title="Go to the latest message">
                 <ArrowDown size={13} /> {away.fresh ? 'New messages' : 'Latest'}
               </button>
             </div>
           )}
-          <div ref={chatEnd} />
         </div>
 
         <div className={`composer ${composerMore ? 'more' : ''}`}>
@@ -2575,7 +2606,7 @@ export default function App() {
             />
           )}
           <AnnotationList
-            annotations={annotations} root={root} activeId={activeId} overlayImage={overlay?.image ?? null}
+            annotations={annotations} root={root} activeId={activeId} overlayImage={overlay?.image ?? null} editingId={popover?.id ?? null}
             pageMarks={page.shapes.length} sketchMarks={sketch.shapes.length}
             onFocus={focusAnn} onActive={setActiveId} onNote={updateNote} onPaste={onPaste} onSend={() => send()}
             onCopyTest={(a) => { navigator.clipboard?.writeText(toPlaywright(a)); flash('Playwright test copied.'); }}
@@ -2583,6 +2614,18 @@ export default function App() {
             onRemove={removeAnn}
           />
 
+          {limits && (
+            <div className={`limit-banner ${limits.status}`}>
+              <AlertTriangle size={13} />
+              <span>
+                {limits.status === 'rejected' ? 'Usage limit reached' : 'Close to your usage limit'}
+                {limits.used != null ? ` · ${limits.used}% used` : ''}{limits.window ? ` (${limits.window})` : ''}
+                {limits.resetsAt ? ` · resets ${new Date(limits.resetsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+              </span>
+              <button className="icon-btn xs" onClick={() => setLimits(null)} title="Dismiss"><X size={12} /></button>
+            </div>
+          )}
+          {runId && <ReadingStrip items={chat} root={root} />}
           {queuedRef.current.length > 0 && (
             <div className="queue-tray">
               <div className="queue-title">Waiting to send when this run ends</div>
@@ -2649,19 +2692,27 @@ export default function App() {
             />
             <div className="composer-foot">
               <button className="icon-btn attach-btn" onClick={() => fileInput.current?.click()} title="Attach reference images (or paste / drop them)"><Paperclip size={15} /></button>
-              {!runId && <button className={`icon-btn composer-more ${composerMore ? 'on' : ''}`} onClick={() => setComposerMore(!composerMore)} title={composerMore ? 'Fewer options' : 'More: share, variants, run in the background'}><DotsThree size={15} /></button>}
-              {!runId && <HandoffMenu hasRequest={!!(instruction.trim() || annotations.length)} canIssue={!!gitStatus?.gh.authed && !!gitStatus?.remote} onExport={exportHandoff} onCopy={copyHandoff} onIssue={issueHandoff} onImport={importHandoff} onReview={() => setReviewOpen(true)} reviewCount={reviewComments.length} reviewing={reviewing} />}
+              {!runId && (
+                <div className={`composer-tray-wrap ${composerMore ? 'open' : ''}`}>
+                  <button className={`icon-btn composer-more ${composerMore ? 'on' : ''}`} onClick={() => setComposerMore(!composerMore)} title="More: share, variants, run in the background"><DotsThree size={15} />{(reviewComments.length > 0 || (settings.variants || 0) > 1) && <i className="more-dot" />}</button>
+                  <div className="composer-tray">
+                    <HandoffMenu hasRequest={!!(instruction.trim() || annotations.length)} canIssue={!!gitStatus?.gh.authed && !!gitStatus?.remote} onExport={exportHandoff} onCopy={copyHandoff} onIssue={issueHandoff} onImport={importHandoff} onReview={() => setReviewOpen(true)} reviewCount={reviewComments.length} reviewing={reviewing} />
+                    <VariantsMenu value={settings.variants || 0} set={(n) => saveSettings({ variants: n })} />
+                    <button className="icon-btn bg-btn" disabled={!canSend || !!bgBlocked} onClick={() => { setComposerMore(false); send('bg'); }} title={bgBlocked || 'Run in the background: in a separate copy of the project, so you can keep working and send more'}><SquareStack size={15} /></button>
+                  </div>
+                </div>
+              )}
               <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) addReferences(e.target.files); e.target.value = ''; }} />
-              {!runId && <VariantsMenu value={settings.variants || 0} set={(n) => saveSettings({ variants: n })} />}
               {runId
                 ? <span className="steer-hint"><kbd>↵</kbd> after this step <kbd>{MOD}↵</kbd> now</span>
                 : <>
                   <AgentPicker
-                    value={settings.agent} harnesses={harnesses} agents={agents} disabled={!!runId}
+                    value={settings.agent} harnesses={harnesses} agents={agents} disabled={!!runId} mcp={mcp}
                     onPick={(agent) => saveSettings({ agent })} onSetup={() => setSettingsOpen(true)}
                   />
                   <AgentControls settings={settings} catalog={catalog} onChange={saveSettings} harness={harnesses.find((h) => h.id === settings.agent)} />
                 </>}
+              {usage && <ContextMeter used={usage.used} window={usage.window} />}
               {runId ? (
                 <div className="run-actions">
                   <button className="icon-btn stop-btn" onClick={cancel} title="Stop the agent"><Square size={11} weight="fill" /></button>
@@ -2670,7 +2721,6 @@ export default function App() {
                 </div>
               ) : (
                 <div className="run-actions">
-                  <button className="icon-btn bg-btn" disabled={!canSend || !!bgBlocked} onClick={() => send('bg')} title={bgBlocked || 'Run in the background: in a separate copy of the project, so you can keep working and send more'}><SquareStack size={15} /></button>
                   <button className="btn primary sm send-btn round" disabled={!canSend} onClick={() => send()} title="Send (Enter)"><ArrowUp size={15} /><span className="sr-only">Send</span></button>
                 </div>
               )}
@@ -2772,7 +2822,7 @@ export default function App() {
           branch={gitStatus?.repo ? gitStatus.branch : undefined} dirty={gitStatus?.dirty}
           devRunning={devRunning} devCommand={devCommand}
           errors={consoleLog.filter((c) => c.level === 'error').length}
-          agent={agentName} model={modelName || ''} cost={chatCost}
+          agent={agentName} model={modelName || ''} cost={chatCost} today={spentToday()}
           // The git panel keeps its own open state; its chip in the composer is the way in.
           onBranch={() => (document.querySelector('.composer .git-wrap > .chip') as HTMLElement | null)?.click()}
           onDev={() => { setDrawerOpen(true); setDrawerTab('dev'); }}

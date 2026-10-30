@@ -33,6 +33,7 @@ export function Drawer(p: Props) {
   useEffect(() => { setCmd(p.devCommand); }, [p.devCommand]);
   useEffect(() => { pre.current?.scrollTo(0, pre.current.scrollHeight); }, [text]);
 
+  const [termSlot, setTermSlot] = useState<HTMLDivElement | null>(null);
   return (
     <div className="drawer">
       <div className="drawer-head">
@@ -58,11 +59,11 @@ export function Drawer(p: Props) {
               : <button type="submit" className="btn xs primary"><Play size={11} /> Run</button>}
           </form>
         )}
-        {p.tab !== 'dev' && <div className="spacer" />}
+        {p.tab === 'term' ? <div className="term-slot" ref={setTermSlot} /> : p.tab !== 'dev' && <div className="spacer" />}
         <button className="icon-btn" onClick={p.onClose}><X size={15} /></button>
       </div>
       <div className="term-wrap" style={{ display: p.tab === 'term' ? 'flex' : 'none' }}>
-        {(p.tab === 'term' || seen.current) && <Suspense fallback={null}><TerminalPane cwd={p.cwd} preferred={p.shell} onPrefer={p.onShell} /></Suspense>}
+        {(p.tab === 'term' || seen.current) && <Suspense fallback={null}><TerminalPane cwd={p.cwd} preferred={p.shell} onPrefer={p.onShell} barSlot={p.tab === 'term' ? termSlot : null} /></Suspense>}
       </div>
       {p.tab === 'net' && p.network}
       <pre ref={pre} className="drawer-log" style={{ display: p.tab === 'term' || p.tab === 'net' ? 'none' : undefined }}>{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>

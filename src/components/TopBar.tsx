@@ -16,6 +16,7 @@ interface Props {
   threadsHidden: boolean;
   onToggleThreads(): void;
   onPalette(): void;
+  chatTools?: React.ReactNode;
   mod: string;
   projectDir: string;
   onPickProject(): void;
@@ -49,6 +50,7 @@ export function TopBar(p: Props) {
       {p.threadsHidden && (
         <>
           <button className="icon-btn threads-toggle" onClick={p.onToggleThreads} title={`Show chats (${p.mod}+Shift+B)`}><PanelLeft size={16} /></button>
+          {p.chatTools}
           <button className="project-btn" onClick={p.onPickProject} title={p.projectDir || 'Choose the project folder the agent edits'}>
             <FolderOpen size={14} />
             <span>{p.projectDir ? p.projectDir.split(/[\\/]/).pop() : 'Open project'}</span>

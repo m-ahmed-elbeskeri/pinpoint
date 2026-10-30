@@ -145,7 +145,7 @@ function DesignTab({ settings, saveSettings, design, setDesign, canExtract, extr
           className="design-editor"
           value={text}
           onChange={(e) => write(e.target.value)}
-          placeholder={'# Design rules\n\n## Colors\n- Primary: #ffd60a\n\n## Rules\n- Buttons are pill-shaped'}
+          placeholder="Start typing your design rules in Markdown…"
           spellCheck={false}
         />
       ) : (

@@ -233,7 +233,8 @@ function renderHover() {
   drawnEl = hoverEl; drawnKey = key; drawnAge = 0;
   u.hover.hidden = false; place(u.hover, r);
   const huge = hoverEl === document.body || hoverEl === document.documentElement || r.width * r.height > innerWidth * innerHeight * 0.6;
-  const note = layoutOn && !huge ? renderLayout(u, hoverEl, r) : (u.layout.replaceChildren(), '');
+  // Margin, padding and gap fills only while Alt is held; normally just the outline and its size.
+  const note = layoutOn && altDown && !huge ? renderLayout(u, hoverEl, r) : (u.layout.replaceChildren(), '');
   u.label.hidden = false;
   u.label.innerHTML = '';
   u.label.append(describeShort(hoverEl));

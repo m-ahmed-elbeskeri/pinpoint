@@ -10,6 +10,7 @@ interface Props {
   agent: string;
   model: string;
   cost: number;
+  today: number;
   onBranch(): void;
   onDev(): void;
   onErrors(): void;
@@ -33,6 +34,7 @@ export function StatusBar(p: Props) {
       )}
       <div className="spacer" />
       {p.cost > 0 && <span className="sb-dim" title="What the runs in this chat have cost, as reported by the agent">${p.cost.toFixed(2)} this chat</span>}
+      {p.today > 0 && <span className="sb-dim" title="Spent across all chats today, as reported by the agents">${p.today.toFixed(2)} today</span>}
       <span title="Agent and model">{p.agent}{p.model ? <span className="sb-dim"> · {p.model}</span> : null}</span>
     </footer>
   );
@@ -44,6 +46,9 @@ const SHORTCUTS: [string, [string, string][]][] = [
   ['Page', [['V', 'Browse'], ['S', 'Annotate: click an element or drag to draw'], ['↑ ↓', 'Annotate: pick the parent or child'], ['Alt', 'Annotate: measure from the selected element'], ['D', 'Draw'], ['K', 'Sketch'], ['F', 'Freeze the page'], ['Ctrl/⌘ T', 'New tab'], ['Esc', 'Back to browsing']]],
   ['Layout', [['Ctrl/⌘ Shift B', 'Chats sidebar'], ['Ctrl/⌘ B', 'Agent panel'], ['Ctrl/⌘ J', 'Terminal and logs'], ['Ctrl/⌘ Shift L', 'Copy a layout report']]],
 ];
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
+const keysFor = (k: string) => k.replace('Ctrl/⌘', IS_MAC ? '⌘' : 'Ctrl').replace('Shift', IS_MAC ? '⇧' : 'Shift');
 
 export function ShortcutsSheet({ onClose }: { onClose(): void }) {
   useEffect(() => {
@@ -60,7 +65,7 @@ export function ShortcutsSheet({ onClose }: { onClose(): void }) {
             <section key={group}>
               <h4>{group}</h4>
               {rows.map(([k, what]) => (
-                <div key={k} className="shortcut-row"><span>{what}</span><span className="shortcut-keys">{k.split(' ').map((x) => <kbd key={x}>{x}</kbd>)}</span></div>
+                <div key={k} className="shortcut-row"><span>{what}</span><span className="shortcut-keys">{keysFor(k).split(' ').map((x) => <kbd key={x}>{x}</kbd>)}</span></div>
               ))}
             </section>
           ))}

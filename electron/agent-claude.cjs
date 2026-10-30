@@ -42,6 +42,7 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askAppro
   // In "Edit files" mode, anything beyond edits (commands, web…) is asked about in the chat instead of being refused.
   if (askApproval && mode === 'acceptEdits') args.push('--permission-prompt-tool', 'stdio');
   const allowed = new Set();
+  let contextWindow = 200000;
   if (sessionId) args.push('--resume', sessionId);
   if (settings.claudeModel) args.push('--model', settings.claudeModel);
   if (settings.claudeEffort) args.push('--effort', settings.claudeEffort);
@@ -94,11 +95,25 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askAppro
       });
       return;
     }
+    if (m.type === 'rate_limit_event' && m.rate_limit_info) {
+      // Usage limits: warn before they bite, not only after.
+      const r = m.rate_limit_info;
+      const status = r.status === 'rejected' ? 'rejected' : r.status === 'allowed_warning' || (r.utilization ?? 0) >= 0.8 ? 'warning' : 'ok';
+      onEvent({ type: 'limits', status, used: r.utilization != null ? Math.round(r.utilization * 100) : undefined, resetsAt: r.resetsAt ? r.resetsAt * (r.resetsAt < 1e12 ? 1000 : 1) : undefined, window: r.rateLimitType });
+      return;
+    }
     if (m.type === 'system' && m.subtype === 'init') {
       totals.sessionId = m.session_id;
       onEvent({ type: 'session', sessionId: m.session_id, model: m.model });
+      if (Array.isArray(m.mcp_servers)) onEvent({ type: 'mcp', servers: m.mcp_servers.map((x) => ({ name: x.name, status: x.status })) });
+    } else if (m.type === 'assistant' && m.message?.content && m.parent_tool_use_id) {
+      // A subagent's own steps: shown nested under the Task step that started it.
+      for (const b of m.message.content) {
+        if (b.type === 'tool_use') onEvent({ type: 'tool', id: b.id, name: b.name, detail: toolDetail(b.input), parent: m.parent_tool_use_id, edits: editsOf(b.name, b.input) });
+      }
     } else if (m.type === 'assistant' && m.message?.content) {
-      if (m.parent_tool_use_id) return;
+      const u = m.message.usage;
+      if (u) onEvent({ type: 'usage', used: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.output_tokens || 0), window: contextWindow });
       for (const b of m.message.content) {
         if (b.type === 'text' && b.text?.trim()) onEvent({ type: 'text', text: b.text });
         else if (b.type === 'thinking' && b.thinking?.trim()) onEvent({ type: 'thinking', text: b.thinking });
@@ -108,7 +123,6 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askAppro
         } else if (b.type === 'tool_use') onEvent({ type: 'tool', id: b.id, name: b.name, detail: toolDetail(b.input), edits: editsOf(b.name, b.input) });
       }
     } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
-      if (m.parent_tool_use_id) return;
       for (const b of m.message.content) {
         if (b.type === 'tool_result') {
           const text = typeof b.content === 'string' ? b.content : (b.content || []).map((c) => c.text || '').join('\n');
@@ -116,6 +130,8 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askAppro
         }
       }
     } else if (m.type === 'result') {
+      const win = Object.values(m.modelUsage || {}).map((x) => x.contextWindow).find(Boolean);
+      if (win) contextWindow = win;
       totals.cost = m.total_cost_usd ?? totals.cost;
       totals.durationMs += m.duration_ms || 0;
       totals.turns += m.num_turns || 0;

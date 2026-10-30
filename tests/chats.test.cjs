@@ -203,7 +203,7 @@ server.listen(0, '127.0.0.1', () => {
       log('the tab is named after the question', /quick-aside/.test(await ui(`document.querySelector('.ptab.side').textContent`)));
       await ui(`document.querySelector('.ptab-new').click(); 0`);
       await sleep(200);
-      log('several side chats can be open, each starting empty', (await ui(`document.querySelectorAll('.ptab.side').length`)) === 2 && (await ui(`document.querySelectorAll('.side-chat:not(.hidden) .side-body > *').length`)) === 0);
+      log('several side chats can be open, each starting empty', (await ui(`document.querySelectorAll('.ptab.side').length`)) === 2 && (await ui(`document.querySelectorAll('.side-chat:not(.hidden) .side-body .side-q, .side-chat:not(.hidden) .side-body .side-a').length`)) === 0);
       await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);
       await sleep(200);
       log('the Chat tab brings the main chat back', await ui(`getComputedStyle(document.querySelector('.chat')).display !== 'none' && !document.querySelector('.side-chat:not(.hidden)')`));

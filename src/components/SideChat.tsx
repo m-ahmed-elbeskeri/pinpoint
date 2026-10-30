@@ -87,6 +87,17 @@ export function SideChat({ sideId, active, agentName, seed, onSeedUsed, getConte
         <button className="icon-btn xs" onClick={clear} disabled={!items.length} title="Start over"><RotateCcw size={13} /></button>
       </div>
       <div className="side-body" ref={body}>
+        {items.length === 0 && (
+          <div className="side-empty">
+            <b>Ask on the side</b>
+            <span>Read-only, in its own session. Your chat keeps going.</span>
+            <div className="side-suggest">
+              {['What did the last change do?', 'Where is this page rendered?', 'Is anything risky in this diff?'].map((q) => (
+                <button key={q} onClick={() => { setText(q); setTimeout(() => input.current?.focus({ preventScroll: true }), 0); }}>{q}</button>
+              ))}
+            </div>
+          </div>
+        )}
         {items.map((it) => it.kind === 'user'
           ? <div key={it.id} className="msg user side-q">{it.text}</div>
           : it.kind === 'error'

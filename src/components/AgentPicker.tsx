@@ -10,9 +10,10 @@ interface Props {
   disabled?: boolean;
   onPick(id: AgentId): void;
   onSetup(): void;
+  mcp?: { name: string; status: string }[];
 }
 
-export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetup }: Props) {
+export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetup, mcp = [] }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = harnesses.find((h) => h.id === value);
@@ -56,6 +57,16 @@ export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetu
           {installed.map(row)}
           {missing.length > 0 && <div className="dd-title">Not installed</div>}
           {missing.map(row)}
+          {mcp.length > 0 && (
+            <>
+              <div className="dd-title">MCP servers</div>
+              {mcp.map((s) => (
+                <div key={s.name} className="mcp-row" title={`${s.name}: ${s.status}`}>
+                  <span>{s.name}</span><small className={s.status === 'connected' ? 'ok' : 'bad'}>{s.status}</small>
+                </div>
+              ))}
+            </>
+          )}
           <button className="dd-item" onClick={() => { setOpen(false); onSetup(); }}>
             <Plus size={14} className="dd-item-icon" />
             <span className="dd-item-text"><span>Add or set up agents…</span></span>

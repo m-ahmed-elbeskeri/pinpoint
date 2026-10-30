@@ -97,7 +97,7 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
               <CondSeg options={[{ id: null, label: 'System' }, { id: 'dark' as const, label: 'Dark' }, { id: 'light' as const, label: 'Light' }]} value={env.colorScheme} set={(colorScheme) => setEnv({ ...env, colorScheme })} />
             </CondRow>
             <CondSwitch label="Reduced motion" hint="As for someone who has turned animations off" on={env.reducedMotion} set={(reducedMotion) => setEnv({ ...env, reducedMotion })} />
-            <CondSwitch label="Layout guides" hint="Margins, padding, flex and grid while selecting. Alt measures." on={layout} set={setLayout} />
+            <CondSwitch label="Layout guides" hint="Hold Alt while selecting to see margins, padding, flex and grid, and to measure." on={layout} set={setLayout} />
           </section>
 
           <section>

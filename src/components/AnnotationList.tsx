@@ -18,6 +18,7 @@ interface Props {
   onCopyTest(a: Annotation): void;
   onOverlay(a: Annotation): void;
   onRemove(id: string): void;
+  editingId?: string | null;
 }
 
 const PLACEHOLDER: Record<Annotation['kind'], string> = {
@@ -77,7 +78,7 @@ export function AnnotationList(p: Props) {
                 )}
               </div>
               {a.image && <div className="ann-thumb"><img src={a.image} alt="" /></div>}
-              <textarea
+              {p.editingId === a.id ? <div className="ann-note-ro">{a.note || 'Writing the note on the page…'}</div> : <textarea
                 data-note={a.id}
                 rows={1}
                 placeholder={PLACEHOLDER[a.kind]}
@@ -86,7 +87,7 @@ export function AnnotationList(p: Props) {
                 onFocus={() => p.onActive(a.id)}
                 onChange={(e) => p.onNote(a.id, e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); p.onSend(); } }}
-              />
+              />}
             </div>
             {a.kind === 'flow' && (
               <button className="icon-btn xs ann-act" title="Copy these steps as a Playwright test" onClick={(e) => { e.stopPropagation(); p.onCopyTest(a); }}><ClipboardCopy size={13} /></button>

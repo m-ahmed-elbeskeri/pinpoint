@@ -64,6 +64,18 @@ function runCodex(opts) {
       case 'item/reasoning/textDelta':
         if (p?.delta) onEvent({ type: 'thinking_delta', text: p.delta });
         break;
+      case 'thread/tokenUsage/updated': {
+        const t = p?.tokenUsage || {};
+        const last = t.last || t.total || {};
+        const used = last.totalTokens ?? ((last.inputTokens || 0) + (last.outputTokens || 0));
+        if (used) onEvent({ type: 'usage', used, window: t.modelContextWindow || undefined });
+        break;
+      }
+      case 'account/rateLimits/updated': {
+        const r = p?.rateLimits?.primary;
+        if (r && r.usedPercent != null) onEvent({ type: 'limits', status: r.usedPercent >= 100 ? 'rejected' : r.usedPercent >= 80 ? 'warning' : 'ok', used: Math.round(r.usedPercent), resetsAt: r.resetsAt ? r.resetsAt * (r.resetsAt < 1e12 ? 1000 : 1) : undefined, window: r.windowDurationMins ? `${Math.round(r.windowDurationMins / 60)}h` : undefined });
+        break;
+      }
       case 'turn/plan/updated': {
         const steps = (p?.plan || []).map((x) => ({ text: x.step || '', status: x.status === 'completed' ? 'completed' : /progress/i.test(x.status || '') ? 'in_progress' : 'pending' }));
         if (steps.length) onEvent({ type: 'plan', steps });

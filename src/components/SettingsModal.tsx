@@ -15,7 +15,7 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
   const [s, setS] = useState(settings);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => setS({ ...s, [k]: v });
   const status = (id: AgentId) => agents?.[id]?.ok
-    ? <span className="pill ok">{agents[id].version}</span>
+    ? <span className="pill ok" title={agents[id].version}>{agents[id].version?.match(/\d+(\.\d+)+/)?.[0] || 'installed'}</span>
     : <span className="pill bad">not found</span>;
   const setIn = (k: 'agentPaths' | 'agentModels', id: string, v: string) => setS({ ...s, [k]: { ...s[k], [id]: v } });
   const customs = s.customAgents || [];
@@ -36,10 +36,12 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
           <div className="harness-row">
             <span className="harness-name"><AgentIcon id="claude" name="Claude Code" /> Claude Code {status('claude')}</span>
             <input value={s.claudePath} onChange={(e) => set('claudePath', e.target.value)} placeholder="claude" spellCheck={false} title="CLI path" />
+            <input value={s.claudeModel} onChange={(e) => set('claudeModel', e.target.value)} placeholder="default model" spellCheck={false} title="Model (also set from the composer)" />
           </div>
           <div className="harness-row">
             <span className="harness-name"><AgentIcon id="codex" name="Codex" /> Codex {status('codex')}</span>
             <input value={s.codexPath} onChange={(e) => set('codexPath', e.target.value)} placeholder="codex" spellCheck={false} title="CLI path" />
+            <input value={s.codexModel} onChange={(e) => set('codexModel', e.target.value)} placeholder="default model" spellCheck={false} title="Model (also set from the composer)" />
           </div>
           {builtins.map((h) => (
             <div key={h.id} className="harness-row">

@@ -1,7 +1,7 @@
 import { SidebarSimpleIcon, type IconProps } from '@phosphor-icons/react';
 
 export {
-  PersonArmsSpreadIcon as Accessibility,
+  WheelchairIcon as Accessibility,
   WarningIcon as AlertTriangle,
   AppWindowIcon as AppWindow,
   ArrowDownIcon as ArrowDown,

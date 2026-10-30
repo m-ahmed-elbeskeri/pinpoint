@@ -157,7 +157,7 @@ export type ChatItem =
   | { kind: 'user'; id: string; text: string; annotations: Annotation[]; agent: AgentId; steer?: 'queue' | 'now' | 'later'; variants?: number; background?: boolean }
   | { kind: 'text'; id: string; text: string; streaming?: boolean }
   | { kind: 'thinking'; id: string; text: string; streaming?: boolean; at?: number; ms?: number }
-  | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string; edits?: ToolEdit[]; at?: number; ms?: number }
+  | { kind: 'tool'; id: string; toolId: string; name: string; detail: string; status: 'running' | 'ok' | 'error'; output?: string; edits?: ToolEdit[]; at?: number; ms?: number; parent?: string }
   | { kind: 'plan'; id: string; steps: PlanStep[] }
   | { kind: 'approval'; id: string; runId: string; approvalId: string; tool: string; detail: string; status: 'pending' | ApprovalDecision | 'expired' }
   | { kind: 'error'; id: string; text: string }
@@ -303,8 +303,11 @@ export type AgentEvent =
   | { runId: string; type: 'text_delta'; text: string }
   | { runId: string; type: 'thinking_delta'; text: string }
   | { runId: string; type: 'thinking'; text: string }
-  | { runId: string; type: 'tool'; id: string; name: string; detail: string; edits?: ToolEdit[] }
+  | { runId: string; type: 'tool'; id: string; name: string; detail: string; edits?: ToolEdit[]; parent?: string }
   | { runId: string; type: 'plan'; steps: PlanStep[] }
+  | { runId: string; type: 'usage'; used: number; window?: number }
+  | { runId: string; type: 'limits'; status: 'ok' | 'warning' | 'rejected'; used?: number; resetsAt?: number; window?: string }
+  | { runId: string; type: 'mcp'; servers: { name: string; status: string }[] }
   | { runId: string; type: 'approval'; approvalId: string; tool: string; detail: string }
   | { runId: string; type: 'tool_result'; id: string; ok: boolean; text: string }
   | { runId: string; type: 'file'; path: string; kind: string }

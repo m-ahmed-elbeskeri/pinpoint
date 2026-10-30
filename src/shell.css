@@ -581,3 +581,187 @@ html, body, #root, .app { overflow: clip; }
 .composer-foot .agent-picker > button.on > span:not(.agent-icon) { display: none; }
 .composer-foot .agent-picker > button.on { padding: 0 6px 0 8px; gap: 4px; }
 .composer-foot .agent-picker > button.on .agent-icon { font-size: 15px; }
+
+/* ---- agent visibility: context meter, limits, reading strip, subagent lanes, MCP ---- */
+.ctx-meter { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ctx-meter circle { fill: none; stroke-width: 2.2; }
+.ctx-track { stroke: var(--line-2); }
+.ctx-fill { stroke: var(--text-2); stroke-linecap: round; }
+.ctx-meter.mid .ctx-fill { stroke: var(--warn); }
+.ctx-meter.high .ctx-fill { stroke: var(--bad); }
+.ctx-meter.high { color: var(--bad-fg, #ff8aa0); }
+.limit-banner { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: 10px; font-size: 12px; border: 1px solid rgba(255, 176, 32, .35); background: rgba(255, 176, 32, .08); color: var(--warn-fg, #ffcf73); }
+.limit-banner.rejected { border-color: rgba(255, 77, 109, .4); background: rgba(255, 77, 109, .08); color: var(--bad-fg, #ff8aa0); }
+.limit-banner span { flex: 1; min-width: 0; }
+.reading-strip { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; padding: 0 2px; }
+.reading-file { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 1; min-width: 0; max-width: 40%; height: 20px; padding: 0 7px; border-radius: 6px; font: 11px var(--mono); color: var(--muted); background: var(--bg-2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.reading-file.now { color: var(--text-2); }
+.lane { margin: 2px 0 4px 18px; padding-left: 8px; border-left: 1px solid var(--line-2); display: grid; gap: 1px; }
+.mcp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 9px; font-size: 12px; color: var(--text-2); }
+.mcp-row small { font-size: 11px; }
+.mcp-row small.ok { color: var(--ok); }
+.mcp-row small.bad { color: var(--bad-fg, #ff8aa0); }
+
+/* ================= Design review, round 1 ================= */
+
+/* 1–2. Transcript: soft edges, nothing cut mid-line; "Latest" floats above the composer, over a fade. */
+.chat { mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 28px), transparent 100%); padding-bottom: 28px; }
+.to-latest { bottom: 10px; }
+.to-latest button { height: 26px; padding: 0 11px; border-radius: 999px; font-size: 11.5px; background: var(--bg-3); border: 1px solid var(--line-2); color: var(--text-2); box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
+.to-latest button.fresh { background: var(--text); color: var(--bg); }
+
+/* 4. Composer: one fixed shape. Every control 28px; access is always an icon. */
+.composer-foot { gap: 6px; }
+.composer-foot .attach-btn, .composer-foot .composer-more, .composer-foot .icon-btn { width: 28px; height: 28px; border-radius: 8px; }
+.composer-foot .agent-picker > button.on, .composer-foot .agent-controls .mp-btn { height: 28px; }
+.composer-foot .dd-access .dd-label { display: none; }
+.composer-foot .dd-access .dd-btn { height: 28px; padding: 0 6px; }
+.composer-foot .agent-picker { margin-right: -6px; }
+
+/* 5. Read-only note while it's being written in the popover. */
+.ann-note-ro { font-size: 12.5px; color: var(--text-2); padding: 3px 0; white-space: pre-wrap; }
+
+/* 6. One menu style everywhere: 10px radius, 4px padding, 30px rows, one shadow. */
+.dd-menu, .thread-menu, .vp-tools > .vp-toggles, .git-pop, .assist, .cmd {
+  border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg-2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 14px 36px rgba(0, 0, 0, .42);
+}
+.dd-menu, .thread-menu, .vp-tools > .vp-toggles, .assist { padding: 4px; }
+.dd-item, .thread-menu button, .vp-tools > .vp-toggles > button, .assist-item { min-height: 30px; border-radius: 6px; font-size: 12.5px; }
+.dd-item { padding: 6px 8px; gap: 8px; }
+.dd-title, .assist-title { padding: 6px 8px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.dd-check { margin-left: auto; }
+/* 7. Unavailable menu items are readable, just muted. */
+.git-pop button:disabled, .dd-item:disabled { opacity: .5; }
+.git-pop .git-head b { font: 600 12.5px Inter, ui-sans-serif, system-ui, sans-serif; }
+
+/* 8. Draw toolbar: a compact floating pill that fits the page area. */
+.draw-toolbar { top: 12px; max-width: calc(100% - 24px); gap: 4px; padding: 4px 6px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-2); overflow-x: auto; scrollbar-width: none; }
+.draw-toolbar .swatch { width: 16px; height: 16px; margin: 0 1px; }
+.draw-toolbar .dt-sep { height: 18px; }
+
+/* 13. Result card: a single summary line, plain file rows. */
+.done-head .done-meta { flex: 0 0 auto; margin-left: 2px; }
+.done-head .done-meta:not(:empty)::before { content: '· '; }
+.done-head > .no-visual-tag, .done-head > .commit-chip { margin-left: auto; }
+.done-card .done-files button.icon-btn { border: 0; background: none; }
+.done-actions .done-more { margin-left: 0; }
+
+/* 14. Work log: one row style; thinking isn't italic; settled approvals are a quiet line; nothing spills sideways. */
+.work-log, .work-body, .tool-row, .tool-head { min-width: 0; }
+.work-body { grid-template-columns: minmax(0, 1fr); }
+.tool-output { max-width: 100%; }
+.thinking button { font-style: normal; color: var(--muted); }
+.approval:not(.pending) { border: 0; background: none; padding: 2px 8px; }
+.approval:not(.pending) .approval-head { font-size: 12px; }
+.approval:not(.pending) .approval-head b { font-weight: 600; color: var(--text-2); }
+
+/* 15. Side chat: orientation and suggestions. */
+.side-empty { display: grid; justify-items: center; gap: 6px; margin: auto 12px; text-align: center; }
+.side-empty b { color: var(--text); font-size: 13px; }
+.side-empty span { font-size: 12px; color: var(--muted); }
+.side-suggest { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+.side-suggest button { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 12px; color: var(--text-2); }
+.side-suggest button:hover { color: var(--text); border-color: var(--ring); }
+
+/* 16. Model menu: one-line rows, a visible thumb, no help box. */
+.mp-models .dd-item small { display: none; }
+.mp-thumb { background: var(--text); }
+.mp-current { background: none; padding: 2px 8px 4px; border: 0; }
+.mp-current span { display: none; }
+
+/* 10. Settings: a regular grid for agents, quiet status text. */
+.harness-row { display: grid; grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 8px; }
+.harness-row .harness-name { gap: 7px; }
+.harness-name .pill { background: none; padding: 0; font-weight: 500; font-size: 11px; }
+.harness-name .pill.bad { color: var(--muted); }
+.harness-name .pill.ok { color: var(--muted); }
+.custom-agent .harness-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; }
+
+/* 11. Terminal: room to breathe. */
+.term-body { padding: 6px 4px 0 12px; }
+
+/* 12. Shortcuts: each column flows on its own. */
+.shortcut-cols { display: block; columns: 2; column-gap: 32px; }
+.shortcut-cols section { break-inside: avoid; padding: 0 0 16px; display: block; }
+.shortcut-cols h4 { margin: 0 0 6px; }
+.shortcut-row { min-height: 30px; }
+
+/* 17. Header icons share one size and hover. */
+.top-right .icon-btn, .mode-seg button, .threads-head .icon-btn { border-radius: 7px; }
+.top-right .icon-btn { width: 30px; height: 30px; }
+
+/* 19. Toolbar details: the tab shows its dot or its ✕, the site pill is quiet. */
+.tab .tab-x { opacity: 0; }
+.tab:hover .tab-x, .tab.on .tab-x { opacity: 1; }
+.tab:hover .tab-pin, .tab.on .tab-pin { display: none; }
+.site-chip { background: transparent; border-color: var(--line); color: var(--text-2); }
+/* 9. Switches are neutral, not the brand yellow. */
+.toggle.on .toggle-track { background: var(--text); }
+.toggle.on .toggle-thumb { background: var(--bg); }
+.to-latest { bottom: 2px; }
+
+/* 11. Terminal sessions sit in the drawer's own header: one tab row, not two. */
+.term-slot { flex: 1; min-width: 0; display: flex; justify-content: flex-end; }
+.term-slot .term-bar { border: 0; background: none; padding: 0; min-height: 0; gap: 2px; }
+.term-slot .term-tab { height: 26px; border-radius: 7px; }
+.drawer-head { height: 40px; box-sizing: border-box; flex-shrink: 0; }
+.term-slot { overflow: hidden; height: 28px; align-items: center; }
+
+/* ================= Design review, round 2 ================= */
+/* 3. ⋯ opens a small tray above it; the toolbar itself never changes. */
+.composer-tray-wrap { position: relative; flex-shrink: 0; }
+.composer-tray { position: absolute; bottom: calc(100% + 8px); left: -4px; z-index: 55; display: none; gap: 2px; padding: 4px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-2); box-shadow: 0 14px 36px rgba(0, 0, 0, .42); }
+.composer-tray-wrap.open .composer-tray { display: flex; }
+.composer-tray .git-wrap > .icon-btn, .composer-tray > .icon-btn { width: 30px; height: 30px; }
+.composer-tray .git-pop { bottom: calc(100% + 10px); }
+.composer-more { position: relative; }
+.more-dot { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--text-2); }
+/* 4. Access keeps its label: it's the safety state. */
+.composer-foot .dd-access .dd-label { display: inline; font-size: 12px; }
+@container composer (max-width: 400px) { .composer-foot .dd-access .dd-label { display: none; } }
+/* 1. Settings grid inputs fill their columns. */
+.harness-row input { width: 100%; min-width: 0; }
+.harness-name .pill { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 5. A longer, visible fade under the floating Latest pill. */
+.chat { mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 44px), transparent 100%); padding-bottom: 40px; }
+.to-latest { bottom: 14px; }
+/* 6. Share menu: icons on the title line, readable disabled rows. */
+.handoff-pop button { align-items: flex-start; }
+.handoff-pop button > svg { margin-top: 2px; flex-shrink: 0; }
+.handoff-pop button:disabled { opacity: .5; }
+.handoff-pop button:disabled * { opacity: 1; }
+/* 7. The card's ⋯ is as visible as Undo. */
+.done-actions .done-more { color: var(--text-2); }
+/* 9. "allowed once" on the step it was about. */
+.tool-approved { flex-shrink: 0; font-size: 11px; color: var(--muted); }
+.tool-approved::before { content: '· '; }
+/* 11. Switches have a visible knob in both themes. */
+.toggle-thumb { width: 13px; height: 13px; box-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+.toggle.on .toggle-thumb { background: var(--bg-2); }
+/* 12. Pin is a plain ghost button like its neighbours. */
+.nav-pins .chip { border-radius: 7px; border-color: transparent; background: transparent; height: 26px; padding: 0 7px; }
+.nav-pins .chip:hover { background: var(--bg-4); }
+/* 15. Notes in the list read as text and become editable when clicked. */
+.ann textarea { background: transparent; border-color: transparent; padding: 3px 6px; margin-left: -6px; }
+.ann textarea:hover { border-color: var(--line); }
+.ann textarea:focus { background: var(--bg); border-color: var(--ring); }
+
+/* ================= Design review, round 3 ================= */
+/* 1. The ⋯ tray opens above the composer box, clear of the text. */
+.composer-tray-wrap { position: static; }
+.composer-tray { bottom: calc(100% + 8px); left: 8px; }
+.composer-tray .git-pop { left: 0; }
+/* 2. The chat list scrolls inside a wrapper; "Latest" floats over its faded bottom edge. */
+.chat-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-wrap > .chat { flex: 1; min-height: 0; padding-bottom: 20px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 36px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 36px), transparent 100%); }
+.chat-wrap > .to-latest { position: absolute; left: 0; right: 0; bottom: 10px; height: auto; z-index: 4; }
+.panel.side-active > .chat-wrap, .panel.side-active .chat { display: none; }
+/* 4. Thinking level: value inline in the title, a clear thumb even on "default". */
+.mp-inline { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); }
+.mp-current { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.mp-thumb.auto { width: 12px; height: 12px; margin-left: -6px; top: 5px; background: var(--bg-2); box-shadow: inset 0 0 0 2px var(--text), 0 0 0 2px var(--bg-2); }
+/* 8. An empty note looks empty. */
+.ann textarea::placeholder { color: var(--muted); font-style: italic; }
+/* 10. Agent menu shows whole rows. */
+.agent-menu { max-height: min(460px, 70vh); }

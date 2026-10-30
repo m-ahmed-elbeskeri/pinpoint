@@ -124,3 +124,14 @@
 /* ---- scrollbars ---- */
 :root[data-theme="light"] ::-webkit-scrollbar-thumb { background-color: #d2d2d8; }
 :root[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background-color: #b9b9c1; }
+
+/* Design review, round 1: clearer separation in light mode. */
+:root[data-theme="light"] { --line: rgba(0, 0, 0, .1); --line-2: rgba(0, 0, 0, .14); }
+:root[data-theme="light"] .threads { background: #f3f3f4; }
+:root[data-theme="light"] .msg.user { background: rgba(0, 0, 0, .04); border-color: var(--line); }
+:root[data-theme="light"] .sheet-backdrop, :root[data-theme="light"] .modal-backdrop { background: rgba(15, 15, 20, .28); }
+:root[data-theme="light"] .term-screen, :root[data-theme="light"] .term-wrap { background: #fbfbfb; }
+/* Round 3: a visible knob on the dark "on" track. */
+:root[data-theme="light"] .toggle.on .toggle-track { background: #18181b; }
+:root[data-theme="light"] .toggle.on .toggle-thumb { background: #ffffff; box-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+:root[data-theme="light"] .toggle-thumb { background: #ffffff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); }
