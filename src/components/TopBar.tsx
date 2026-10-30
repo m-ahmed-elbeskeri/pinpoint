@@ -63,7 +63,7 @@ export function TopBar(p: Props) {
             <m.icon size={15} /><span>{m.label}</span><kbd>{m.key}</kbd>
           </button>
         ))}
-        <button className={p.recording ? 'rec' : ''} onClick={p.onToggleRecording} disabled={!p.canRecord} title={p.recording ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
+        <button className={`rec-btn ${p.recording ? 'rec' : ''}`} onClick={p.onToggleRecording} disabled={!p.canRecord} title={p.recording ? 'Stop recording and attach the steps' : 'Record an interaction (clicks and typing) to show the agent what you did'}>
           <CircleDot size={15} /><span>{p.recording ? 'Stop' : 'Record'}</span>
         </button>
       </div>

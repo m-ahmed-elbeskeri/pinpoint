@@ -6,6 +6,7 @@ import {
   ExternalLink, ShieldCheck, ClipboardCopy, Pin, DotsThree, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
 } from './icons';
 import { flowVerdict } from '../lib/flow';
+import { INTERRUPTED } from '../lib/chat';
 import type { ApprovalDecision, BuildSize, ChatItem, ToolEdit, DiffFile, FileChange, FlowResult, PerfMetrics, RevertResult } from '../lib/types';
 
 const diffCache = new Map<string, Promise<DiffFile[]>>();
@@ -534,7 +535,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
     case 'status':
       return <div className="msg status">{item.text}</div>;
     case 'error':
-      return <div className="msg error"><AlertTriangle size={14} /> <span>{item.text}</span></div>;
+      return <div className={`msg error ${item.text === INTERRUPTED ? 'soft' : ''}`}><AlertTriangle size={14} /> <span>{item.text}</span></div>;
     case 'memory':
       return (
         <div className={`memory-card ${item.status}`}>

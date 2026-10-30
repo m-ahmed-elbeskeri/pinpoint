@@ -63,7 +63,7 @@ export interface ParkedChat {
   designAtStart: string | null; runId: string | null; agent: AgentId;
 }
 
-const INTERRUPTED = 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.';
+export const INTERRUPTED = 'This run was interrupted: Pinpoint closed before it finished. Files it already edited stay edited.';
 
 export function healChat(items: ChatItem[]): ChatItem[] {
   const noted = (it: ChatItem) => it.kind === 'error' && it.text === INTERRUPTED;

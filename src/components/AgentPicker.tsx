@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Plus } from './icons';
 import type { AgentId, HarnessInfo } from '../lib/types';
+import { AgentIcon } from './AgentIcon';
 
 interface Props {
   value: AgentId;
@@ -30,6 +31,7 @@ export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetu
   const missing = harnesses.filter((h) => !ok(h.id));
   const row = (h: HarnessInfo) => (
     <button key={h.id} className={`dd-item ${h.id === value ? 'sel' : ''}`} onClick={() => { onPick(h.id); setOpen(false); }}>
+      <AgentIcon id={h.id} name={h.name} size={16} />
       <span className="dd-item-text">
         <span>{h.name}</span>
         <small>{agents?.[h.id]?.ok ? agents[h.id].version : agents ? `${h.bin} not found` : h.bin}{h.steerable ? ' · steerable' : ''}</small>
@@ -42,8 +44,9 @@ export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetu
     <div className="dd agent-seg agent-picker" ref={ref}>
       <button
         className={`on ${ok(value) ? '' : 'missing'}`} onClick={() => setOpen(!open)} disabled={disabled}
-        title={ok(value) ? agents?.[value]?.version || 'Choose the coding agent' : "Its CLI wasn't found. Install it or set its path in Settings."}
+        title={`${current?.name || value}${ok(value) ? (agents?.[value]?.version ? ` · ${agents[value].version}` : '') : ": its CLI wasn't found. Install it or set its path in Settings."} (click to switch agent)`}
       >
+        <AgentIcon id={value} name={current?.name || value} />
         <span>{current?.name || value}</span>
         <ChevronDown size={12} className="dd-chev" />
       </button>

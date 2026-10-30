@@ -2232,6 +2232,7 @@ export default function App() {
           onOpen={openChat} onDelete={deleteChat} onNew={newChat} onPickProject={pickProject}
           onOpenIn={(dir, id) => { wantChat.current = id; pickProject(dir); }}
           onSettings={() => setSettingsOpen(true)} onPalette={() => setPaletteOpen(true)} onHide={toggleThreads}
+          onTheme={() => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' })} onShortcuts={() => setShortcutsOpen(true)}
         />
       )}
       <TopBar

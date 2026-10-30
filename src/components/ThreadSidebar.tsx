@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Check, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, Square, SquarePen, Trash2, X } from './icons';
+import { Archive, Keyboard, Palette, Check, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, Square, SquarePen, Trash2, X } from './icons';
 import { Logo } from './Logo';
 import type { ChatMeta, OtherChat } from '../lib/types';
 
@@ -32,6 +32,8 @@ interface Props {
   onOpenIn(dir: string, chatId: string): void;
   onSettings(): void;
   onPalette(): void;
+  onTheme(): void;
+  onShortcuts(): void;
   onHide(): void;
 }
 
@@ -257,8 +259,11 @@ export function ThreadSidebar(p: Props) {
       </div>
 
       <div className="threads-foot">
-        <button onClick={p.onPalette} title={`Commands (${p.mod}+K)`}><Command size={14} /><span>Commands</span><kbd>{p.mod}K</kbd></button>
-        <button onClick={p.onSettings} title="Settings"><SettingsIcon size={14} /><span>Settings</span></button>
+        <button onClick={p.onPalette} title={`Commands (${p.mod}+K)`}><Command size={15} /><span>Commands</span></button>
+        <button onClick={p.onTheme} title="Switch light / dark"><Palette size={15} /><span>Theme</span></button>
+        <button onClick={p.onShortcuts} title="Keyboard shortcuts (?)"><Keyboard size={15} /><span>Shortcuts</span></button>
+        <div className="spacer" />
+        <button onClick={p.onSettings} title={`Settings (${p.mod}+,)`}><SettingsIcon size={15} /><span>Settings</span></button>
       </div>
     </aside>
   );

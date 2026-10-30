@@ -64,8 +64,8 @@ export function ContextBar(p: Props) {
           </button>
         )}
         {p.a11y.length > 0 && (
-          <button data-diag-chip className={`chip ${p.includeA11y ? 'warn' : ''}`} onClick={() => { setA11yOpen(!a11yOpen); setOpen(false); }} title="Accessibility problems on this page (axe-core, WCAG A/AA)">
-            <Accessibility size={12} /> {a11yNodes} a11y
+          <button data-diag-chip className={`chip ${p.includeA11y ? 'warn' : ''}`} onClick={() => { setA11yOpen(!a11yOpen); setOpen(false); }} title={`${a11yNodes} accessibility problem${a11yNodes === 1 ? '' : 's'} on this page (axe-core, WCAG A/AA)`}>
+            <Accessibility size={12} /> {a11yNodes}
           </button>
         )}
       </div>

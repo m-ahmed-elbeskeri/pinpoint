@@ -200,7 +200,7 @@ export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefa
     <div className="git-wrap git-panel" ref={ref}>
       <button className={`chip ${status.repo ? (status.branch?.startsWith('pinpoint/') ? 'on' : '') : 'muted'}`} onClick={() => setOpen(!open)} title={status.linked ? `Git (worktree at ${status.root})` : 'Git'}>
         {status.linked ? <Worktree size={12} /> : <GitBranch size={12} />}
-        <span className="chip-ellipsis">{status.repo ? status.branch : 'No git'}</span>
+        {status.repo && <span className="chip-ellipsis">{status.branch}</span>}
         {status.repo && !!status.dirty && <span className="git-dirty" title={`${status.dirty} uncommitted change${status.dirty > 1 ? 's' : ''}`}>{status.dirty}</span>}
         {status.repo && (!!status.ahead || !!status.behind) && (
           <span className="git-sync-mini" title={`${status.ahead || 0} to push, ${status.behind || 0} to pull`}>{status.ahead ? `↑${status.ahead}` : ''}{status.behind ? `↓${status.behind}` : ''}</span>

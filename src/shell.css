@@ -528,3 +528,56 @@ html, body, #root, .app { overflow: clip; }
 .done-card .no-visual { margin-top: 8px; }
 .done-meta { opacity: .85; }
 .commit-chip { opacity: .85; }
+
+/* ---- header: Record is an action, not a fifth mode ---- */
+.mode-seg .rec-btn { position: relative; margin-left: 5px; }
+.mode-seg .rec-btn::before { content: ''; position: absolute; left: -4px; top: 6px; bottom: 6px; width: 1px; background: var(--line-2); }
+.mode-seg .rec-btn:not(.rec) span { display: none; }
+.mode-seg .rec-btn.rec { color: #fff; background: var(--bad); }
+.mode-seg .rec-btn.rec svg { color: #fff; }
+
+/* ---- composer: agent and model read as one control; quieter diagnostics ---- */
+.composer-foot .agent-picker > button.on { border: 1px solid var(--line-2); border-right: 0; border-radius: 8px 0 0 8px; background: var(--bg-2); height: 26px; }
+.composer-foot .agent-controls .mp-btn { border: 1px solid var(--line-2); border-radius: 0 8px 8px 0; background: var(--bg-2); height: 26px; max-width: 170px; }
+.composer-foot .agent-controls .mp-btn > svg:first-child { display: none; }
+.composer-foot .agent-controls .mp-btn .mp-level { display: none; }
+.composer-foot .agent-controls .mp-btn::before { content: ''; width: 1px; height: 12px; margin-right: 4px; background: var(--line-2); }
+.composer-foot .agent-controls .dd-btn:hover:not(:disabled) { background: var(--bg-4); }
+.composer-foot .agent-controls { gap: 6px; }
+.ctx-bar .chip { height: 22px; font-size: 11px; background: transparent; border-color: transparent; color: var(--muted); }
+.ctx-bar .chip:hover { color: var(--text); background: var(--bg-3); }
+.ctx-bar .chip.warn { color: var(--warn-fg, #ffcf73); }
+
+/* ---- chat: informational notes are quiet; real errors keep a red edge ---- */
+.msg.error { background: transparent; border: 0; border-left: 2px solid var(--bad); border-radius: 0 8px 8px 0; padding: 4px 10px; color: var(--bad-fg, #ff9db0); }
+.msg.error.soft { border-left-color: var(--line-2); color: var(--muted); font-size: 12px; }
+.msg.error.soft svg { color: var(--warn); }
+.msg.status { padding-left: 2px; }
+.working { padding: 2px 4px; }
+.composer-foot .agent-controls .dd.mp { flex-shrink: 0; }
+.composer-foot .agent-controls .mp-btn { width: auto; }
+@container composer (max-width: 380px) { .composer-foot .agent-controls .mp-btn .mp-meter { display: none; } }
+.composer-foot .agent-picker { margin-right: -8px; }
+.composer-foot .agent-controls .mp-btn::before { display: none; }
+
+/* ---- icons first: words only where they carry meaning ---- */
+/* Modes: the active one is labelled, the rest are icons (name and key in the tooltip). */
+.mode-seg button:not(.on):not(.rec-btn) span, .mode-seg kbd { display: none; }
+.mode-seg button { padding: 0 8px; }
+/* Sidebar footer: a row of icon buttons. */
+.threads-foot { display: flex; align-items: center; gap: 2px; padding: 6px 8px; }
+.threads-foot button { width: 30px; height: 30px; padding: 0; justify-content: center; }
+.threads-foot button span, .threads-foot kbd { display: none; }
+.threads-foot .spacer { flex: 1; }
+
+/* ---- agent logos ---- */
+.agent-icon { flex-shrink: 0; color: var(--text-2); }
+.agent-icon.letter { display: inline-grid; place-items: center; border-radius: 4px; background: var(--bg-4); color: var(--text-2); font-weight: 700; line-height: 1; }
+.dd-item .agent-icon { color: var(--text-2); }
+.dd-item.sel .agent-icon, .agent-picker > button.on .agent-icon { color: var(--text); }
+.agent-icon:not(.letter) { display: inline-flex; line-height: 1; }
+.agent-icon:not(.letter) svg { display: block; width: 1em; height: 1em; }
+/* The composer's agent button is just the logo; the name is in its tooltip and the menu. */
+.composer-foot .agent-picker > button.on > span:not(.agent-icon) { display: none; }
+.composer-foot .agent-picker > button.on { padding: 0 6px 0 8px; gap: 4px; }
+.composer-foot .agent-picker > button.on .agent-icon { font-size: 15px; }

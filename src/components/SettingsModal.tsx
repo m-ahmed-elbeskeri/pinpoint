@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PanelLeft, PanelRight, Plus, Trash2, X } from './icons';
 import type { AgentId, CustomAgent, HarnessInfo, Settings } from '../lib/types';
+import { AgentIcon } from './AgentIcon';
 
 interface Props {
   settings: Settings;
@@ -33,16 +34,16 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
           <h4>Agents</h4>
           <p className="hint">Pinpoint runs any of these coding-agent CLIs headless in your project. Install one and it shows up here; set a path if it isn't on your PATH.</p>
           <div className="harness-row">
-            <span className="harness-name">Claude Code {status('claude')}</span>
+            <span className="harness-name"><AgentIcon id="claude" name="Claude Code" /> Claude Code {status('claude')}</span>
             <input value={s.claudePath} onChange={(e) => set('claudePath', e.target.value)} placeholder="claude" spellCheck={false} title="CLI path" />
           </div>
           <div className="harness-row">
-            <span className="harness-name">Codex {status('codex')}</span>
+            <span className="harness-name"><AgentIcon id="codex" name="Codex" /> Codex {status('codex')}</span>
             <input value={s.codexPath} onChange={(e) => set('codexPath', e.target.value)} placeholder="codex" spellCheck={false} title="CLI path" />
           </div>
           {builtins.map((h) => (
             <div key={h.id} className="harness-row">
-              <span className="harness-name">{h.name} {status(h.id)}</span>
+              <span className="harness-name"><AgentIcon id={h.id} name={h.name} /> {h.name} {status(h.id)}</span>
               <input value={s.agentPaths?.[h.id] || ''} onChange={(e) => setIn('agentPaths', h.id, e.target.value)} placeholder={h.bin} spellCheck={false} title="CLI path" />
               <input value={s.agentModels?.[h.id] || ''} onChange={(e) => setIn('agentModels', h.id, e.target.value)} placeholder="default model" spellCheck={false} title="Model passed to the CLI (blank uses its own default)" />
             </div>

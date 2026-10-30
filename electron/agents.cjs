@@ -10,7 +10,9 @@ const { harnesses, harness, binOf } = require('./harnesses.cjs');
 
 function detectOne(bin) {
   return new Promise((resolve) => {
-    execFile(bin, ['--version'], { timeout: 15000, shell: isWin, windowsHide: true }, (err, stdout) => {
+    execFile(bin, ['--version'], { timeout: 20000, shell: isWin, windowsHide: true }, (err, stdout) => {
+      // A missing CLI fails at once; one killed for taking too long is installed, just slow to start.
+      if (err && (err.killed || err.signal)) return resolve({ ok: true });
       resolve(err ? { ok: false } : { ok: true, version: String(stdout).trim().split('\n')[0] });
     });
   });

@@ -206,8 +206,8 @@ export function PinsChip({ projectDir, url, title, onCompare, flash }: PinsProps
 
   return (
     <div className="git-wrap" ref={ref}>
-      <button className={`chip ${changed ? 'warn' : pins.length ? '' : 'muted'}`} onClick={() => setOpen(!open)} title="Pinned pages: baselines that should not change">
-        <PinIcon size={12} /> {changed ? `${changed} pin${changed > 1 ? 's' : ''} changed` : pins.length ? `${pins.length} pinned` : 'Pin'}
+      <button className={`chip ${changed ? 'warn' : pins.length ? '' : 'muted'}`} onClick={() => setOpen(!open)} title={changed ? `${changed} pinned page${changed > 1 ? 's' : ''} changed` : pins.length ? `${pins.length} pinned page${pins.length > 1 ? 's' : ''}: baselines that should not change` : 'Pin this page: keep a screenshot as a baseline that should not change'}>
+        <PinIcon size={12} />{changed || pins.length ? ` ${changed || pins.length}` : ''}
       </button>
       {open && (
         <div className="git-pop">
