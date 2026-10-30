@@ -25,6 +25,7 @@ interface Props {
   status: GitStatus;
   initialBase?: string;
   initialRemote?: boolean;
+  initialPr?: boolean;
   prDefaults(): PrDefaults;
   flash(msg: string): void;
   onOpen(path: string): void;
@@ -32,7 +33,7 @@ interface Props {
 }
 
 // Everything on this branch measured against a base branch of your choice: what a pull request into it would show.
-export function BranchCompare({ status, initialBase, initialRemote, prDefaults, flash, onOpen, onClose }: Props) {
+export function BranchCompare({ status, initialBase, initialRemote, initialPr, prDefaults, flash, onOpen, onClose }: Props) {
   const [base, setBase] = useState(initialRemote && status.upstream ? ORIGIN : initialBase || status.defaultBranch || 'main');
   const remote = base === ORIGIN;
   const [working, setWorking] = useState(true);
@@ -43,7 +44,7 @@ export function BranchCompare({ status, initialBase, initialRemote, prDefaults, 
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState<string>();
   const [tab, setTab] = useState<'files' | 'commits'>('files');
-  const [pr, setPr] = useState<PrDefaults | null>(null);
+  const [pr, setPr] = useState<PrDefaults | null>(() => (initialPr && status.remote && status.gh.authed ? prDefaults() : null));
 
   useEffect(() => {
     window.pinpoint.gitBranches().then((r) => setNames([...new Set(r.branches.map((b) => b.name))].filter((n) => n !== status.branch))).catch(() => {});

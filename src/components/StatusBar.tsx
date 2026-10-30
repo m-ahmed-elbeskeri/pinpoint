@@ -44,7 +44,7 @@ const SHORTCUTS: [string, [string, string][]][] = [
   ['General', [['Ctrl/⌘ K', 'Command palette'], ['?', 'This list'], ['Ctrl/⌘ ,', 'Settings']]],
   ['Chats', [['Ctrl/⌘ Shift O', 'New chat'], ['Ctrl/⌘ Shift A', 'New side chat'], ['Enter', 'Send (while working: after the current step)'], ['Ctrl/⌘ Enter', 'Interrupt and send now'], ['@', 'Mention a file'], ['/', 'Commands']]],
   ['Page', [['V', 'Browse'], ['S', 'Annotate: click an element or drag to draw'], ['↑ ↓', 'Annotate: pick the parent or child'], ['Alt', 'Annotate: measure from the selected element'], ['D', 'Draw'], ['K', 'Sketch'], ['F', 'Freeze the page'], ['Ctrl/⌘ T', 'New tab'], ['Esc', 'Back to browsing']]],
-  ['Layout', [['Ctrl/⌘ Shift B', 'Chats sidebar'], ['Ctrl/⌘ B', 'Agent panel'], ['Ctrl/⌘ J', 'Terminal and logs'], ['Ctrl/⌘ Shift L', 'Copy a layout report']]],
+  ['Layout', [['Ctrl/⌘ Shift B', 'Chats sidebar'], ['Ctrl/⌘ B', 'Agent panel'], ['Ctrl/⌘ J', 'Terminal and logs'], ['Ctrl/⌘ Shift E', 'Files'], ['Ctrl/⌘ .', 'Zen mode'], ['Ctrl/⌘ Shift L', 'Copy a layout report']]],
 ];
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);

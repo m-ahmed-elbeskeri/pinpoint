@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArrowRight, ChevronDown, ClipboardCopy, ExternalLink, TerminalSquare, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, X } from './icons';
+import { Archive, ArrowRight, ChevronDown, ClipboardCopy, ExternalLink, TerminalSquare, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, NewWindow, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, Users, X } from './icons';
 import { Logo } from './Logo';
 import { PullIcon } from './PullIcon';
 import type { ChatMeta, GitPull, OtherChat } from '../lib/types';
@@ -133,6 +133,7 @@ export function ThreadSidebar(p: Props) {
   const fileManager = window.pinpoint.platform === 'darwin' ? 'Finder' : window.pinpoint.platform === 'win32' ? 'File Explorer' : 'file manager';
   const projectMenu = (dir: string, current: boolean) => menuFor === `proj:${dir}` && (
     <div className="thread-menu proj-menu">
+      {!current && <button onClick={() => { setMenuFor(null); window.pinpoint.openProjectWindow(dir).catch(() => {}); }}><NewWindow size={13} /> Open in a new window</button>}
       <button onClick={() => { setMenuFor(null); window.pinpoint.openPath(dir); }}><FolderOpen size={13} /> Show in {fileManager}</button>
       {current && <button onClick={() => { setMenuFor(null); window.pinpoint.openFile('.').catch(() => {}); }}><ExternalLink size={13} /> Open in your editor</button>}
       {current && <button onClick={() => { setMenuFor(null); p.onTerminal(); }}><TerminalSquare size={13} /> Open a terminal here</button>}
@@ -217,6 +218,7 @@ export function ThreadSidebar(p: Props) {
                       <button onClick={() => { setMenuFor(null); patch(c.id, { pinned: !c.pinned }); }}><Pin size={13} /> {c.pinned ? 'Unpin' : 'Pin to top'}</button>
                       <button onClick={() => { setMenuFor(null); patch(c.id, { archived: !c.archived }); }}><Archive size={13} /> {c.archived ? 'Unarchive' : 'Archive'}</button>
                       <button onClick={() => { setMenuFor(null); window.pinpoint.exportChat(c.id).catch(() => null); }}><Download size={13} /> Export as Markdown…</button>
+                      <button onClick={() => { setMenuFor(null); window.pinpoint.shareChat(c.id).catch(() => null); }} title="Save this chat as a file a teammate can open in Pinpoint and carry on from"><Users size={13} /> Hand to a teammate…</button>
                       <button className="danger" onClick={() => { if (confirm === c.id) { setMenuFor(null); askDelete(c.id); } else setConfirm(c.id); }}>
                         <Trash2 size={13} /> {confirm === c.id ? 'Click again to delete' : 'Delete'}
                       </button>

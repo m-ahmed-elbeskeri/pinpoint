@@ -234,7 +234,8 @@ export interface Chat {
   items: ChatItem[];
 }
 
-export interface MemoryItem { id: string; text: string; enabled: boolean; createdAt: number }
+export interface MemoryItem { id: string; text: string; enabled: boolean; createdAt: number; shared?: boolean }
+export interface SavedLayout { name: string; threadsHidden: boolean; panelHidden: boolean; panelSide: 'left' | 'right'; panelWidth: number; statusBar: boolean; split: boolean }
 export interface DesignDoc { path: string; exists: boolean; content: string }
 export interface RouteInfo { route: string; file: string; framework: string; dynamic: boolean }
 
@@ -277,6 +278,10 @@ export interface Settings {
   threadsHidden?: boolean;
   theme?: 'system' | 'dark' | 'light';
   statusBar?: boolean;
+  tray?: boolean;
+  split?: boolean;
+  layouts?: SavedLayout[];
+  onboarded?: boolean;
   snippets?: { name: string; text: string }[];
   sounds?: boolean;
   textSize?: 'small' | 'normal' | 'large';
@@ -429,6 +434,14 @@ export interface PinpointAPI {
   patchChat(id: string, patch: { renamed?: string | null; pinned?: boolean; archived?: boolean }): Promise<boolean>;
   searchChats(q: string): Promise<{ id: string; title: string; updatedAt: number; snippet: string }[]>;
   exportChat(id: string): Promise<string | null>;
+  shareChat(id: string): Promise<string | null>;
+  receiveChat(): Promise<string | null>;
+  readProjectFile(rel: string): Promise<{ binary: boolean; size: number; text: string; truncated: boolean }>;
+  projectChanges(): Promise<Record<string, 'M' | 'A' | 'D'>>;
+  openProjectWindow(dir: string): Promise<boolean>;
+  tray(state: { working: number; waiting: number; chats: { id: string; title: string; state: string }[] }): Promise<boolean>;
+  onTrayChat(cb: (id: string) => void): () => void;
+  draftPR(args: { draft: string; base?: string }): Promise<string>;
   loadChat(id: string): Promise<Chat | null>;
   saveChat(chat: Chat): Promise<boolean>;
   deleteChat(id: string): Promise<boolean>;

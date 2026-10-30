@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { FileText, FolderOpen, Globe, Play, Share2, SquarePen, TerminalSquare } from './icons';
 import type { DrawerTab } from './Drawer';
 import { Logo } from './Logo';
@@ -13,15 +14,17 @@ interface Props {
   onStartDev(): void;
   onSketch(): void;
   onTool(tool: DrawerTab): void;
+  setup?: ReactNode;
 }
 
-export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningUrl, onOpenUrl, onOpenProject, onStartDev, onSketch, onTool }: Props) {
+export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningUrl, onOpenUrl, onOpenProject, onStartDev, onSketch, onTool, setup }: Props) {
   return (
     <div className="welcome clean">
       <div className="start">
         <Logo size={36} />
+        {setup}
         {projectDir && <div className="start-project" title={projectDir}>{projectDir.split(/[\\/]/).filter(Boolean).pop()}{devCommand && <span>$ {devCommand}{devLabel && devLabel !== devCommand.split(' ').pop() ? ` · ${devLabel}` : ''}</span>}</div>}
-        <div className="start-actions">
+        {!setup && <div className="start-actions">
           {projectDir && runningUrl && (
             <button className="start-btn primary" onClick={() => onOpenUrl(runningUrl)} title="A server is already running on this project's port">
               <Globe size={18} /><span>Open {runningUrl.replace(/^https?:\/\//, '')}</span>
@@ -37,7 +40,7 @@ export function Welcome({ projectDir, devCommand, devLabel, devRunning, runningU
           <button className="start-btn" onClick={() => onTool('agent')}><FileText size={18} /><span>Agent logs</span></button>
           <button className="start-btn" onClick={onSketch}><SquarePen size={18} /><span>Sketch</span></button>
           <button className="start-btn" onClick={onOpenProject}><FolderOpen size={18} /><span>{projectDir ? 'Switch project' : 'Open project'}</span></button>
-        </div>
+        </div>}
       </div>
     </div>
   );

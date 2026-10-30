@@ -119,6 +119,10 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
             <input type="checkbox" checked={!!s.sounds} onChange={(e) => set('sounds', e.target.checked)} />
             Play a quiet sound when a run finishes or needs your OK
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.tray !== false} onChange={(e) => set('tray', e.target.checked)} />
+            Show chats that are working or need you in the system tray
+          </label>
           <div className="setting-row">
             <span>Theme</span>
             <div className="seg">

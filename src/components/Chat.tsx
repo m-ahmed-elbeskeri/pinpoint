@@ -3,7 +3,7 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, ListChecks, ShieldCheck, ClipboardCopy, Pin, DotsThree, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+  ExternalLink, ListChecks, ShieldCheck, ClipboardCopy, Pin, DotsThree, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff, GitFork,
 } from './icons';
 import { flowVerdict } from '../lib/flow';
 import { INTERRUPTED } from '../lib/chat';
@@ -408,6 +408,7 @@ interface ItemProps {
   onSendText(text: string): void;
   onSaveSnippet(text: string): void;
   onRewind(itemId: string): void;
+  onFork(itemId: string): void;
   onMeasureBuild(runId: string): void;
   onOpenLocal(): void;
   onFlowFix(runId: string): void;
@@ -508,7 +509,7 @@ function Attachments({ annotations }: { annotations: Extract<ChatItem, { kind: '
   );
 }
 
-export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, onSaveSnippet, onRewind, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
+export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, onSaveSnippet, onRewind, onFork, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
   const [loadStats, setLoadStats] = useState(false);
   const [moreActs, setMoreActs] = useState(false);
   switch (item.kind) {
@@ -536,6 +537,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
               <button onClick={() => onEditMessage(item.text)} title="Put this back in the composer to edit and send"><Pencil size={12} /></button>
               {!busy && <button onClick={() => onSendText(item.text)} title="Send it again"><RotateCw size={12} /></button>}
               <button onClick={() => onSaveSnippet(item.text)} title="Save as a snippet you can reuse from the / menu"><Pin size={12} /></button>
+              <button onClick={() => onFork(item.id)} title="Fork: a new chat with everything before this message, ready to take another direction"><GitFork size={12} /></button>
               {!busy && <RewindButton onRewind={() => onRewind(item.id)} />}
             </div>
           )}

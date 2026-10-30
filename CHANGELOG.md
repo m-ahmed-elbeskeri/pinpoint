@@ -4,6 +4,25 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-30
+
+### Added
+
+- **Fork from a message.** A new chat with everything before that message, with the message back in the composer to take another direction. The original stays as it was.
+- **Files.** A file tree with changed badges and a quick code viewer, as a tool tab (Ctrl/⌘+Shift+E). Mention a file in your message or open it in your editor from there.
+- **Tools beside the page.** Any tool tab can sit next to the page instead of over it.
+- **Zen mode** (Ctrl/⌘+.) shows just the page and the chat. **Saved layouts** remember the panels by name, from the command palette.
+- **A window per project.** Open a recent project in its own window. Each keeps its own settings, agent runs and dev server.
+- **Tray status.** The tray lists chats that are working or need you; click one to go to it. It can be switched off in Settings.
+- **Pull request from a chat.** `/pr`, the palette or an icon by the Chat tab opens the form directly, and "Write it for me" has the agent write the description from the branch's diff. It changes nothing.
+- **Shared rules.** A rule in Project memory can be shared with the team: it moves to `PINPOINT.md`, which you commit. Switching a shared rule off only affects you.
+- **Hand a chat to a teammate.** Save a chat as a file; they open it in Pinpoint and carry on. Runs arrive as notes, without screenshots or undo, and code travels through your branch.
+- **First-run setup.** With no project or no working agent, the start page shows which agents are installed, with the commands to install them and sign in.
+
+### Changed
+
+- A new agent session now gets the earlier conversation as text whenever it can't resume: after a fork, a hand-over, a change of agent, or with an agent that has no resume.
+
 ## [0.10.0] - 2026-10-30
 
 ### Added

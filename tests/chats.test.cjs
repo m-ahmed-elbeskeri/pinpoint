@@ -34,6 +34,7 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "    }",
   "    if (m.type !== 'user') continue;",
   "    const text = m.message.content.filter((c) => c.type === 'text').map((c) => c.text).join(' ');",
+  "    if (/<earlier-conversation>/.test(text)) fs.writeFileSync(path.join(process.cwd(), 'carried.txt'), text);",
   "    const word = (text.match(/(slow|quick)-(\\w+)/) || [])[0] || 'other';",
     "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in' });",
   "    if (word === 'quick-ask') {",
@@ -354,6 +355,63 @@ server.listen(0, '127.0.0.1', () => {
       log('the project folder opens a menu', /Show in/.test(folderMenu) && /Copy path/.test(folderMenu) && /Open a terminal here/.test(folderMenu), folderMenu);
       await ui(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); 0`);
       await sleep(150);
+
+      {
+      const press = (k, mods = '') => ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, ctrlKey: true, shiftKey: ${/shift/.test(mods)}, bubbles: true })); 0`);
+      const fillIn = (sel, text) => ui(`(() => { const t = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(t, ${JSON.stringify(text)}); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+
+      // Fork: everything before the message, the message back in the composer, the original untouched.
+      const usersBefore = await ui(`document.querySelectorAll('.chat .msg.user').length`);
+      await ui(`[...document.querySelectorAll('.msg.user .msg-actions button[title^="Fork"]')].pop().click(); 0`);
+      await sleep(500);
+      log('a fork keeps only what came before the message', (await ui(`document.querySelectorAll('.chat .msg.user').length`)) === usersBefore - 1, String(await ui(`document.querySelectorAll('.chat .msg.user').length`)));
+      log('and puts the message back in the composer', /Review comments|\S/.test(await ui(`document.querySelector('.composer-box textarea').value`)));
+      await send('quick-forked please');
+      await until(`document.querySelector('.chat .working') ? 1 : 0`, 4000);
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      log('its new session is told the earlier conversation', fs.existsSync(path.join(proj, 'carried.txt')) && /earlier-conversation/.test(fs.readFileSync(path.join(proj, 'carried.txt'), 'utf8')));
+
+      // Files
+      await press('E', 'shift');
+      log('the files tab opens', await until(`document.querySelector('.files-panel .file-row') ? 1 : 0`, 5000) === 1);
+      await ui(`[...document.querySelectorAll('.file-row')].find((r) => r.textContent.includes('index.html')).click(); 0`);
+      log('a file opens with line numbers', await until(`document.querySelector('.code-view .code-num') && document.querySelector('.code-view').textContent.includes('<') ? 1 : 0`, 5000) === 1);
+      await ui(`document.querySelector('.tool-split').click(); 0`);
+      log('a tool can sit beside the page', await until(`document.querySelector('.stage.split .tool-view') ? 1 : 0`, 3000) === 1);
+      await sleep(200);
+      try { fs.writeFileSync(path.join(OUT, 'chats-split.png'), (await host.capturePage()).toPNG()); } catch {  }
+      await ui(`document.querySelector('.tabbar .tab:not(.tool-tab)').click(); 0`);
+      await sleep(150);
+      log('and stays open when you click the page tab', (await ui(`!!document.querySelector('.files-panel')`)) === true);
+      await ui(`document.querySelector('.tool-split').click(); 0`);
+      await ui(`document.querySelector('.tool-tab .tab-x').click(); 0`);
+      await sleep(200);
+
+      // Zen
+      await press('.');
+      log('zen hides the sidebar and tabs', await until(`document.querySelector('.app.zen') && !document.querySelector('.threads') ? 1 : 0`, 2000) === 1);
+      await sleep(200);
+      try { fs.writeFileSync(path.join(OUT, 'chats-zen.png'), (await host.capturePage()).toPNG()); } catch {  }
+      await press('.');
+      log('and comes back', await until(`!document.querySelector('.app.zen') && document.querySelector('.threads') ? 1 : 0`, 2000) === 1);
+
+      // Layouts
+      await press('k');
+      await sleep(150);
+      await fillIn('.cmd-input input', 'Save or delete layouts');
+      await sleep(200);
+      await ui(`document.querySelector('.cmd-item').click(); 0`);
+      await sleep(200);
+      await fillIn('.modal.layouts input', 'Review');
+      await sleep(100);
+      await ui(`document.querySelector('.modal.layouts form button').click(); 0`);
+      await sleep(300);
+      const stored = JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8'));
+      log('a layout is saved by name', stored.layouts?.some((l) => l.name === 'Review' && 'panelWidth' in l), JSON.stringify(stored.layouts));
+      log('and listed', /Review/.test(await ui(`document.querySelector('.layout-list')?.textContent || ''`)));
+      await ui(`document.querySelector('.modal.layouts .modal-head .icon-btn').click(); 0`);
+      await sleep(150);
+      }
 
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }

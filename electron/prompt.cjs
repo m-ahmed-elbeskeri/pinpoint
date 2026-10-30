@@ -264,7 +264,7 @@ function siteNote(site) {
 const REMEMBER_RULE = 'If the user states a lasting preference for this project ("always…", "never…", "from now on…", a brand rule), end your reply with one line exactly like `REMEMBER: <the rule in one short sentence>`. Otherwise don\'t add that line.';
 
 function buildPrompt({ request, files, projectDir, followUp, design, memory, designSystem }) {
-  const { url, title, viewport, breakpoints, instruction, annotations, diagnostics, route, env, variant, note, site } = request;
+  const { url, title, viewport, breakpoints, instruction, annotations, diagnostics, route, env, variant, note, site, carried } = request;
   const hasAnn = annotations.length > 0;
   const empty = isEmptyProject(projectDir);
   const ctx = contextSections({ design: followUp ? '' : design, memory, diagnostics, route, env, designSystem: followUp ? null : designSystem });
@@ -303,6 +303,11 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
 
   if (note) { out.push(note); out.push(''); }
   if (variantLines.length) { out.push(...variantLines); out.push(''); }
+  if (carried?.trim() && !followUp) {
+    out.push('## Earlier in this conversation');
+    out.push('This chat started with another agent session, which you cannot see. Here is what was said, for context:');
+    out.push('<earlier-conversation>', carried.trim(), '</earlier-conversation>', '');
+  }
 
   if (instruction?.trim()) {
     out.push('## What the user wants');

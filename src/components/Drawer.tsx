@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { FileText, Globe, Play, Square, TerminalSquare, X } from './icons';
+import { Columns2, FileText, FileTree, Globe, Play, Square, TerminalSquare, X } from './icons';
 import type { DevCandidate } from '../lib/types';
 
 const TerminalPane = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPane })));
 
-export type DrawerTab = 'term' | 'dev' | 'agent' | 'net';
+export type DrawerTab = 'term' | 'dev' | 'agent' | 'net' | 'files';
 export const TOOLS: { id: DrawerTab; label: string; icon: typeof Globe }[] = [
+  { id: 'files', label: 'Files', icon: FileTree },
   { id: 'term', label: 'Terminal', icon: TerminalSquare },
   { id: 'dev', label: 'Dev server', icon: Play },
   { id: 'net', label: 'Network', icon: Globe },
@@ -18,6 +19,9 @@ interface Props {
   shell?: string;
   onShell(shell: string): void;
   network: ReactNode;
+  files: ReactNode;
+  split: boolean;
+  onSplit(): void;
   netFailed: number;
   devLog: string;
   agentLog: string;
@@ -66,13 +70,15 @@ export function Drawer(p: Props) {
           </form>
         )}
         {p.tab === 'term' ? <div className="term-slot" ref={setTermSlot} /> : p.tab !== 'dev' && <div className="spacer" />}
+        <button className={`icon-btn tool-split ${p.split ? 'on' : ''}`} onClick={p.onSplit} aria-pressed={p.split} title={p.split ? 'Show this over the page' : 'Show this beside the page'}><Columns2 size={15} /></button>
         <button className="icon-btn" onClick={p.onClose}><X size={15} /></button>
       </div>
       <div className="term-wrap" style={{ display: p.tab === 'term' ? 'flex' : 'none' }}>
         {(p.tab === 'term' || seen.current) && <Suspense fallback={null}><TerminalPane cwd={p.cwd} preferred={p.shell} onPrefer={p.onShell} barSlot={p.tab === 'term' ? termSlot : null} /></Suspense>}
       </div>
       {p.tab === 'net' && p.network}
-      <pre ref={pre} className="drawer-log" style={{ display: p.tab === 'term' || p.tab === 'net' ? 'none' : undefined }}>{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>
+      {p.tab === 'files' && p.files}
+      <pre ref={pre} className="drawer-log" style={{ display: p.tab === 'term' || p.tab === 'net' || p.tab === 'files' ? 'none' : undefined }}>{text || (p.tab === 'dev' ? 'Run your dev server here. Pinpoint opens the local URL it prints.' : 'No agent output yet.')}</pre>
     </div>
   );
 }

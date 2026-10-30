@@ -26,7 +26,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 - [x] "Thought for 12s" and per-step timers
 - [x] Context meter by the composer; cost per run, per chat and per day
-- [x] Message hover actions: copy, edit and resend, retry (fork from here still open)
+- [x] Message hover actions: copy, edit and resend, retry, fork from here
 - [x] Rewind to any message (undo the runs after it)
 - [x] Subagent lanes (steps nested under the Task that started them)
 - [x] Live strip of files the agent is reading
@@ -40,7 +40,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 - [x] Image chips inside the composer
 - [x] Prompt history (↑, Ctrl+R) and saved snippets
 - [x] Paste long text as a collapsed chip; drag files in from the OS
-- [ ] Voice dictation
+- [ ] Voice dictation (blocked: Electron's speech recognition needs a Google API key)
 
 ## Threads and workspace
 
@@ -50,8 +50,8 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 - [x] Keep or revert per hunk; "Explain this change"; inline review comments that feed the next message
 - [x] Change summary at the top of a turn with jump links
 - [x] Compare runs (timeline) and branches (git panel)
-- [ ] File tree with recently-changed badges; quick code viewer
-- [ ] Split panes, saved layouts, zen mode; one window per project; tray status
+- [x] File tree with recently-changed badges; quick code viewer
+- [x] Split panes (a tool beside the page), saved layouts, zen mode; one window per project; tray status
 - [x] Terminal tabs in the drawer header
 - [x] Timeline scrubber of page screenshots across a thread's runs
 - [x] Annotation pins kept on the page across reloads, per thread
@@ -59,9 +59,9 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 ## Sharing
 
 - [x] Export a thread as Markdown
-- [ ] Thread → PR with written description and screenshots
-- [ ] Shared project memory and rules
-- [ ] Hand a thread to a teammate
+- [x] Thread → PR with written description and screenshots
+- [x] Shared project memory and rules (PINPOINT.md, committed)
+- [x] Hand a thread to a teammate (a file they open; the agent gets the conversation as text)
 
 ## Feel
 
@@ -72,4 +72,4 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 - [x] Palette: recent section, search inside chat contents
 - [x] Resume on interrupted runs
 - [x] Status bar: branch, dev server, errors, agent, model, cost (off by default)
-- [ ] Onboarding that detects installed CLIs and helps sign in
+- [x] Onboarding that detects installed CLIs and shows how to install and sign in

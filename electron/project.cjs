@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const pp = (root, ...p) => path.join(root, '.pinpoint', ...p);
 const safeId = (id) => String(id).replace(/[^\w-]/g, '');
@@ -110,15 +111,99 @@ function writeDesign(root, content) {
   return { path: p, exists: true, content };
 }
 
-function readMemory(root) {
+// Rules shared with the team live in PINPOINT.md, which is committed; .pinpoint/ stays private to this machine.
+const sharedPath = (root) => path.join(root, 'PINPOINT.md');
+const SHARED_HEAD = '# Project rules\n\nRules for coding agents working here, kept by Pinpoint. Each bullet is sent with every request.\n';
+const sharedId = (text) => `shared-${crypto.createHash('sha1').update(text).digest('hex').slice(0, 12)}`;
+
+function readShared(root) {
+  let text = '';
+  try { text = fs.readFileSync(sharedPath(root), 'utf8'); } catch { return []; }
+  return text.split(/\r?\n/).flatMap((l) => {
+    const m = l.match(/^\s*[-*]\s+(.+?)\s*$/);
+    return m ? [m[1]] : [];
+  });
+}
+
+function readLocalMemory(root) {
   try { return JSON.parse(fs.readFileSync(pp(root, 'memory.json'), 'utf8')); }
   catch { return []; }
 }
 
+function readMemory(root) {
+  const local = readLocalMemory(root);
+  const off = new Set(local.filter((m) => m.shared && m.enabled === false).map((m) => m.id));
+  const shared = readShared(root).map((text) => {
+    const id = sharedId(text);
+    return { id, text, enabled: !off.has(id), shared: true, createdAt: 0 };
+  });
+  return [...shared, ...local.filter((m) => !m.shared)];
+}
+
 function writeMemory(root, items) {
   ensureDir(root);
-  fs.writeFileSync(pp(root, 'memory.json'), JSON.stringify(items, null, 2));
-  return items;
+  const shared = items.filter((m) => m.shared && m.text?.trim());
+  const before = readShared(root);
+  const lines = shared.map((m) => m.text.trim().replace(/\s*\n\s*/g, ' '));
+  if (lines.join('\n') !== before.join('\n')) {
+    if (!lines.length) {
+      // Only the rules are ours: a file with other writing in it stays, without its bullets.
+      let rest = '';
+      try { rest = fs.readFileSync(sharedPath(root), 'utf8').split(/\r?\n/).filter((l) => !/^\s*[-*]\s+/.test(l)).join('\n').trim(); } catch { /* no file */ }
+      if (rest && `${rest}\n` !== SHARED_HEAD.trim() + '\n') fs.writeFileSync(sharedPath(root), `${rest}\n`);
+      else fs.rmSync(sharedPath(root), { force: true });
+    } else {
+      let head = SHARED_HEAD;
+      try {
+        const kept = fs.readFileSync(sharedPath(root), 'utf8').split(/\r?\n/).filter((l) => !/^\s*[-*]\s+/.test(l)).join('\n').trim();
+        if (kept) head = `${kept}\n`;
+      } catch { /* a new file */ }
+      fs.writeFileSync(sharedPath(root), `${head}\n${lines.map((l) => `- ${l}`).join('\n')}\n`);
+    }
+  }
+  // Switching a shared rule off is personal: it is remembered here and doesn't touch the file.
+  const local = [
+    ...items.filter((m) => !m.shared),
+    ...lines.map((text) => ({ id: sharedId(text), text })).filter((x) => shared.some((m) => m.enabled === false && m.text.trim().replace(/\s*\n\s*/g, ' ') === x.text)).map((x) => ({ ...x, shared: true, enabled: false })),
+  ];
+  fs.writeFileSync(pp(root, 'memory.json'), JSON.stringify(local, null, 2));
+  return readMemory(root);
+}
+
+// A chat packed to hand to a teammate. Sessions and runs only exist on this machine, so runs become plain notes;
+// the new agent gets the conversation as text the first time it is asked something.
+function packThread(chat) {
+  return { pinpointThread: 1, chat: { title: chat.renamed || chat.title, createdAt: chat.createdAt, agent: chat.agent, branch: chat.branch, items: chat.items || [] } };
+}
+
+function unpackThread(data, id, now = Date.now()) {
+  if (data?.pinpointThread !== 1 || !Array.isArray(data.chat?.items)) throw new Error("That file isn't a Pinpoint chat.");
+  const note = (text, i) => ({ kind: 'status', id: `${id}-n${i}`, text });
+  const items = data.chat.items.flatMap((it, i) => {
+    if (it.kind === 'approval') return [];
+    if (it.kind !== 'done') return [it];
+    const files = (it.changes || []).filter((c) => !c.reverted).map((c) => c.path);
+    return [note(`${it.undone ? 'Run undone' : it.ok ? 'Run finished' : 'Run stopped'}${files.length && !it.undone ? `: changed ${files.join(', ')}` : ''}`, i)];
+  });
+  items.push(note(`Handed over${data.chat.branch ? ` from branch ${data.chat.branch}` : ''}. Their uncommitted changes aren't included.`, 'end'));
+  return { id, title: data.chat.title || 'Handed-over chat', createdAt: now, updatedAt: now, agent: data.chat.agent, branch: data.chat.branch, session: null, items };
+}
+
+// One file for the code viewer: never outside the project, and capped so a huge or binary file can't stall the window.
+const VIEW_LIMIT = 1024 * 1024;
+function readProjectFile(root, rel) {
+  const base = fs.realpathSync(root);
+  const abs = fs.realpathSync(path.resolve(base, String(rel)));
+  if (abs !== base && !abs.startsWith(base + path.sep)) throw new Error('Path is outside the project.');
+  const st = fs.statSync(abs);
+  if (!st.isFile()) throw new Error('Not a file.');
+  const fd = fs.openSync(abs, 'r');
+  try {
+    const buf = Buffer.alloc(Math.min(st.size, VIEW_LIMIT));
+    fs.readSync(fd, buf, 0, buf.length, 0);
+    if (buf.includes(0)) return { binary: true, size: st.size, text: '', truncated: false };
+    return { binary: false, size: st.size, text: buf.toString('utf8'), truncated: st.size > VIEW_LIMIT };
+  } finally { fs.closeSync(fd); }
 }
 
 function readProfiles(root) {
@@ -132,4 +217,4 @@ function writeProfiles(root, list) {
   return list;
 }
 
-module.exports = { ensureDir, listChats, loadChat, saveChat, deleteChat, readDesign, writeDesign, readMemory, writeMemory, readProfiles, writeProfiles, patchChat, searchChats, chatMarkdown };
+module.exports = { ensureDir, listChats, loadChat, saveChat, deleteChat, readDesign, writeDesign, readMemory, writeMemory, readProfiles, writeProfiles, patchChat, searchChats, chatMarkdown, packThread, unpackThread, readProjectFile };

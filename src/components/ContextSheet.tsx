@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Brain, Check, Eye, Loader2, Palette, PenLine, Plus, Sparkles, Trash2, Wand2, X } from './icons';
+import { Brain, Check, Eye, Loader2, Palette, PenLine, Plus, Sparkles, Trash2, Users, Wand2, X } from './icons';
 import { Markdown } from './Chat';
 import type { DesignDoc, MemoryItem, Settings } from '../lib/types';
 import { uid } from '../lib/draw';
@@ -157,7 +157,7 @@ function DesignTab({ settings, saveSettings, design, setDesign, canExtract, extr
 
 function MemoryTab({ settings, saveSettings, memory, setMemory }: Props) {
   const [draft, setDraft] = useState('');
-  const persist = (items: MemoryItem[]) => { setMemory(items); window.pinpoint.writeMemory(items); };
+  const persist = (items: MemoryItem[]) => { setMemory(items); window.pinpoint.writeMemory(items).then(setMemory).catch(() => {}); };
   const add = () => {
     if (!draft.trim()) return;
     persist([{ id: uid(), text: draft.trim(), enabled: true, createdAt: Date.now() }, ...memory]);
@@ -193,6 +193,11 @@ function MemoryTab({ settings, saveSettings, memory, setMemory }: Props) {
                 onChange={(e) => setMemory(memory.map((x) => (x.id === m.id ? { ...x, text: e.target.value } : x)))}
                 onBlur={() => window.pinpoint.writeMemory(memory.filter((x) => x.text.trim()))}
               />
+              <button
+                className={`icon-btn xs ${m.shared ? 'on' : ''}`} aria-pressed={!!m.shared}
+                onClick={() => persist(memory.map((x) => (x.id === m.id ? { ...x, shared: !x.shared } : x)))}
+                title={m.shared ? 'Shared: kept in PINPOINT.md, which you commit. Click to keep it to yourself.' : 'Only on this machine. Click to share it with the team through PINPOINT.md.'}
+              ><Users size={13} /></button>
               <button className="icon-btn xs" onClick={() => persist(memory.filter((x) => x.id !== m.id))} title="Delete"><Trash2 size={13} /></button>
             </li>
           ))}

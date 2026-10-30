@@ -112,6 +112,14 @@ export {
   ArchiveIcon as Archive,
   GitMergeIcon as GitMerge,
   LightningIcon as Zap,
+  GitForkIcon as GitFork,
+  UsersIcon as Users,
+  CornersOutIcon as Maximize,
+  FolderSimpleIcon as Folder,
+  FileIcon as File,
+  TreeViewIcon as FileTree,
+  SquaresFourIcon as LayoutGrid,
+  AppWindowIcon as NewWindow,
 } from '@phosphor-icons/react';
 
 export const PanelRight = (p: IconProps) => <SidebarSimpleIcon mirrored {...p} />;

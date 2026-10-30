@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, webContents, shell, session, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, webContents, shell, session, nativeImage, Tray, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -31,6 +31,12 @@ const review = require('./review.cjs');
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 if (process.env.PINPOINT_USER_DATA) app.setPath('userData', process.env.PINPOINT_USER_DATA);
 let win = null;
+// A project's own window is its own process with its own settings folder, so one project can't reach into another's agent runs or dev server.
+const projectWindow = !!process.env.PINPOINT_WINDOW;
+if (projectWindow) {
+  if (!app.requestSingleInstanceLock()) app.exit(0);
+  app.on('second-instance', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
+}
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 const DEFAULT_SETTINGS = {
@@ -180,6 +186,71 @@ ipcMain.handle('app:notify', (_e, { title, body }) => {
   n.on('click', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
   n.show();
   return true;
+});
+const showWindow = () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } };
+let tray = null;
+// The tray says what's going on while the window is out of sight. Only the first window keeps one.
+ipcMain.handle('app:tray', (_e, { working, waiting, chats }) => {
+  if (projectWindow || loadSettings().tray === false) { tray?.destroy(); tray = null; return false; }
+  if (!tray) {
+    const image = nativeImage.createFromPath(path.join(__dirname, 'icon.png')).resize({ width: 16, height: 16 });
+    tray = new Tray(image);
+    tray.on('click', showWindow);
+  }
+  const parts = [working ? `${working} working` : '', waiting ? `${waiting} need${waiting === 1 ? 's' : ''} you` : ''].filter(Boolean);
+  tray.setToolTip(parts.length ? `Pinpoint: ${parts.join(', ')}` : 'Pinpoint');
+  const rows = (chats || []).slice(0, 8).map((c) => ({
+    label: `${String(c.title || 'Untitled').slice(0, 48)} · ${c.state}`,
+    click: () => { showWindow(); win?.webContents.send('tray:chat', c.id); },
+  }));
+  tray.setContextMenu(Menu.buildFromTemplate([
+    ...rows, ...(rows.length ? [{ type: 'separator' }] : []),
+    { label: 'Show Pinpoint', click: showWindow },
+    { label: 'Quit', click: () => app.quit() },
+  ]));
+  return true;
+});
+// Opens a project in a window of its own. Launching it again just brings that window forward.
+ipcMain.handle('window:openProject', (_e, dir) => {
+  const s = loadSettings();
+  if (!dir || !fs.existsSync(dir)) throw new Error('That folder no longer exists.');
+  if (path.resolve(dir) === path.resolve(s.projectDir || '.')) { showWindow(); return false; }
+  const home = process.env.PINPOINT_WINDOW_HOME || app.getPath('userData');
+  const ud = path.join(home, 'project-windows', crypto.createHash('sha1').update(path.resolve(dir)).digest('hex').slice(0, 16));
+  const file = path.join(ud, 'settings.json');
+  if (!fs.existsSync(file)) {
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ ...s, projectDir: dir, recentProjects: [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8), devCommand: '', tabs: [], activeTab: 0, liveUrl: '', onboarded: true }, null, 2));
+  }
+  const { ELECTRON_RUN_AS_NODE: _drop, ...env } = process.env;
+  const child = spawn(process.execPath, app.isPackaged ? [] : [app.getAppPath()], { detached: true, stdio: 'ignore', env: { ...env, PINPOINT_USER_DATA: ud, PINPOINT_WINDOW: dir, PINPOINT_WINDOW_HOME: home } });
+  child.unref();
+  return true;
+});
+ipcMain.handle('project:read', (_e, rel) => {
+  const root = loadSettings().projectDir;
+  if (!root) throw new Error('No project open.');
+  return project.readProjectFile(root, rel);
+});
+// What git sees as changed, for the badges in the file tree.
+ipcMain.handle('project:changes', async () => {
+  const root = loadSettings().projectDir;
+  if (!root || !fs.existsSync(root)) return {};
+  return new Promise((resolve) => {
+    require('node:child_process').execFile('git', ['status', '--porcelain', '--untracked-files=all', '-z'], { cwd: root, windowsHide: true, timeout: 8000, maxBuffer: 16 * 1024 * 1024 }, (err, out) => {
+      if (err) return resolve({});
+      const parts = String(out).split('\0');
+      const map = {};
+      for (let i = 0; i < parts.length; i++) {
+        const row = parts[i];
+        if (row.length < 4) continue;
+        const code = row.slice(0, 2);
+        map[row.slice(3)] = code.includes('D') ? 'D' : code === '??' || code.includes('A') ? 'A' : 'M';
+        if (code[0] === 'R' || code[0] === 'C') i++; // a rename is followed by its old path
+      }
+      resolve(map);
+    });
+  });
 });
 // Files for @-mentions in the composer: git's view of the project when it's a repo, otherwise a capped walk.
 const SKIP_DIRS = new Set(['node_modules', '.git', '.pinpoint', 'dist', 'build', 'out', '.next', '.nuxt', '.svelte-kit', '.turbo', 'coverage', '.cache', 'vendor', 'target']);
@@ -718,6 +789,30 @@ ipcMain.handle('side:ask', (e, { sideId, question, context, sessionId }) => {
   return true;
 });
 ipcMain.handle('side:cancel', (_e, sideId) => { sideRuns.get(sideId)?.kill(); return true; });
+// The agent writes the pull request's description from the chat and the branch's diff, without touching anything.
+ipcMain.handle('git:prDraft', async (_e, { draft, base }) => {
+  const settings = loadSettings();
+  const cwd = settings.projectDir;
+  project.ensureDir(cwd);
+  const requestDir = path.join(cwd, '.pinpoint', 'side', `pr-${Date.now().toString(36)}`);
+  fs.mkdirSync(requestDir, { recursive: true });
+  const prompt = [
+    'Write the description for a pull request of the current git branch.',
+    `Look at the commits and diff against ${base || 'the default branch'} (for example with git log and git diff). Do not edit, create or delete anything.`,
+    'Say what changed and why in plain language, then anything a reviewer should check. Use short Markdown sections. Do not invent testing that did not happen.',
+    'Reply with only the description, no preamble.',
+    `\nThe notes below were put together from the chat that made these changes:\n<notes>\n${String(draft || '').slice(0, 6000)}\n</notes>`,
+  ].join('\n');
+  let text = '', failed = '';
+  const handle = runAgent({ settings: readOnly(settings), cwd, prompt, images: [], sessionId: null, requestDir, onEvent: (ev) => {
+    if (ev.type === 'text_delta') text += ev.text;
+    else if (ev.type === 'error') failed = ev.text || 'The agent could not write it.';
+  } });
+  const stop = setTimeout(() => handle.kill(), 180000);
+  try { await handle.done; } finally { clearTimeout(stop); }
+  if (!text.trim()) throw new Error(failed || 'The agent returned nothing.');
+  return text.trim();
+});
 
 const approvals = new Map();
 ipcMain.handle('agent:approve', (_e, { runId, approvalId, decision }) => {
@@ -749,6 +844,22 @@ ipcMain.handle('chats:export', async (_e, id) => {
   if (r.canceled || !r.filePath) return null;
   fs.writeFileSync(r.filePath, project.chatMarkdown(c));
   return r.filePath;
+});
+ipcMain.handle('chats:share', async (_e, id) => {
+  const c = project.loadChat(projectDir(), id);
+  if (!c) throw new Error('Send a message in this chat first.');
+  const name = String(c.renamed || c.title || 'chat').replace(/[^\w -]+/g, '').trim().slice(0, 60) || 'chat';
+  const r = await dialog.showSaveDialog(win, { defaultPath: `${name}.pinpoint-chat.json`, filters: [{ name: 'Pinpoint chat', extensions: ['json'] }] });
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, JSON.stringify(project.packThread(c)));
+  return r.filePath;
+});
+ipcMain.handle('chats:receive', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Pinpoint chat', extensions: ['json'] }] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const c = project.unpackThread(JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8')), crypto.randomUUID().replace(/-/g, '').slice(0, 16));
+  project.saveChat(projectDir(), c);
+  return c.id;
 });
 ipcMain.handle('design:read', () => project.readDesign(projectDir()));
 ipcMain.handle('design:write', (_e, content) => project.writeDesign(projectDir(), content));

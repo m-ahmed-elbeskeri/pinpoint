@@ -15,6 +15,19 @@ export interface AgentRequest {
   verify?: { before?: string; after: string; same?: boolean; requests?: { method: string; url: string; before?: { status?: number }; after: { status: number; body: string; error?: string } }[]; flow?: FlowResult };
   note?: string;
   site?: { kind: 'live' | 'built'; local?: string };
+  carried?: string;
+}
+
+// The conversation as plain text, for an agent session that wasn't part of it. Keeps the end when it's too long.
+export function conversationText(items: ChatItem[], limit: number) {
+  const lines: string[] = [];
+  for (const it of items) {
+    if (it.kind === 'user') lines.push(`User: ${[it.text, ...it.annotations.map((a) => a.note)].filter(Boolean).join(' / ')}`);
+    else if (it.kind === 'text') lines.push(`Agent: ${it.text}`);
+    else if (it.kind === 'done') lines.push(`(Run ${it.ok ? 'finished' : 'failed'}; changed ${it.changes.map((c) => c.path).join(', ') || 'nothing'})`);
+    else if (it.kind === 'status' && /^(Run |Handed over)/.test(it.text)) lines.push(`(${it.text})`);
+  }
+  return lines.join('\n').slice(-limit);
 }
 
 export interface RunMeta { site?: 'live' | 'built'; match?: number; variant?: { index: number; total: number }; verify?: boolean; startedAt?: number; frame?: { targets: FrameTarget[]; y: number }; requests?: RequestNote[]; devAnchor?: string; logMark?: number }

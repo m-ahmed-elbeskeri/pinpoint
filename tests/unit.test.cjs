@@ -174,6 +174,54 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   fs.rmSync(bare, { recursive: true, force: true });
   fs.rmSync(top, { recursive: true, force: true });
   fs.rmSync(top + '.worktrees', { recursive: true, force: true });
+
+  // Shared rules, handing a chat over, reading a file for the viewer.
+  const project = require(path.join(repo, 'electron', 'project.cjs'));
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-'));
+  project.writeMemory(proj, [{ id: 'a', text: 'Mine only', enabled: true, createdAt: 1 }, { id: 'b', text: 'Use pill buttons', enabled: true, createdAt: 2, shared: true }]);
+  const rules = fs.readFileSync(path.join(proj, 'PINPOINT.md'), 'utf8');
+  check('a shared rule goes to the committed file, a private one does not', rules.includes('- Use pill buttons') && !rules.includes('Mine only'), rules);
+  let mem = project.readMemory(proj);
+  check('both come back, marked', mem.length === 2 && mem.find((m) => m.text === 'Use pill buttons').shared && !mem.find((m) => m.text === 'Mine only').shared, JSON.stringify(mem));
+  fs.appendFileSync(path.join(proj, 'PINPOINT.md'), '- From a teammate\n');
+  mem = project.readMemory(proj);
+  check("a teammate's rule pulled from git is picked up", mem.some((m) => m.text === 'From a teammate' && m.enabled && m.shared));
+  mem = project.writeMemory(proj, mem.map((m) => (m.text === 'From a teammate' ? { ...m, enabled: false } : m)));
+  check('switching a shared rule off is personal: the file keeps it', fs.readFileSync(path.join(proj, 'PINPOINT.md'), 'utf8').includes('From a teammate') && mem.find((m) => m.text === 'From a teammate').enabled === false, JSON.stringify(mem));
+  fs.writeFileSync(path.join(proj, 'PINPOINT.md'), '# Team notes\n\nKeep this paragraph.\n\n- One rule\n');
+  project.writeMemory(proj, project.readMemory(proj).map((m) => (m.shared ? { ...m, text: 'Changed rule' } : m)));
+  const edited = fs.readFileSync(path.join(proj, 'PINPOINT.md'), 'utf8');
+  check('editing rules keeps what else the file says', edited.includes('Keep this paragraph.') && edited.includes('- Changed rule') && !edited.includes('- One rule'), edited);
+  project.writeMemory(proj, project.readMemory(proj).filter((m) => !m.shared));
+  check('removing the last rule keeps other writing', fs.readFileSync(path.join(proj, 'PINPOINT.md'), 'utf8').includes('Keep this paragraph.'));
+
+  const packed = project.packThread({ title: 'T', renamed: 'Named', createdAt: 5, agent: 'claude', branch: 'feat', session: { id: 'secret', agent: 'claude' }, items: [
+    { kind: 'user', id: 'u', text: 'hi', annotations: [] },
+    { kind: 'approval', id: 'p', status: 'pending' },
+    { kind: 'done', id: 'd', runId: 'r', ok: true, shots: true, changes: [{ path: 'a.css' }, { path: 'b.css', reverted: true }] },
+  ] });
+  check('a packed chat carries no session', !JSON.stringify(packed).includes('secret'));
+  const got = project.unpackThread(JSON.parse(JSON.stringify(packed)), 'new');
+  check('runs become notes, approvals are dropped', got.id === 'new' && got.title === 'Named' && !got.session && !got.items.some((i) => i.kind === 'done' || i.kind === 'approval') && got.items.some((i) => i.text === 'Run finished: changed a.css'), JSON.stringify(got.items));
+  check('it says which branch it came from', /from branch feat/.test(got.items[got.items.length - 1].text));
+  check('other files are refused', /isn't a Pinpoint chat/.test((() => { try { project.unpackThread({ pinpointHandoff: 1 }, 'x'); return ''; } catch (e) { return e.message; } })()));
+
+  fs.writeFileSync(path.join(proj, 'a.txt'), 'hello');
+  fs.writeFileSync(path.join(proj, 'b.bin'), Buffer.from([1, 0, 2]));
+  fs.writeFileSync(path.join(proj, 'big.txt'), 'x'.repeat(1024 * 1024 + 5));
+  check('a file is read', project.readProjectFile(proj, 'a.txt').text === 'hello');
+  check('a binary file is flagged', project.readProjectFile(proj, 'b.bin').binary === true);
+  check('a huge file is cut', project.readProjectFile(proj, 'big.txt').truncated === true && project.readProjectFile(proj, 'big.txt').text.length === 1024 * 1024);
+  const outside = path.join(path.dirname(proj), `${path.basename(proj)}-out.txt`);
+  fs.writeFileSync(outside, 'secret');
+  check('a path outside the project is refused', /outside/.test((() => { try { project.readProjectFile(proj, `../${path.basename(outside)}`); return ''; } catch (e) { return e.message; } })()));
+  fs.rmSync(outside, { force: true });
+  fs.rmSync(proj, { recursive: true, force: true });
+
+  const { buildPrompt } = require(path.join(repo, 'electron', 'prompt.cjs'));
+  const reqBase = { url: 'http://x/', title: '', viewport: { width: 1000, height: 800 }, instruction: 'Do it', annotations: [], carried: 'User: earlier words' };
+  check('a new session is told the earlier conversation', buildPrompt({ request: reqBase, files: {}, projectDir: repo, followUp: false }).includes('earlier words'));
+  check('a resumed session is not', !buildPrompt({ request: reqBase, files: {}, projectDir: repo, followUp: true }).includes('earlier words'));
 })().catch((e) => check('git branches and worktrees', false, e.stack)).finally(() => {
   console.log(`${pass} pass, ${failed} fail`);
   process.exit(failed ? 1 : 0);

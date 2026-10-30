@@ -4,8 +4,11 @@ import {
   Plus, RotateCw, Smartphone, Square, Tablet,
   Bug, Brain, AlertTriangle, History, Search, Keyboard, DotsThree, Pencil, Pin, FileText, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
-  AppWindow, Boxes, GitCompareArrows, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
+  AppWindow, Boxes, GitCompareArrows, CircleDot, Columns2, Columns3, ShieldCheck, Snowflake, SquareStack, FileTree, GitPullRequestArrow, LayoutGrid, Maximize, NewWindow, Users,
 } from './components/icons';
+import { FilesPanel } from './components/FilesPanel';
+import { Onboarding } from './components/Onboarding';
+import { LayoutsSheet } from './components/LayoutsSheet';
 import { SweepView } from './components/SweepView';
 import { ReviewPanel } from './components/ReviewPanel';
 import { VariantsLive } from './components/VariantsLive';
@@ -44,13 +47,13 @@ import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverl
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  OtherChat, ChatMeta, HarnessInfo, GitPull, ApprovalDecision,
+  OtherChat, ChatMeta, HarnessInfo, GitPull, ApprovalDecision, SavedLayout,
   A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowResult, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
   GitStatus, PageEnv, Rect, RevertResult, ReviewComment, RouteInfo, Settings, SourceInfo, SweepPage, Tool,
 } from './lib/types';
 
 import { makeTab, matchRoute, normalizeUrl, pairs, partitionOf, tabLabel, type Tab } from './lib/urls';
-import { applyPlan, chatTitle, expireApprovals, finalizeItems, healChat, mergeDeltas, mergeRequests, needsInput, splitMemory, type AgentRequest, type ParkedChat, type RunMeta } from './lib/chat';
+import { applyPlan, chatTitle, conversationText, expireApprovals, finalizeItems, healChat, mergeDeltas, mergeRequests, needsInput, splitMemory, type AgentRequest, type ParkedChat, type RunMeta } from './lib/chat';
 import { describe, handoffMarkdown, toPlaywright } from './lib/handoff';
 import { clampRect, errText, readImage, stripAnsi } from './lib/util';
 import { useShapes } from './lib/useShapes';
@@ -159,6 +162,8 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [zen, setZen] = useState(false);
+  const [layoutsOpen, setLayoutsOpen] = useState(false);
   // Rarely used controls stay folded behind a ⋯ until asked for.
   const [pageToolsOpen, setPageToolsOpen] = useState(false);
   const [composerMore, setComposerMore] = useState(false);
@@ -212,7 +217,7 @@ export default function App() {
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
   const [sheet, setSheet] = useState<ContextTab | null>(null);
   const [diffView, setDiffView] = useState<{ runId: string; path?: string } | null>(null);
-  const [branchCompare, setBranchCompare] = useState<{ base?: string; remote?: boolean } | null>(null);
+  const [branchCompare, setBranchCompare] = useState<{ base?: string; remote?: boolean; pr?: boolean } | null>(null);
   const { consoleLog, netFails, consoleRef, netRef, onConsole, clearDiagnostics } = usePageProblems();
   const { requests, requestsRef, onRequest, clearRequests } = useRequests();
   const [mocks, setMocks] = useState<Mock[]>([]);
@@ -1206,6 +1211,14 @@ export default function App() {
     const sess = sessionRef.current;
     const resume = sess && sess.agent === settings.agent ? sess.id : null;
     if (!resume) setDesignAtStart(settings.useDesign && design?.exists ? design.content : '');
+    // A forked or handed-over chat, a change of agent, or an agent that can't resume: the new session is told what was said.
+    if (!resume && !meta.variant && !meta.verify) {
+      const items = chatRef.current;
+      let cut = items.length - 1;
+      while (cut >= 0 && items[cut].kind !== 'user') cut--;
+      const earlier = conversationText(items.slice(0, Math.max(0, cut)), 6000);
+      if (earlier) request = { ...request, carried: earlier };
+    }
     try {
       await api.runAgent({ runId: id, request, sessionId: resume, check: meta.variant || meta.verify || request.site ? undefined : otherRoutes(request.url, request.annotations.flatMap((a) => (a.kind === 'element' && a.element ? [a.element.selector] : (a.hits || []).map((h) => h.selector)))) });
     } catch (e) {
@@ -1770,14 +1783,40 @@ export default function App() {
   }, [paletteOpen, projectDir]);
   // What the side chat gets to know about the main conversation: the last few requests and replies.
   const sideContext = () => {
-    const lines: string[] = [];
-    for (const it of chatRef.current.slice(-24)) {
-      if (it.kind === 'user') lines.push(`User: ${[it.text, ...it.annotations.map((a) => a.note)].filter(Boolean).join(' / ')}`);
-      else if (it.kind === 'text') lines.push(`Agent: ${it.text}`);
-      else if (it.kind === 'done') lines.push(`(Run ${it.ok ? 'finished' : 'failed'}; changed ${it.changes.map((c) => c.path).join(', ') || 'nothing'})`);
-    }
     const page = navRef.current.url ? `Page open in the browser: ${navRef.current.url}\n` : '';
-    return (page + lines.join('\n')).slice(-4000);
+    return (page + conversationText(chatRef.current.slice(-24), 4000)).slice(-4000);
+  };
+  // A new chat with everything before this message; the message waits in the composer to be changed.
+  const forkFrom = async (itemId: string) => {
+    if (job) { flash('Wait for the variants to finish before forking.'); return; }
+    const all = mergeDeltas(chatRef.current, deltaBuf.current);
+    const at = all.findIndex((it) => it.id === itemId);
+    const msg = all[at];
+    if (msg?.kind !== 'user' || !leaveChat()) return;
+    const items = healChat(all.slice(0, at));
+    const now = Date.now();
+    const id = items.length ? uid() : null;
+    const gitBranch = chatId ? branchOf.current.get(chatId) : undefined;
+    if (id) {
+      if (gitBranch) branchOf.current.set(id, gitBranch);
+      await api.saveChat({ id, branch: gitBranch, title: chatTitle(items), createdAt: now, updatedAt: now, agent: settingsRef.current?.agent || 'claude', session: null, designAtStart: null, items });
+      showChat({ id, createdAt: now, items, session: null, designAtStart: null }, null);
+    } else {
+      setChat([]); setSession(null); setChatId(null); setDesignAtStart(null); setUsage(null);
+      setRunId(null); runRef.current = null;
+      restoreAnnotations(null);
+    }
+    syncOthers();
+    setInstruction(msg.text);
+    setActiveSide(null);
+    flash('Forked. The original chat is still in the sidebar.');
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30);
+  };
+  const receiveChat = async () => {
+    try {
+      const id = await api.receiveChat();
+      if (id) { await openChat(id); flash('Chat received. The agent gets the conversation with your next message.'); }
+    } catch (e) { flash(errText(e)); }
   };
   const onChatMouseUp = () => {
     const sel = window.getSelection();
@@ -1990,6 +2029,7 @@ export default function App() {
   const chatHandlers = {
     onApprove: approve,
     onRewind: (itemId: string) => rewindTo(itemId),
+    onFork: (itemId: string) => { forkFrom(itemId); },
     onEditMessage: (text: string) => {
       setInstruction(text);
       setActiveSide(null);
@@ -2123,7 +2163,29 @@ export default function App() {
   };
   const openTool = (t: DrawerTab) => { setPlusOpen(false); setDrawerTab(t); setDrawerOpen(true); };
   const togglePanel = () => saveSettings({ panelHidden: !settingsRef.current?.panelHidden });
-  const toggleThreads = () => saveSettings({ threadsHidden: !settingsRef.current?.threadsHidden });
+  const zenRef = useRef(zen);
+  zenRef.current = zen;
+  const toggleThreads = () => { if (zenRef.current) setZen(false); else saveSettings({ threadsHidden: !settingsRef.current?.threadsHidden }); };
+  const toggleZen = () => { if (!zenRef.current) setDrawerOpen(false); setZen(!zenRef.current); };
+  const saveLayout = (name: string) => {
+    const s = settingsRef.current;
+    if (!s) return;
+    const l: SavedLayout = { name, threadsHidden: !!s.threadsHidden, panelHidden: !!s.panelHidden, panelSide: s.panelSide === 'left' ? 'left' : 'right', panelWidth: panelWidth ?? s.panelWidth ?? 400, statusBar: !!s.statusBar, split: !!s.split };
+    saveSettings({ layouts: [...(s.layouts || []).filter((x) => x.name !== name), l] });
+    flash(`Layout saved: ${name}`);
+  };
+  const applyLayout = ({ name, ...l }: SavedLayout) => {
+    setZen(false);
+    setPanelWidth(l.panelWidth);
+    saveSettings(l);
+    flash(`Layout: ${name}`);
+  };
+  const mention = (path: string) => {
+    setInstruction((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}@${path} `);
+    if (settingsRef.current?.panelHidden) saveSettings({ panelHidden: false });
+    setActiveSide(null);
+    setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30);
+  };
 
   const handleKey = useCallback((key: string, e?: KeyboardEvent) => {
     const m = modeRef.current;
@@ -2146,6 +2208,8 @@ export default function App() {
       const m = modeRef.current;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { if (e.shiftKey) toggleThreads(); else togglePanel(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') { setSettingsOpen(true); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === '.') { toggleZen(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') { openTool('files'); e.preventDefault(); return; }
       if (!typing && !e.ctrlKey && !e.metaKey && e.key === '?') { setShortcutsOpen((o) => !o); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') { setPaletteOpen((o) => !o); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { setDrawerOpen((o) => !o); e.preventDefault(); return; }
@@ -2220,6 +2284,9 @@ export default function App() {
       { name: 'edit', hint: planMode ? 'Let the agent edit files again' : 'Edit files is on', icon: PenTool, run: () => { setPlanMode(false); flash('The agent can edit files again.'); } },
     ] : []),
     { name: 'terminal', hint: 'Show the terminal (Ctrl+J)', icon: TerminalSquare, run: () => setDrawerOpen(true) },
+    { name: 'files', hint: 'Browse and read the project', icon: FileTree, run: () => openTool('files') },
+    { name: 'pr', hint: 'Open a pull request from this chat', icon: GitPullRequestArrow, run: () => setBranchCompare({ pr: true }) },
+    { name: 'zen', hint: 'Just the page and the chat', icon: Maximize, run: toggleZen },
     { name: 'theme', hint: 'Switch light / dark', icon: Palette, run: () => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' }) },
     { name: 'settings', hint: 'Open settings', icon: SettingsIcon, run: () => setSettingsOpen(true) },
     { name: 'save', hint: 'Save the text after /save as a snippet', icon: Pin, run: (rest) => saveSnippet(rest) },
@@ -2238,6 +2305,18 @@ export default function App() {
 
   const waitingCount = others.filter((o) => o.needsInput || !o.running).length + (needsInput(chat) ? 1 : 0);
   useEffect(() => { api.badge(waitingCount).catch(() => {}); }, [waitingCount]);
+  const trayChats = [
+    ...(chatId && chat.length && (runId || needsInput(chat)) ? [{ id: chatId, title: chatTitle(chat), state: needsInput(chat) ? 'needs you' : 'working' }] : []),
+    ...others.map((o) => ({ id: o.id, title: o.title, state: o.needsInput ? 'needs you' : o.running ? 'working' : 'done' })),
+  ];
+  const trayKey = JSON.stringify(trayChats) + settings?.tray;
+  useEffect(() => {
+    if (!settings) return;
+    api.tray({ working: trayChats.filter((c) => c.state === 'working').length, waiting: trayChats.filter((c) => c.state === 'needs you').length, chats: trayChats }).catch(() => {});
+  }, [trayKey]);
+  const openChatRef = useRef<(id: string) => void>(() => {});
+  useEffect(() => api.onTrayChat((id) => openChatRef.current(id)), []);
+  useEffect(() => { if (sheet === 'memory' && projectDir) api.readMemory().then(setMemory).catch(() => {}); }, [sheet, projectDir]);
 
   useEffect(() => {
     if (!projectDir) { setPulls({}); return; }
@@ -2248,12 +2327,21 @@ export default function App() {
     return () => { clearInterval(t); window.removeEventListener('focus', get); };
   }, [projectDir, gitStatus?.branch]);
   useEffect(() => { markBelow(); });
+  openChatRef.current = openChat;
 
   const commands: Command[] = !settings ? [] : [
     { id: 'chat:timeline', group: 'Chat', label: 'Timeline of this chat', hint: 'the page after each run', icon: History, disabled: !chat.some((it) => it.kind === 'done' && it.shots), run: () => setTimelineOpen(true) },
     { id: 'chat:aside', group: 'Chat', label: 'New side chat', hint: 'ask without touching this chat', icon: MessageSquare, keys: combo('A', true), disabled: !projectDir, run: () => newSide() },
     ...sides.map((x) => ({ id: `chat:${x.id}`, group: 'Chat', label: x.title, hint: 'side chat', icon: MessageSquare, run: () => setActiveSide(x.id) })),
     { id: 'chat:new', group: 'Chat', label: 'New chat', icon: SquarePen, keys: combo('O', true), disabled: !!job || !chat.length, run: newChat },
+    { id: 'chat:pr', group: 'Chat', label: 'Open a pull request from this chat', hint: 'description and screenshots', icon: GitPullRequestArrow, disabled: !gitStatus?.repo || !chat.length, run: () => setBranchCompare({ pr: true }) },
+    { id: 'chat:share', group: 'Chat', label: 'Hand this chat to a teammate…', hint: 'saves a file they can open', icon: Users, disabled: !chatId, run: () => { if (chatId) api.shareChat(chatId).then((f) => { if (f) flash(`Saved ${f}. Push your branch so they can pick up the code too.`); }).catch((e) => flash(errText(e))); } },
+    { id: 'chat:receive', group: 'Chat', label: 'Open a chat from a teammate…', icon: Users, disabled: !projectDir || !!job, run: receiveChat },
+    { id: 'view:files', group: 'View', label: 'Files', hint: 'tree and code viewer', icon: FileTree, keys: combo('E', true), disabled: !projectDir, run: () => openTool('files') },
+    { id: 'view:zen', group: 'View', label: zen ? 'Leave zen mode' : 'Zen mode', hint: 'just the page and the chat', icon: Maximize, keys: `${MOD} .`, run: toggleZen },
+    { id: 'view:split', group: 'View', label: settings.split ? 'Show tools over the page' : 'Show tools beside the page', icon: Columns2, run: () => saveSettings({ split: !settings.split }) },
+    { id: 'view:layouts', group: 'View', label: 'Save or delete layouts…', icon: LayoutGrid, run: () => setLayoutsOpen(true) },
+    ...(settings.layouts || []).map((l) => ({ id: `layout:${l.name}`, group: 'View', label: `Layout: ${l.name}`, icon: LayoutGrid, run: () => applyLayout(l) })),
     ...paletteHits.filter((h) => h.id !== chatId).map((h) => ({ id: `hit:${h.id}`, group: 'In chats', label: h.title || 'Untitled', hint: h.snippet, icon: Search, disabled: !!job, run: () => openChat(h.id) })),
     ...paletteChats.filter((c) => c.id !== chatId).map((c) => ({ id: `chat:${c.id}`, group: 'Chat', label: c.title || 'Untitled', hint: others.find((o) => o.id === c.id)?.running ? 'working' : 'open chat', icon: MessageSquare, disabled: !!job, run: () => openChat(c.id) })),
     { id: 'view:threads', group: 'View', label: settings.threadsHidden ? 'Show chats sidebar' : 'Hide chats sidebar', icon: PanelLeft, keys: combo('B', true), run: toggleThreads },
@@ -2279,6 +2367,7 @@ export default function App() {
     { id: 'proj:memory', group: 'Project', label: 'Project memory', icon: Brain, disabled: !projectDir, run: () => setSheet('memory') },
     { id: 'proj:open', group: 'Project', label: 'Open project folder…', icon: FolderOpen, run: () => pickProject() },
     ...(settings.recentProjects || []).filter((d) => d !== projectDir).map((d) => ({ id: `proj:${d}`, group: 'Project', label: `Switch to ${d.split(/[\\/]/).pop()}`, hint: d, icon: FolderOpen, disabled: !!job, run: () => pickProject(d) })),
+    ...(settings.recentProjects || []).filter((d) => d !== projectDir).map((d) => ({ id: `win:${d}`, group: 'Project', label: `Open ${d.split(/[\\/]/).pop()} in a new window`, hint: d, icon: NewWindow, run: () => { api.openProjectWindow(d).catch((e) => flash(errText(e))); } })),
     ...(['system', 'light', 'dark'] as const).map((t) => ({ id: `app:theme:${t}`, group: 'App', label: `Theme: ${t === 'system' ? 'match the system' : t}`, icon: Palette, disabled: theme === t, run: () => saveSettings({ theme: t }) })),
     { id: 'app:shortcuts', group: 'App', label: 'Keyboard shortcuts', icon: Keyboard, keys: '?', run: () => setShortcutsOpen(true) },
     { id: 'app:statusbar', group: 'View', label: settings.statusBar ? 'Hide status bar' : 'Show status bar', icon: PanelLeft, run: () => saveSettings({ statusBar: !settings.statusBar }) },
@@ -2289,11 +2378,13 @@ export default function App() {
   if (!settings) return <div className="boot"><Loader2 className="spin" /></div>;
 
   const left = settings.panelSide === 'left';
-  const threadsOn = !settings.threadsHidden;
+  const threadsOn = !settings.threadsHidden && !zen;
   const tw = threadsOn ? THREADS_W : 0;
   const pw = settings.panelHidden ? 0 : panelWidth ?? settings.panelWidth ?? 400;
   const row2 = left ? "'threads panel stage'" : "'threads stage panel'";
-  const statusOn = settings.statusBar === true;
+  const statusOn = settings.statusBar === true && !zen;
+  const split = settings.split === true && drawerOpen;
+  const recentFiles = [...new Set(chat.flatMap((it) => (it.kind === 'done' && !it.undone ? it.changes.filter((c) => !c.reverted).map((c) => c.path) : [])))];
   const gridStyle: React.CSSProperties = {
     gridTemplateColumns: left ? `${tw}px ${pw}px 1fr` : `${tw}px 1fr ${pw}px`,
     gridTemplateRows: `52px 1fr${statusOn ? ' 24px' : ''}`,
@@ -2303,7 +2394,7 @@ export default function App() {
   const modelName = settings.agent === 'claude' ? settings.claudeModel : settings.agent === 'codex' ? settings.codexModel : settings.agentModels?.[settings.agent];
 
   return (
-    <div className={`app ${resizing ? 'resizing' : ''} ${threadsOn ? 'threads-on' : ''}`} style={gridStyle}>
+    <div className={`app ${resizing ? 'resizing' : ''} ${threadsOn ? 'threads-on' : ''} ${zen ? 'zen' : ''}`} style={gridStyle}>
       {threadsOn && (
         <ThreadSidebar
           mod={MOD} projectDir={projectDir} recentProjects={settings.recentProjects || []}
@@ -2335,13 +2426,13 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
       />
 
-      <main className="stage">
+      <main className={`stage ${split ? 'split' : ''}`}>
         <div className="tabbar">
           <div className="tabstrip">
             {tabs.map((t) => (
               <div
-                key={t.id} className={`tab ${t.id === activeTab && !drawerOpen ? 'on' : ''}`} title={t.url || 'New tab'}
-                onClick={() => { setDrawerOpen(false); switchTab(t.id); }}
+                key={t.id} className={`tab ${t.id === activeTab && (!drawerOpen || split) ? 'on' : ''}`} title={t.url || 'New tab'}
+                onClick={() => { if (!split) setDrawerOpen(false); switchTab(t.id); }}
                 onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}
               >
                 {t.loading ? <Loader2 size={11} className="spin" /> : <Globe size={11} />}
@@ -2557,6 +2648,14 @@ export default function App() {
                 onStartDev={quickStartDev}
                 onSketch={() => setMode('sketch')}
                 onTool={openTool}
+                setup={!settings.onboarded && agents && (!projectDir || !agentReady) ? (
+                  <Onboarding
+                    agents={agents} harnesses={harnesses} current={settings.agent} projectDir={projectDir}
+                    onPick={(agent) => saveSettings({ agent })} onRecheck={() => api.detectAgents().then(setAgents).catch(() => {})}
+                    onTerminal={() => openTool('term')} onOpenProject={() => pickProject()} onSettings={() => setSettingsOpen(true)}
+                    onDone={() => saveSettings({ onboarded: true })}
+                  />
+                ) : null}
               />
             )}
             {loadError && nav.url !== 'about:blank' && (
@@ -2601,6 +2700,8 @@ export default function App() {
               onAdd={addRequest} onReplay={replayRequest} onOpenFile={openFile} onBuild={buildMock} onClear={clearRequests}
             />
           }
+          files={<FilesPanel recent={recentFiles} refreshKey={`${projectDir}:${recentFiles.length}:${runId || ''}`} onMention={mention} onOpen={openFile} />}
+          split={!!settings.split} onSplit={() => saveSettings({ split: !settings.split })}
           cwd={projectDir} shell={settings.terminalShell} onShell={(terminalShell) => { if (terminalShell !== settingsRef.current?.terminalShell) saveSettings({ terminalShell }); }}
           devRunning={devRunning} devCommand={devCommand} devCandidates={devInfo?.candidates}
           onStartDev={startDev} onStopDev={() => api.stopDev()} onClose={() => setDrawerOpen(false)}
@@ -2645,6 +2746,9 @@ export default function App() {
               {runId ? <Loader2 size={12} className="spin" /> : <MessageSquare size={12} />}<span>Chat</span>
             </button>
             {chatId && <PullIcon pull={pulls[branchOf.current.get(chatId) || '']} branch={branchOf.current.get(chatId)} />}
+            {chatId && gitStatus?.repo && gitStatus.remote && gitStatus.branch && gitStatus.branch !== gitStatus.defaultBranch && !pulls[gitStatus.branch] && recentFiles.length > 0 && (
+              <button className="ptab-new" onClick={() => setBranchCompare({ pr: true })} title="Open a pull request from this chat"><GitPullRequestArrow size={13} /></button>
+            )}
             {sides.map((x) => (
               <div key={x.id} className={`ptab side ${activeSide === x.id ? 'on' : ''}`} onClick={() => setActiveSide(x.id)} title={x.title}>
                 {x.running ? <Loader2 size={12} className="spin" /> : <CornerDownRight size={12} />}<span>{x.title}</span>
@@ -2898,7 +3002,7 @@ export default function App() {
       )}
       {compare && <CompareView {...compare} onClose={() => setCompare(null)} captureSizes={captureSizes} />}
       {branchCompare && gitStatus?.repo && (
-        <BranchCompare status={gitStatus} initialBase={branchCompare.base} initialRemote={branchCompare.remote} prDefaults={prDefaults} flash={flash} onOpen={openFile} onClose={() => { setBranchCompare(null); refreshGit(); }} />
+        <BranchCompare status={gitStatus} initialBase={branchCompare.base} initialRemote={branchCompare.remote} initialPr={branchCompare.pr} prDefaults={prDefaults} flash={flash} onOpen={openFile} onClose={() => { setBranchCompare(null); refreshGit(); }} />
       )}
       {settingsOpen && <SettingsModal settings={settings} agents={agents} harnesses={harnesses} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}
       {statusOn && (
@@ -2922,6 +3026,7 @@ export default function App() {
       )}
       {timelineOpen && <Timeline items={chat} onClose={() => setTimelineOpen(false)} onCompare={(images, labels, title) => { setTimelineOpen(false); setCompare({ images, labels, title }); }} />}
       {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
+      {layoutsOpen && <LayoutsSheet layouts={settings.layouts || []} onSave={saveLayout} onApply={(l) => { applyLayout(l); setLayoutsOpen(false); }} onRemove={(name) => saveSettings({ layouts: (settings.layouts || []).filter((x) => x.name !== name) })} onClose={() => setLayoutsOpen(false)} />}
       {paletteOpen && <CommandPalette commands={commands} onQuery={searchChats} onClose={() => { setPaletteOpen(false); setPaletteHits([]); }} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
