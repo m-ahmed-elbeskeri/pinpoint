@@ -4,6 +4,8 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-30
+
 ### Added
 
 - **See what the agent is doing.** A context meter by the send button, a warning before you hit a usage limit, MCP server status in the agent menu, today's spend in the status bar, a strip of the files it is touching, and a subagent's steps nested under the Task that started them.
