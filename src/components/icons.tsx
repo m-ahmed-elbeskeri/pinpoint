@@ -54,6 +54,7 @@ export {
   ImageIcon as ImagePlus,
   StackIcon as Layers,
   LightbulbIcon as Lightbulb,
+  ListChecksIcon as ListChecks,
   LinkIcon as Link2,
   KeyboardIcon as Keyboard,
   CircleNotchIcon as Loader2,

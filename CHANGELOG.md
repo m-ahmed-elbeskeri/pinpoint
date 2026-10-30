@@ -9,9 +9,12 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 - **Review beside the chat.** The diff docks over the page area while the chat stays usable. Each change can be kept, reverted on its own, explained in a side chat or commented on; comments go to the agent as one message.
 - **Turn summary.** A request whose result is a scroll away shows what changed under it, with a jump to the result and to each file.
 - **Compare runs.** The timeline can compare a run with the one before it.
+- **Pull request status on chats.** Each chat remembers its branch; an icon on its row and by the Chat tab shows an open, draft, merged or closed PR, and opens it.
+- **Folder menu.** The project folder offers Show in File Explorer or Finder, open in your editor, a terminal, copy path, and switching project.
 
 ### Changed
 
+- The chat reads as one flow: steps, plan and result lose their boxes, and a finished plan folds to one line.
 - **Tools are tabs.** Terminal, Dev server, Network and Agent logs open as tabs beside your pages instead of a bottom drawer. Hover + to pick one; click + for a blank tab that offers them all.
 - Access levels are icons in the composer: eye for Plan only, pencil for Edit files, lightning for Full access.
 - Test conditions is a window you can drag around, open until you close it.

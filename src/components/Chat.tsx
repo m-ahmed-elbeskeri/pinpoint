@@ -3,7 +3,7 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, ShieldCheck, ClipboardCopy, Pin, DotsThree, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+  ExternalLink, ListChecks, ShieldCheck, ClipboardCopy, Pin, DotsThree, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
 } from './icons';
 import { flowVerdict } from '../lib/flow';
 import { INTERRUPTED } from '../lib/chat';
@@ -423,6 +423,29 @@ const STEER_TAG = {
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
 
+function PlanCard({ item, live }: { item: Extract<ChatItem, { kind: 'plan' }>; live: boolean }) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const shown = open ?? live;
+  const done = item.steps.filter((x) => x.status === 'completed').length;
+  return (
+    <div className={`plan-card ${live ? 'live' : ''} ${shown ? 'open' : ''}`}>
+      <button className="plan-head" onClick={() => setOpen(!shown)}>
+        <ListChecks size={13} /><b>Plan</b><span>{done} of {item.steps.length} done</span><ChevronRight size={12} className={`chev ${shown ? 'open' : ''}`} />
+      </button>
+      {shown && (
+        <ol>
+          {item.steps.map((x, i) => (
+            <li key={i} className={x.status}>
+              <i className="plan-mark">{x.status === 'completed' ? <Check size={11} /> : x.status === 'in_progress' && live ? <Loader2 size={11} className="spin" /> : null}</i>
+              <span>{x.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 function RewindButton({ onRewind }: { onRewind(): void }) {
   const [sure, setSure] = useState(false);
   useEffect(() => { if (!sure) return; const t = setTimeout(() => setSure(false), 2500); return () => clearTimeout(t); }, [sure]);
@@ -533,22 +556,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
       return <Thinking text={item.text} streaming={item.streaming} ms={item.ms} />;
     case 'tool':
       return <ToolRow item={item} root={root} />;
-    case 'plan': {
-      const done = item.steps.filter((x) => x.status === 'completed').length;
-      return (
-        <div className={`plan-card ${live ? 'live' : ''}`}>
-          <div className="plan-head"><b>Plan</b><span>{done} of {item.steps.length} done</span></div>
-          <ol>
-            {item.steps.map((x, i) => (
-              <li key={i} className={x.status}>
-                <i className="plan-mark">{x.status === 'completed' ? <Check size={11} /> : x.status === 'in_progress' && live ? <Loader2 size={11} className="spin" /> : null}</i>
-                <span>{x.text}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      );
-    }
+    case 'plan': return <PlanCard item={item} live={!!live} />;
     case 'approval': {
       const pending = item.status === 'pending';
       const said = { allow: 'Allowed once', always: 'Always allowed for this run', deny: 'Denied', expired: 'Not answered before the run ended', pending: '' }[item.status];

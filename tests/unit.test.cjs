@@ -87,6 +87,14 @@ const runsLib = require(path.join(repo, 'electron', 'runs.cjs'));
   check('reverting the last hunk restores the file and marks it reverted', fs.readFileSync(path.join(root, 'a.txt'), 'utf8') === before && r.restored.includes('a.txt') && r.allReverted);
 }
 
+{
+  const pr = require(path.join(repo, 'electron', 'project.cjs'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chatbranch-'));
+  pr.saveChat(root, { id: 'c', title: 't', updatedAt: 1, items: [], branch: 'feature' });
+  pr.saveChat(root, { id: 'c', title: 't', updatedAt: 2, items: [], branch: 'main' });
+  check('a chat keeps the branch it started on', pr.listChats(root)[0].branch === 'feature', JSON.stringify(pr.listChats(root)));
+}
+
 const { translate } = require(path.join(repo, 'electron', 'agent-generic.cjs'));
 const { harnesses, splitArgs } = require(path.join(repo, 'electron', 'harnesses.cjs'));
 const tr = (lines) => { const st = { sessionId: null, sawText: false }; return lines.flatMap((l) => translate(l, st) || [{ type: 'unknown' }]); };

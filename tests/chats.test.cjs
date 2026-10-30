@@ -348,6 +348,13 @@ server.listen(0, '127.0.0.1', () => {
       await ui(`document.querySelector('.diff-dock .diff-head .icon-btn').click(); 0`);
       await sleep(150);
 
+      await ui(`document.querySelector('.proj-row.current').click(); 0`);
+      await sleep(150);
+      const folderMenu = await ui(`document.querySelector('.proj-menu')?.textContent || ''`);
+      log('the project folder opens a menu', /Show in/.test(folderMenu) && /Copy path/.test(folderMenu) && /Open a terminal here/.test(folderMenu), folderMenu);
+      await ui(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); 0`);
+      await sleep(150);
+
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }
     } catch (e) { log('exception', false, e.stack); }

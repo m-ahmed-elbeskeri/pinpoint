@@ -44,7 +44,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 ## Threads and workspace
 
-- [ ] Branch / worktree per thread, shown on the thread
+- [x] Branch per thread, with its pull request state shown on the thread
 - [x] Thread states: needs you, failed, done-while-away; pin, rename, archive
 - [x] Diff docked beside the chat
 - [x] Keep or revert per hunk; "Explain this change"; inline review comments that feed the next message

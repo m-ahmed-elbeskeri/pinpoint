@@ -29,6 +29,7 @@ import { SideChat } from './components/SideChat';
 import { ShortcutsSheet, StatusBar } from './components/StatusBar';
 import { ContextMeter, ReadingStrip } from './components/AgentStatus';
 import { Timeline } from './components/Timeline';
+import { PullIcon } from './components/PullIcon';
 import { useComposerAssist, type SlashCommand } from './components/ComposerAssist';
 import { AgentPicker } from './components/AgentPicker';
 import { CommandPalette, type Command } from './components/CommandPalette';
@@ -43,7 +44,7 @@ import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverl
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  OtherChat, ChatMeta, HarnessInfo, ApprovalDecision,
+  OtherChat, ChatMeta, HarnessInfo, GitPull, ApprovalDecision,
   A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowResult, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
   GitStatus, PageEnv, Rect, RevertResult, ReviewComment, RouteInfo, Settings, SourceInfo, SweepPage, Tool,
 } from './lib/types';
@@ -199,6 +200,11 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [chatId, setChatId] = useState<string | null>(null);
+  const chatIdRef = useRef(chatId);
+  chatIdRef.current = chatId;
+  // The branch each chat worked on, and the pull requests by branch.
+  const branchOf = useRef(new Map<string, string>());
+  const [pulls, setPulls] = useState<Record<string, GitPull>>({});
   const [chatCreated, setChatCreated] = useState(0);
   const [designAtStart, setDesignAtStart] = useState<string | null>(null);
   const [design, setDesign] = useState<DesignDoc | null>(null);
@@ -344,6 +350,7 @@ export default function App() {
       wantChat.current = null;
       const pick = (want && list.find((c) => c.id === want)) || list[0];
       const last = pick ? await api.loadChat(pick.id) : null;
+      if (last?.branch) branchOf.current.set(last.id, last.branch);
       if (last) {
         setChatId(last.id); setChatCreated(last.createdAt); setChat(healChat(last.items)); setSession(last.session); setDesignAtStart(last.designAtStart ?? null);
       } else {
@@ -356,7 +363,8 @@ export default function App() {
     if (!projectDir || !chatId || !chat.length) return;
     const t = setTimeout(() => {
       const title = chatTitle(chat);
-      api.saveChat({ id: chatId, title, createdAt: chatCreated || Date.now(), updatedAt: Date.now(), agent: settingsRef.current?.agent || 'claude', session, designAtStart, items: chat }).catch(() => {});
+      if (!branchOf.current.has(chatId) && gitStatus?.branch) branchOf.current.set(chatId, gitStatus.branch);
+      api.saveChat({ id: chatId, branch: branchOf.current.get(chatId), title, createdAt: chatCreated || Date.now(), updatedAt: Date.now(), agent: settingsRef.current?.agent || 'claude', session, designAtStart, items: chat }).catch(() => {});
     }, 600);
     return () => clearTimeout(t);
   }, [chat, session, chatId, projectDir, designAtStart]);
@@ -392,6 +400,7 @@ export default function App() {
     ...(finished ? [{ id: finished.id, title: chatTitle(finished.items), running: false }] : []),
   ]);
   const saveParked = (p: ParkedChat) => api.saveChat({
+    branch: branchOf.current.get(p.id),
     id: p.id, title: chatTitle(p.items), createdAt: p.createdAt, updatedAt: Date.now(), agent: p.agent, session: p.session, designAtStart: p.designAtStart, items: p.items,
   }).catch(() => {});
 
@@ -439,6 +448,7 @@ export default function App() {
       showChat(p, p.runId);
     } else {
       const c = await api.loadChat(id);
+      if (c?.branch) branchOf.current.set(c.id, c.branch);
       if (c) showChat({ ...c, items: healChat(c.items) }, null);
       else { setChatId(null); setChat([]); setSession(null); setDesignAtStart(null); }
     }
@@ -463,7 +473,7 @@ export default function App() {
       case 'thinking_delta': p.items = mergeDeltas(p.items, [{ kind: 'thinking', text: e.text }]); break;
       case 'status': add({ kind: 'status', id: uid(), text: e.text }); break;
       case 'session': p.session = { id: e.sessionId, agent: p.agent }; break;
-      case 'git': refreshGit(); break;
+      case 'git': branchOf.current.set(p.id, e.branch); refreshGit(); break;
       case 'text': { const m = splitMemory(e.text); p.items = finalizeItems(p.items, 'text', m.text, m.extra); break; }
       case 'thinking': p.items = finalizeItems(p.items, 'thinking', e.text); break;
       case 'tool': add({ kind: 'tool', id: uid(), toolId: e.id, name: e.name, detail: e.detail, status: 'running', edits: e.edits, at: Date.now(), parent: e.parent }); break;
@@ -1910,7 +1920,7 @@ export default function App() {
         break;
       case 'status': push({ kind: 'status', id: uid(), text: e.text }); break;
       case 'session': setSession({ id: e.sessionId, agent: (settingsRef.current?.agent || 'claude') }); break;
-      case 'git': refreshGitRef.current(); break;
+      case 'git': if (chatIdRef.current) branchOf.current.set(chatIdRef.current, e.branch); refreshGitRef.current(); break;
       case 'text': {
         const m = splitMemory(e.text);
         finalizeBlock('text', m.text, m.extra);
@@ -2229,6 +2239,14 @@ export default function App() {
   const waitingCount = others.filter((o) => o.needsInput || !o.running).length + (needsInput(chat) ? 1 : 0);
   useEffect(() => { api.badge(waitingCount).catch(() => {}); }, [waitingCount]);
 
+  useEffect(() => {
+    if (!projectDir) { setPulls({}); return; }
+    const get = () => api.gitPulls().then(setPulls).catch(() => {});
+    get();
+    const t = setInterval(get, 60000);
+    window.addEventListener('focus', get);
+    return () => { clearInterval(t); window.removeEventListener('focus', get); };
+  }, [projectDir, gitStatus?.branch]);
   useEffect(() => { markBelow(); });
 
   const commands: Command[] = !settings ? [] : [
@@ -2290,11 +2308,11 @@ export default function App() {
         <ThreadSidebar
           mod={MOD} projectDir={projectDir} recentProjects={settings.recentProjects || []}
           chatId={chatId} currentTitle={chat.length ? chatTitle(chat) : ''} currentRunning={!!runId} currentNeedsInput={needsInput(chat)}
-          others={others} refreshKey={`${chatId}:${chat.length}:${others.map((o) => o.id + o.running).join()}`} disabled={!!job}
+          others={others} pulls={pulls} refreshKey={`${chatId}:${chat.length}:${others.map((o) => o.id + o.running).join()}`} disabled={!!job}
           onOpen={openChat} onDelete={deleteChat} onNew={newChat} onPickProject={pickProject}
           onOpenIn={(dir, id) => { wantChat.current = id; pickProject(dir); }}
           onSettings={() => setSettingsOpen(true)} onPalette={() => setPaletteOpen(true)} onHide={toggleThreads}
-          onTheme={() => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' })} onShortcuts={() => setShortcutsOpen(true)} light={theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)}
+          onTheme={() => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' })} onShortcuts={() => setShortcutsOpen(true)} onTerminal={() => openTool('term')} light={theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)}
         />
       )}
       <TopBar
@@ -2626,6 +2644,7 @@ export default function App() {
             <button className={`ptab ${activeSide ? '' : 'on'}`} onClick={() => setActiveSide(null)} title={chatTitle(chat) || 'This chat'}>
               {runId ? <Loader2 size={12} className="spin" /> : <MessageSquare size={12} />}<span>Chat</span>
             </button>
+            {chatId && <PullIcon pull={pulls[branchOf.current.get(chatId) || '']} branch={branchOf.current.get(chatId)} />}
             {sides.map((x) => (
               <div key={x.id} className={`ptab side ${activeSide === x.id ? 'on' : ''}`} onClick={() => setActiveSide(x.id)} title={x.title}>
                 {x.running ? <Loader2 size={12} className="spin" /> : <CornerDownRight size={12} />}<span>{x.title}</span>

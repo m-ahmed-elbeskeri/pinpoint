@@ -19,7 +19,7 @@ function listChats(root) {
     try {
       const c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
       const last = [...(c.items || [])].reverse().find((it) => it.kind === 'done' || it.kind === 'user');
-      out.push({ id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent, failed: last?.kind === 'done' && !last.ok && !last.undone });
+      out.push({ id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent, branch: c.branch, failed: last?.kind === 'done' && !last.ok && !last.undone });
     } catch {  }
   }
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -36,7 +36,7 @@ function saveChat(root, chat) {
   const items = (chat.items || []).slice(-400);
   // The app saves the conversation; names, pins and archiving set from the sidebar live in the same file and are kept.
   const prev = loadChat(root, chat.id) || {};
-  const kept = { renamed: prev.renamed, pinned: prev.pinned, archived: prev.archived };
+  const kept = { renamed: prev.renamed, pinned: prev.pinned, archived: prev.archived, branch: prev.branch || chat.branch };
   fs.writeFileSync(pp(root, 'chats', `${safeId(chat.id)}.json`), JSON.stringify({ ...chat, ...kept, items }));
   return true;
 }

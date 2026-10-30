@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, X } from './icons';
+import { Archive, ArrowRight, ChevronDown, ClipboardCopy, ExternalLink, TerminalSquare, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, X } from './icons';
 import { Logo } from './Logo';
-import type { ChatMeta, OtherChat } from '../lib/types';
+import { PullIcon } from './PullIcon';
+import type { ChatMeta, GitPull, OtherChat } from '../lib/types';
 
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   currentRunning: boolean;
   currentNeedsInput: boolean;
   others: OtherChat[];
+  pulls: Record<string, GitPull>;
   refreshKey: unknown;
   disabled: boolean;
   onOpen(id: string): void;
@@ -24,6 +26,7 @@ interface Props {
   onPalette(): void;
   onTheme(): void;
   onShortcuts(): void;
+  onTerminal(): void;
   light: boolean;
   onHide(): void;
 }
@@ -57,7 +60,7 @@ export function ThreadSidebar(p: Props) {
   const [showArchived, setShowArchived] = useState(false);
   useEffect(() => {
     if (!menuFor) return;
-    const close = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('.thread-menu, .thread-more')) { setMenuFor(null); setConfirm(null); } };
+    const close = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('.thread-menu, .thread-more, .thread-more-free')) { setMenuFor(null); setConfirm(null); } };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [menuFor]);
@@ -127,6 +130,20 @@ export function ThreadSidebar(p: Props) {
 
   const otherProjects = p.recentProjects.filter((d) => d !== p.projectDir);
 
+  const fileManager = window.pinpoint.platform === 'darwin' ? 'Finder' : window.pinpoint.platform === 'win32' ? 'File Explorer' : 'file manager';
+  const projectMenu = (dir: string, current: boolean) => menuFor === `proj:${dir}` && (
+    <div className="thread-menu proj-menu">
+      <button onClick={() => { setMenuFor(null); window.pinpoint.openPath(dir); }}><FolderOpen size={13} /> Show in {fileManager}</button>
+      {current && <button onClick={() => { setMenuFor(null); window.pinpoint.openFile('.').catch(() => {}); }}><ExternalLink size={13} /> Open in your editor</button>}
+      {current && <button onClick={() => { setMenuFor(null); p.onTerminal(); }}><TerminalSquare size={13} /> Open a terminal here</button>}
+      <button onClick={() => { setMenuFor(null); navigator.clipboard?.writeText(dir); }}><ClipboardCopy size={13} /> Copy path</button>
+      <div className="dd-sep" />
+      {current
+        ? <button onClick={() => { setMenuFor(null); p.onPickProject(); }}><Plus size={13} /> Open another folder…</button>
+        : <button disabled={p.disabled} onClick={() => { setMenuFor(null); p.onPickProject(dir); }}><ArrowRight size={13} /> Switch to this project</button>}
+    </div>
+  );
+
   return (
     <aside className="threads">
       <div className="threads-head">
@@ -147,9 +164,16 @@ export function ThreadSidebar(p: Props) {
       </div>
 
       <div className="threads-scroll">
-        <button className="proj-row current" onClick={() => p.onPickProject()} title={p.projectDir || 'Choose the project folder the agent edits'}>
-          <FolderOpen size={14} /><span>{p.projectDir ? base(p.projectDir) : 'Open a project'}</span>
-        </button>
+        <div className="proj-anchor">
+          <button
+            className={`proj-row current thread-more-free ${menuFor === `proj:${p.projectDir}` ? 'open' : ''}`}
+            onClick={() => (p.projectDir ? setMenuFor(menuFor === `proj:${p.projectDir}` ? null : `proj:${p.projectDir}`) : p.onPickProject())}
+            title={p.projectDir || 'Choose the project folder the agent edits'}
+          >
+            <FolderOpen size={14} /><span>{p.projectDir ? base(p.projectDir) : 'Open a project'}</span>{p.projectDir && <ChevronDown size={12} className="proj-caret" />}
+          </button>
+          {p.projectDir && projectMenu(p.projectDir, true)}
+        </div>
 
         {p.projectDir && list.length === 0 && (
           <div className="threads-empty">{query ? 'No chats match' : 'No chats yet'}</div>
@@ -178,6 +202,7 @@ export function ThreadSidebar(p: Props) {
                       onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(null); }}
                     />
                   ) : <span className="thread-title">{c.pinned && <Pin size={10} className="thread-pinned" />}{c.title || 'Untitled'}</span>}
+                  <PullIcon pull={c.branch ? p.pulls[c.branch] : undefined} branch={c.branch} />
                   <span className={`thread-time ${c.failed && !running ? 'failed' : ''}`}>{waiting ? 'needs you' : running ? 'working' : finished ? 'done' : c.failed ? 'failed' : ago(c.updatedAt)}</span>
                   <button
                     className={`thread-x thread-more ${menuFor === c.id ? 'open' : ''}`}
@@ -215,7 +240,9 @@ export function ThreadSidebar(p: Props) {
               <div className={`proj-row ${kids !== undefined ? 'open' : ''}`} onClick={() => toggleProject(d)} title={d}>
                 <ChevronRight size={12} className="proj-chev" /><FolderOpen size={14} /><span>{base(d)}</span>
                 <button className="proj-go" onClick={(e) => { e.stopPropagation(); p.onPickProject(d); }} disabled={p.disabled} title="Switch to this project">Open</button>
+                <button className="proj-go thread-more-free" onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === `proj:${d}` ? null : `proj:${d}`); }} title="More"><DotsThree size={13} /></button>
               </div>
+              {projectMenu(d, false)}
               {kids === null && <div className="threads-empty nested">Loading…</div>}
               {kids && kids.length === 0 && <div className="threads-empty nested">No chats yet</div>}
               {kids && kids.slice(0, 8).map((c) => (

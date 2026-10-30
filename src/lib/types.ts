@@ -226,9 +226,9 @@ export interface DiffFile {
 }
 export interface RevertResult { restored: string[]; conflicts: string[]; failed: string[]; allReverted: boolean }
 
-export interface ChatMeta { id: string; title: string; createdAt: number; updatedAt: number; count: number; agent?: AgentId; renamed?: boolean; pinned?: boolean; archived?: boolean; failed?: boolean }
+export interface ChatMeta { id: string; title: string; createdAt: number; updatedAt: number; count: number; agent?: AgentId; renamed?: boolean; pinned?: boolean; archived?: boolean; failed?: boolean; branch?: string }
 export interface Chat {
-  id: string; title: string; createdAt: number; updatedAt: number; agent: AgentId;
+  id: string; title: string; createdAt: number; updatedAt: number; agent: AgentId; branch?: string;
   session: { id: string; agent: AgentId } | null;
   designAtStart?: string | null;
   items: ChatItem[];

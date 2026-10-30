@@ -906,3 +906,53 @@ button:focus:not(:focus-visible) { outline: none; }
 .tool-tab .live-dot { margin-left: 2px; flex-shrink: 0; }
 .start-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 150px)); justify-content: center; gap: 8px; max-width: 640px; }
 .start-btn { flex-direction: column; justify-content: center; gap: 8px; height: 84px; padding: 8px 10px; border-radius: 12px; white-space: normal; text-align: center; }
+
+
+/* ---- the folder opens a menu: file manager, editor, terminal, path, switch ---- */
+.proj-anchor, .proj-node { position: relative; }
+.proj-caret { margin-left: auto; opacity: 0; color: var(--muted); }
+.proj-row:hover .proj-caret, .proj-row.open .proj-caret { opacity: 1; }
+.proj-row.open { background: var(--bg-3); }
+.proj-menu { top: 32px; left: 4px; right: auto; min-width: 210px; }
+.proj-menu button:disabled { opacity: .5; }
+.thread-menu { z-index: 40; }
+/* Tabs carry their own close; the tool's header needs only its own controls. */
+.tool-view .drawer-head > .icon-btn:last-child { display: none; }
+.start-actions { display: flex; flex-wrap: wrap; justify-content: center; }
+.start-btn { width: 150px; }
+
+
+/* ---- pull request state on a chat ---- */
+.pull-icon { display: grid; place-items: center; width: 18px; height: 18px; flex-shrink: 0; border-radius: 5px; color: var(--muted); }
+.pull-icon:hover { background: var(--bg-4); }
+.pull-icon.open { color: var(--ok); }
+.pull-icon.merged { color: #a78bfa; }
+.pull-icon.closed { color: var(--bad-fg, #ff8aa0); }
+
+/* ---- the chat reads as one flow: steps, plan and result blend in instead of sitting in boxes ---- */
+.work-log, .plan-card, .done-card { background: none; border: 0; border-radius: 0; box-shadow: none; padding: 0; margin: 0; }
+.work-head, .plan-head { display: flex; align-items: center; gap: 7px; width: 100%; padding: 3px 2px; border-radius: 6px; text-align: left; font-size: 12px; color: var(--muted); }
+.work-head:hover, .plan-head:hover { color: var(--text-2); background: none; }
+.work-title, .plan-head b { font-weight: 500; color: var(--text-2); }
+.plan-head { margin: 0; }
+.plan-head span { color: var(--muted); font-size: 11.5px; }
+.work-body { border-top: 0; padding: 0 0 2px 18px; }
+.plan-card ol { padding: 2px 0 2px 20px; }
+.plan-card li { font-size: 12px; color: var(--text-2); }
+.plan-card li.completed { color: var(--muted); }
+.plan-card.live { position: sticky; top: 0; z-index: 3; background: var(--bg); box-shadow: 0 6px 10px -6px var(--bg); }
+.tool-head { padding: 2px 4px; color: var(--muted); }
+.tool-name { font-weight: 500; color: var(--text-2); }
+.tool-output { border: 0; background: var(--bg-2); margin-left: 20px; }
+.done-head { font-weight: 500; color: var(--text-2); padding: 2px; }
+.done-card .done-files { margin: 2px 0 0 18px; padding: 0; border-left: 0; }
+.done-actions { margin: 2px 0 0 14px; padding: 0; }
+.where, .done-card .no-visual { margin-left: 20px; }
+.done-card .no-visual { background: none; border: 0; padding: 2px 0; }
+.shot-strip { margin: 6px 0 2px 20px; }
+.done-card.fail .done-head { color: var(--bad-fg, #ff8aa0); }
+
+/* Success is quiet: an icon on a result means "look at this". */
+.done-card.ok .done-icon { display: none; }
+.done-card.ok .done-files, .done-card.ok .where, .done-card.ok .no-visual, .done-card.ok .shot-strip { margin-left: 2px; }
+.done-card.ok .done-actions { margin-left: -2px; }

@@ -80,6 +80,7 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
   const [menu, setMenu] = useState<{ left: number; bottom: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const [starting, setStarting] = useState(true);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const start = async (shell?: string) => {
@@ -91,6 +92,7 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
       setCurrent(s.id);
       if (shell) onPrefer(shell);
     } catch (e) { setError(String((e as Error).message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
+    setStarting(false);
   };
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
       if (!live) return;
       setShells(sh);
       setSessions(open);
-      if (open.length) setCurrent(open[open.length - 1].id);
+      if (open.length) { setCurrent(open[open.length - 1].id); setStarting(false); }
       else if (!started.current) { started.current = true; start(sh.some((s) => s.id === preferred) ? preferred : undefined); }
     }).catch((e) => setError(String(e.message || e)));
     return () => { live = false; };
@@ -156,7 +158,7 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
       {barSlot ? createPortal(bar, barSlot) : bar}
       <div className="term-body">
         {error && <div className="term-msg">{error}</div>}
-        {!error && shells && !sessions.length && <div className="term-msg">No terminal open. Press + to start one in {cwd || 'your home folder'}.</div>}
+        {!error && shells && !starting && !sessions.length && <div className="term-msg">No terminal open. Press + to start one in {cwd || 'your home folder'}.</div>}
         {sessions.map((s) => <Screen key={s.id} id={s.id} active={s.id === current} />)}
       </div>
     </div>
