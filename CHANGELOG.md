@@ -4,6 +4,8 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-30
+
 ### Added
 
 - **Message actions.** Hover a message to copy it; your own messages can also be put back in the composer to edit, or sent again.
