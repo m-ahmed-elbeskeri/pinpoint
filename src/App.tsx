@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Globe, Loader2, Monitor,
   Plus, RotateCw, Smartphone, Square, Tablet,
-  Bug, Brain, Search, Keyboard, DotsThree, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
+  Bug, Brain, Search, Keyboard, DotsThree, Pencil, Pin, FileText, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
   AppWindow, Boxes, GitCompareArrows, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
 } from './components/icons';
@@ -58,7 +58,7 @@ import { TopBar } from './components/TopBar';
 import { SiteChip } from './components/SiteChip';
 import { originOf, siteKind, twinUrl, type BuildKind } from './lib/site';
 import { EmptyChat } from './components/EmptyChat';
-import { AnnotationList } from './components/AnnotationList';
+import { AnnotationList, ImageChips } from './components/AnnotationList';
 
 const api = window.pinpoint;
 export const isMac = api.platform === 'darwin';
@@ -67,6 +67,14 @@ document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
 
 const THREADS_W = 248;
+const HISTORY_KEY = 'pp.promptHistory';
+const readHistory = (): string[] => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } };
+const rememberPrompt = (text: string) => {
+  const t = text.trim();
+  if (!t || t.startsWith('/')) return;
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify([t, ...readHistory().filter((x) => x !== t)].slice(0, 200))); } catch { /* storage off */ }
+};
+const snippetName = (text: string) => text.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').trim().split(/\s+/).slice(0, 3).join('-') || 'snippet';
 export const combo = (k: string, shift = false) => isMac ? `⌘${shift ? '⇧' : ''}${k}` : `Ctrl+${shift ? 'Shift+' : ''}${k}`;
 
 const MATCH_ROUNDS = 3;
@@ -143,6 +151,10 @@ export default function App() {
   // Rarely used controls stay folded behind a ⋯ until asked for.
   const [pageToolsOpen, setPageToolsOpen] = useState(false);
   const [composerMore, setComposerMore] = useState(false);
+  const [pastes, setPastes] = useState<{ id: string; text: string }[]>([]);
+  const [pasteOpen, setPasteOpen] = useState<string | null>(null);
+  const historyAt = useRef(-1);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [toolsHover, setToolsHover] = useState(false);
   const toolsTimer = useRef(0);
   const [sides, setSides] = useState<{ id: string; title: string; seed: string | null; running: boolean }[]>([]);
@@ -1058,10 +1070,30 @@ export default function App() {
   };
   const onPaste = (e: React.ClipboardEvent) => {
     const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
-    if (files.length) { e.preventDefault(); addReferences(files); }
+    if (files.length) { e.preventDefault(); addReferences(files); return; }
+    // A long paste becomes a chip that goes with the message, instead of a wall of text in the box.
+    const text = e.clipboardData.getData('text/plain');
+    if ((e.target as HTMLElement).closest('.composer-box') && (text.length > 2000 || text.split('\n').length > 30)) {
+      e.preventDefault();
+      setPastes((list) => [...list, { id: uid(), text }]);
+    }
+  };
+  // Files dropped from the computer: images become references, anything else is mentioned by path.
+  const dropFiles = (files: FileList) => {
+    const all = [...files];
+    const images = all.filter((f) => f.type.startsWith('image/'));
+    if (images.length) addReferences(images);
+    const root = (settingsRef.current?.projectDir || '').replace(/\\/g, '/').replace(/\/$/, '');
+    const refs = all.filter((f) => !f.type.startsWith('image/')).map((f) => api.pathForFile(f).replace(/\\/g, '/')).filter(Boolean)
+      .map((p) => (root && p.toLowerCase().startsWith(root.toLowerCase() + '/') ? `@${p.slice(root.length + 1)}` : /\s/.test(p) ? `"${p}"` : p));
+    if (refs.length) {
+      setInstruction((v) => `${v}${v && !/\s$/.test(v) ? ' ' : ''}${refs.join(' ')} `);
+      setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30);
+    }
   };
 
-  const queuedRef = useRef<AgentRequest[]>([]);
+  // Messages waiting for the current run to end, each with the chat message that shows it.
+  const queuedRef = useRef<{ itemId: string; request: AgentRequest }[]>([]);
   const [flushTick, setFlushTick] = useState(0);
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -1114,16 +1146,26 @@ export default function App() {
 
   useEffect(() => {
     if (runId || variantJob.current || !queuedRef.current.length) return;
-    const merged = mergeRequests(queuedRef.current);
+    const merged = mergeRequests(queuedRef.current.map((q) => q.request));
     queuedRef.current = [];
     startRun(merged);
   }, [runId, flushTick]);
+
+  const unqueue = (itemId: string, edit: boolean) => {
+    const q = queuedRef.current.find((x) => x.itemId === itemId);
+    if (!q) return;
+    queuedRef.current = queuedRef.current.filter((x) => x.itemId !== itemId);
+    setChat((c) => c.filter((it) => it.id !== itemId));
+    if (edit) { setInstruction(q.request.instruction); setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30); }
+    setFlushTick((t) => t + 1);
+  };
 
   // Quick replies and Retry send a fixed text without touching what's typed in the composer.
   const sendOverride = useRef<string | null>(null);
   const sendText = (text: string) => { sendOverride.current = text; send(); };
   const send = async (mode: 'queue' | 'now' | 'bg' = 'queue') => {
-    const typed = sendOverride.current ?? instruction;
+    const pasted = sendOverride.current == null ? pastes.map((p) => `Pasted text:\n\`\`\`\n${p.text}\n\`\`\``).join('\n\n') : '';
+    const typed = [sendOverride.current ?? instruction, pasted].filter((x) => x.trim()).join('\n\n');
     const fromBox = sendOverride.current == null;
     sendOverride.current = null;
     if (!settings || busy || (mode !== 'bg' && job && !runRef.current)) return;
@@ -1193,7 +1235,7 @@ export default function App() {
       if (!chatId) { setChatId(uid()); setChatCreated(Date.now()); }
       const thumbs = await Promise.all(anns.map(async (a) => ({ ...a, image: a.image ? await thumbnail(a.image) : undefined })));
 
-      if (fromBox) setInstruction('');
+      if (fromBox) { rememberPrompt(instruction); setInstruction(''); setPastes([]); setPasteOpen(null); historyAt.current = -1; }
       setAnnotations([]);
       setActiveId(null);
       setPopover(null);
@@ -1213,9 +1255,10 @@ export default function App() {
       const running = runRef.current;
       if (running) {
         const r = await api.steerAgent({ runId: running, steerId: uid(), request, mode }).catch(() => ({ delivered: false }));
-        setChat((c) => [...c, { kind: 'user', id: uid(), text: request.instruction, annotations: thumbs, agent: settings.agent, steer: r.delivered ? mode : 'later' }]);
+        const itemId = uid();
+        setChat((c) => [...c, { kind: 'user', id: itemId, text: request.instruction, annotations: thumbs, agent: settings.agent, steer: r.delivered ? mode : 'later' }]);
         if (!r.delivered) {
-          queuedRef.current.push(request);
+          queuedRef.current.push({ itemId, request });
           if (mode === 'now') api.cancelAgent(running);
           setFlushTick((t) => t + 1);
         }
@@ -1872,6 +1915,7 @@ export default function App() {
       setTimeout(() => { const c = composerRef.current; if (c) { c.focus({ preventScroll: true }); c.selectionStart = c.selectionEnd = c.value.length; } }, 30);
     },
     onSendText: (text: string) => sendText(text),
+    onSaveSnippet: (text: string) => saveSnippet(text),
     onReload: () => browser.current?.reload(),
     onUndo: undoRun,
     onReview: (id: string, path?: string) => setDiffView({ runId: id, path }),
@@ -2063,7 +2107,7 @@ export default function App() {
   const deviceH = device.h || avail.h / deviceScale;
   const drawShapes = mode === 'sketch' ? sketch : page;
   const pendingMarks = page.shapes.length + sketch.shapes.length;
-  const canSend = !busy && !!(instruction.trim() || annotations.length || pendingMarks);
+  const canSend = !busy && !!(instruction.trim() || pastes.length || annotations.length || pendingMarks);
   const popAnn = popover && annotations.find((a) => a.id === popover.id);
   const root = settings?.projectDir || '';
   const runMeta = runId ? runMetaRef.current[runId] : undefined;
@@ -2096,7 +2140,18 @@ export default function App() {
     { name: 'terminal', hint: 'Show the terminal (Ctrl+J)', icon: TerminalSquare, run: () => setDrawerOpen(true) },
     { name: 'theme', hint: 'Switch light / dark', icon: Palette, run: () => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' }) },
     { name: 'settings', hint: 'Open settings', icon: SettingsIcon, run: () => setSettingsOpen(true) },
+    { name: 'save', hint: 'Save the text after /save as a snippet', icon: Pin, run: (rest) => saveSnippet(rest) },
+    ...(settings?.snippets || []).map((sn) => ({ name: sn.name, hint: sn.text.slice(0, 80), icon: Pin, run: () => { setInstruction(sn.text); setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 0); } })),
   ];
+  const saveSnippet = (text: string) => {
+    const t = text.trim();
+    if (!t) { flash('Type the text after /save, e.g. /save make it responsive'); return; }
+    const list = settingsRef.current?.snippets || [];
+    let name = snippetName(t);
+    for (let i = 2; list.some((x) => x.name === name); i++) name = `${snippetName(t)}-${i}`;
+    saveSettings({ snippets: [...list, { name, text: t }] });
+    flash(`Saved as /${name}`);
+  };
   const assist = useComposerAssist(composerRef, instruction, setInstruction, slashCommands);
 
   const tasks: RunningTask[] = [
@@ -2433,11 +2488,11 @@ export default function App() {
       <aside
         className={`panel ${left ? 'left' : 'right'} ${activeSide ? 'side-active' : ''}`}
         style={settings.panelHidden ? { display: 'none' } : undefined}
-        onDragOver={(e) => { if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) { e.preventDefault(); setDragOver(true); } }}
+        onDragOver={(e) => { if ([...e.dataTransfer.items].some((i) => i.kind === 'file')) { e.preventDefault(); setDragOver(true); } }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); addReferences(e.dataTransfer.files); }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); dropFiles(e.dataTransfer.files); }}
       >
-        {dragOver && <div className="drop-zone"><ImagePlus size={26} /><b>Drop images as references</b><span>Mockups, screenshots, inspiration</span></div>}
+        {dragOver && <div className="drop-zone"><ImagePlus size={26} /><b>Drop files here</b><span>Images become references; other files are mentioned by path</span></div>}
         <div
           className={`resizer col ${resizing === 'panel' ? 'on' : ''}`}
           onPointerDown={startResize('panel')}
@@ -2527,8 +2582,35 @@ export default function App() {
             onRemove={removeAnn}
           />
 
+          {queuedRef.current.length > 0 && (
+            <div className="queue-tray">
+              <div className="queue-title">Waiting to send when this run ends</div>
+              {queuedRef.current.map((q) => (
+                <div key={q.itemId} className="queue-item">
+                  <span>{q.request.instruction || `${q.request.annotations.length} annotation${q.request.annotations.length === 1 ? '' : 's'}`}</span>
+                  <button className="icon-btn xs" onClick={() => unqueue(q.itemId, true)} title="Take it back to edit"><Pencil size={12} /></button>
+                  <button className="icon-btn xs" onClick={() => unqueue(q.itemId, false)} title="Don't send it"><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="composer-box">
             {assist.popover}
+            {pastes.length > 0 && (
+              <div className="paste-chips">
+                {pastes.map((p) => (
+                  <span key={p.id} className={`paste-chip ${pasteOpen === p.id ? 'on' : ''}`}>
+                    <button onClick={() => setPasteOpen(pasteOpen === p.id ? null : p.id)} title="Show what was pasted"><FileText size={12} /> Pasted text · {p.text.split('\n').length} lines</button>
+                    <button onClick={() => setPastes((list) => list.filter((x) => x.id !== p.id))} title="Remove"><X size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <ImageChips
+              annotations={annotations} overlayImage={overlay?.image ?? null} onActive={setActiveId} onRemove={removeAnn}
+              onOverlay={(a) => setOverlay(overlay?.image === a.image ? null : { image: a.image!, name: a.name || 'mockup', opacity: 0.5, x: 0, y: 0, moving: false })}
+            />
+            {pasteOpen && <pre className="paste-preview">{pastes.find((p) => p.id === pasteOpen)?.text}</pre>}
             {planMode && !runId && <button className="plan-pill" onClick={() => setPlanMode(false)} title="The agent proposes changes without making them. Click to let it edit files.">Plan only ×</button>}
             <textarea
               ref={composerRef}
@@ -2540,6 +2622,23 @@ export default function App() {
                 : annotations.length ? 'Anything else? (optional)' : chat.length ? 'Follow up' : 'Describe a change  ·  @ files  ·  / commands'}
               onKeyDown={(e) => {
                 if (assist.onKeyDown(e)) return;
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); setHistoryOpen(true); return; }
+                if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                  // ↑ / ↓ walk through what you've sent, when the box is empty or you're already browsing it.
+                  const t = e.currentTarget;
+                  const browsing = historyAt.current >= 0;
+                  const atEdge = e.key === 'ArrowUp' ? t.selectionStart === 0 : t.selectionStart === t.value.length;
+                  if ((browsing || !t.value) && atEdge) {
+                    const list = readHistory();
+                    const next = e.key === 'ArrowUp' ? Math.min(list.length - 1, historyAt.current + 1) : historyAt.current - 1;
+                    if (next !== historyAt.current && (next >= 0 || browsing)) {
+                      e.preventDefault();
+                      historyAt.current = next;
+                      setInstruction(next >= 0 ? list[next] : '');
+                      return;
+                    }
+                  }
+                }
                 if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
                 e.preventDefault();
                 send(runId && (e.ctrlKey || e.metaKey) ? 'now' : 'queue');
@@ -2677,6 +2776,13 @@ export default function App() {
           onBranch={() => (document.querySelector('.composer .git-wrap > .chip') as HTMLElement | null)?.click()}
           onDev={() => { setDrawerOpen(true); setDrawerTab('dev'); }}
           onErrors={() => browser.current?.devtools()}
+        />
+      )}
+      {historyOpen && (
+        <CommandPalette
+          placeholder="Search what you've sent…"
+          commands={readHistory().map((t, i) => ({ id: `h${i}`, group: 'Sent before', label: t.split('\n')[0].slice(0, 120), hint: t.includes('\n') ? `${t.split('\n').length} lines` : undefined, run: () => { setInstruction(t); setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30); } }))}
+          onClose={() => setHistoryOpen(false)}
         />
       )}
       {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}

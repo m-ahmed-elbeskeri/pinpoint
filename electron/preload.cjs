@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const on = (channel) => (cb) => {
   const fn = (_e, data) => cb(data);
@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   detectAgents: () => ipcRenderer.invoke('agents:detect'),
   modelCatalog: () => ipcRenderer.invoke('agents:models'),
   listAgents: () => ipcRenderer.invoke('agents:list'),
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   notify: (title, body) => ipcRenderer.invoke('app:notify', { title, body }),
   projectFiles: () => ipcRenderer.invoke('project:files'),
   setWindowTheme: (light) => ipcRenderer.invoke('window:theme', light),

@@ -36,10 +36,10 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 ## Composer
 
-- [ ] Queued-messages tray (edit or remove before they send)
-- [ ] Image chips inside the composer
-- [ ] Prompt history (↑, Ctrl+R) and saved snippets
-- [ ] Paste long text as a collapsed chip; drag files in from the OS
+- [x] Queued-messages tray (edit or remove before they send)
+- [x] Image chips inside the composer
+- [x] Prompt history (↑, Ctrl+R) and saved snippets
+- [x] Paste long text as a collapsed chip; drag files in from the OS
 - [ ] Voice dictation
 
 ## Threads and workspace

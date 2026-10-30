@@ -211,7 +211,7 @@ server.listen(0, '127.0.0.1', () => {
       await shot('3-sweep');
       await ui(`[...document.querySelectorAll('.sweep .diff-head button')].find((b) => /Fix all/.test(b.textContent)).click(); 0`);
       const drafted = await until(`(() => { const v = document.querySelector('.composer-box textarea').value; return /scrolls sideways/.test(v) ? v : ''; })()`, 8000);
-      const refs = await until(`[...document.querySelectorAll('.ann-title')].filter((t) => /Reference image/.test(t.innerText)).length`, 8000);
+      const refs = await until(`document.querySelectorAll('.composer-box .img-chip').length`, 8000);
       log('"Fix all" drafts the request and attaches the worst screenshots', /\/wide\.html \(wide\.html\)/.test(drafted || '') && refs >= 1, `${refs} screenshot(s) · ${String(drafted).slice(0, 160)}`);
       await ui(`[...document.querySelectorAll('.ann-x')].forEach((b) => b.click()); 0`);
       await type('');

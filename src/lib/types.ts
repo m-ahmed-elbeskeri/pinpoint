@@ -277,6 +277,7 @@ export interface Settings {
   threadsHidden?: boolean;
   theme?: 'system' | 'dark' | 'light';
   statusBar?: boolean;
+  snippets?: { name: string; text: string }[];
   drawerHeight: number;
   useDesign: boolean;
   useMemory: boolean;
@@ -333,6 +334,7 @@ export interface PinpointAPI {
   detectAgents(): Promise<Record<AgentId, { ok: boolean; version?: string }>>;
   modelCatalog(): Promise<ModelCatalog>;
   listAgents(): Promise<HarnessInfo[]>;
+  pathForFile(file: File): string;
   notify(title: string, body: string): Promise<boolean>;
   projectFiles(): Promise<string[]>;
   setWindowTheme(light: boolean): Promise<boolean>;

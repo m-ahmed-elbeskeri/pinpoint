@@ -3,7 +3,7 @@ import { structuredPatch } from 'diff';
 import {
   AlertTriangle, Brain, CheckCircle2, ChevronRight, FileText, Globe, Loader2, Pencil, RotateCw,
   Search, Terminal, Wrench, XCircle, FilePlus2, Undo2, FileMinus2, FilePen, GitCompareArrows, Lightbulb, Check,
-  ExternalLink, ShieldCheck, ClipboardCopy, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
+  ExternalLink, ShieldCheck, ClipboardCopy, Pin, DotsThree, CornerDownRight, Columns2, Zap, Clock, GitCommitHorizontal, SplitSquareHorizontal, Layers, Route, SealCheck, Gauge, Timer, EyeOff,
 } from './icons';
 import { flowVerdict } from '../lib/flow';
 import type { ApprovalDecision, BuildSize, ChatItem, ToolEdit, DiffFile, FileChange, FlowResult, PerfMetrics, RevertResult } from '../lib/types';
@@ -395,6 +395,7 @@ interface ItemProps {
   onApprove(itemId: string, decision: ApprovalDecision): void;
   onEditMessage(text: string): void;
   onSendText(text: string): void;
+  onSaveSnippet(text: string): void;
   onMeasureBuild(runId: string): void;
   onOpenLocal(): void;
   onFlowFix(runId: string): void;
@@ -449,8 +450,9 @@ function Attachments({ annotations }: { annotations: Extract<ChatItem, { kind: '
   );
 }
 
-export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
+export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, onSaveSnippet, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
   const [loadStats, setLoadStats] = useState(false);
+  const [moreActs, setMoreActs] = useState(false);
   switch (item.kind) {
     case 'user': {
       const tag = item.steer ? STEER_TAG[item.steer] : null;
@@ -475,6 +477,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
               <CopyButton text={item.text} />
               <button onClick={() => onEditMessage(item.text)} title="Put this back in the composer to edit and send"><Pencil size={12} /></button>
               {!busy && <button onClick={() => onSendText(item.text)} title="Send it again"><RotateCw size={12} /></button>}
+              <button onClick={() => onSaveSnippet(item.text)} title="Save as a snippet you can reuse from the / menu"><Pin size={12} /></button>
             </div>
           )}
           {item.annotations.filter((a) => a.note.trim()).map((a) => (
@@ -621,7 +624,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
           )}
           {item.shots && !noVisual && <ShotStrip runId={item.runId} onOpen={() => onCompare(item.runId)} />}
           {item.routeCheck && (
-            <div className={`where ${elsewhere.length || sideEffects ? 'moved' : ''}`}>
+            <div className={`where ${elsewhere.length || sideEffects ? 'moved' : moved.length ? '' : 'quiet'}`}>
               <div className="where-head">
                 <Route size={12} />
                 {elsewhere.length
@@ -644,7 +647,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
           {item.perf && <PerfLine perf={item.perf} />}
           {item.perf && loadStats && <PerfStats perf={item.perf} />}
           {item.build && <BuildLine build={item.build} />}
-          {!(item.verify && n === 0) && <div className="done-actions">
+          {!(item.verify && n === 0) && <div className={`done-actions ${moreActs ? 'more' : ''}`}>
             {n > 0 && (
               <button className="btn xs" onClick={() => onReview(item.runId)} title="See exactly what changed and revert individual files">
                 <GitCompareArrows size={12} /> Review
@@ -656,22 +659,23 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
               </button>
             )}
             {gitRepo && n > 0 && !item.undone && !item.commit && item.ok && (
-              <button className="btn ghost xs" disabled={busy} onClick={() => onCommit(item.runId)} title="Commit the files this run changed">
+              <button className="btn ghost xs more-act" disabled={busy} onClick={() => onCommit(item.runId)} title="Commit the files this run changed">
                 <GitCommitHorizontal size={12} /><span className="btn-text">Commit</span>
               </button>
             )}
             {n > 0 && !item.undone && item.ok && (
-              <button className="btn ghost xs" disabled={busy} onClick={() => onMeasureBuild(item.runId)} title="Run the project's build and measure the JS and CSS it produces (the per-run numbers come from the dev server)">
+              <button className="btn ghost xs more-act" disabled={busy} onClick={() => onMeasureBuild(item.runId)} title="Run the project's build and measure the JS and CSS it produces (the per-run numbers come from the dev server)">
                 <Gauge size={12} /><span className="btn-text">Build size</span>
               </button>
             )}
             {item.perf && (
-              <button className={`btn ghost xs load-stats-btn ${loadStats ? 'on' : ''}`} onClick={() => setLoadStats(!loadStats)} title="How this page loads, before and after this change">
+              <button className={`btn ghost xs load-stats-btn more-act ${loadStats ? 'on' : ''}`} onClick={() => setLoadStats(!loadStats)} title="How this page loads, before and after this change">
                 <Timer size={12} /><span className="btn-text">Load stats</span>
               </button>
             )}
+            <button className="btn ghost xs more-act" onClick={onReload} title="Reload the page"><RotateCw size={12} /><span className="btn-text">Reload</span></button>
             <div className="spacer" />
-            <button className="btn ghost xs" onClick={onReload} title="Reload the page"><RotateCw size={12} /><span className="btn-text">Reload</span></button>
+            <button className={`btn ghost xs done-more ${moreActs ? 'on' : ''}`} onClick={() => setMoreActs(!moreActs)} title={moreActs ? 'Fewer actions' : 'More: commit, build size, load stats, reload'}><DotsThree size={14} /></button>
           </div>}
         </div>
       );

@@ -493,3 +493,38 @@ html, body, #root, .app { overflow: clip; }
 .vp-tools > .vp-toggles > .cond-wrap > button::after { content: 'Test conditions'; }
 .vp-tools > .vp-toggles > .vp-sep { display: block !important; width: auto; height: 1px; margin: 4px 2px; background: var(--line); }
 .vp-label { white-space: nowrap; }
+
+/* ---- queued messages tray ---- */
+.queue-tray { border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); padding: 6px; display: grid; gap: 2px; }
+.queue-title { padding: 2px 6px 4px; font-size: 11px; color: var(--muted); }
+.queue-item { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 8px; border-radius: 8px; font-size: 12.5px; color: var(--text-2); }
+.queue-item:hover { background: var(--bg-3); }
+.queue-item > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- chips inside the composer: pasted text and reference images ---- */
+.paste-chips, .img-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; }
+.paste-chip, .img-chip { display: inline-flex; align-items: center; height: 26px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg-2); overflow: hidden; }
+.paste-chip button, .img-chip button { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 7px; font-size: 11.5px; color: var(--text-2); }
+.paste-chip button:hover, .img-chip button:hover, .img-chip button.on { color: var(--text); background: var(--bg-4); }
+.paste-chip.on, .img-chip.on { border-color: var(--ring); }
+.img-chip img { width: 22px; height: 18px; object-fit: cover; border-radius: 4px; margin-left: -3px; }
+.img-chip .badge.sm { margin: 0; }
+.img-chip-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paste-preview { margin: 8px 12px 0; max-height: 160px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); font: 11px/1.5 var(--mono); color: var(--text-2); white-space: pre-wrap; }
+.img-chip-full { display: block; max-width: calc(100% - 24px); max-height: 220px; margin: 8px 12px 0; border-radius: 8px; border: 1px solid var(--line-2); cursor: zoom-out; }
+.msg.user .msg-text { max-height: 320px; overflow-y: auto; }
+.snippet-text { flex: 2 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+
+/* ---- result card: one clear summary line, details quieter, everything still there ---- */
+.done-card { padding: 10px 12px; border-color: var(--line); background: var(--bg-2); box-shadow: none; }
+.done-card .done-files { margin-top: 8px; padding: 2px; background: transparent; border: 0; border-left: 2px solid var(--line); border-radius: 0; }
+.done-actions { margin-top: 6px; padding-top: 6px; border-top: 0; }
+.done-actions:not(.more) .more-act { display: none; }
+.done-actions .done-more { width: 26px; padding: 0; color: var(--muted); }
+.done-actions .done-more.on { color: var(--text); background: var(--bg-4); }
+.shot-strip { max-width: 360px; }
+.where.quiet { margin-top: 6px; font-size: 11px; }
+.where.quiet .where-head svg { opacity: .7; }
+.done-card .no-visual { margin-top: 8px; }
+.done-meta { opacity: .85; }
+.commit-chip { opacity: .85; }

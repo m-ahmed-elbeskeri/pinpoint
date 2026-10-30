@@ -17,6 +17,7 @@ interface Props {
   commands: Command[];
   onClose(): void;
   onQuery?(q: string): void;
+  placeholder?: string;
 }
 
 const RECENT_KEY = 'pp.recentCommands';
@@ -35,7 +36,7 @@ function score(c: Command, q: string) {
   return i === q.length ? 1 : 0;
 }
 
-export function CommandPalette({ commands, onClose, onQuery }: Props) {
+export function CommandPalette({ commands, onClose, onQuery, placeholder }: Props) {
   const [query, setQuery] = useState('');
   const [hi, setHi] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -78,7 +79,7 @@ export function CommandPalette({ commands, onClose, onQuery }: Props) {
           <Search size={15} />
           <input
             autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command or search chats…" spellCheck={false}
+            placeholder={placeholder || "Type a command or search chats…"} spellCheck={false}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(results.length - 1, h + 1)); }
               else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }

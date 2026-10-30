@@ -66,6 +66,20 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
           <button className="btn xs" onClick={() => set('customAgents', [...customs, { id: `custom-${Date.now().toString(36)}`, name: '', command: '', args: '{prompt}' }])}><Plus size={12} /> Add custom agent</button>
         </section>
 
+        {(s.snippets || []).length > 0 && (
+          <section>
+            <h4>Snippets</h4>
+            <p className="hint">Reusable prompts. Type / in the composer to use one; /save &lt;text&gt; adds another.</p>
+            {(s.snippets || []).map((sn) => (
+              <div key={sn.name} className="harness-row">
+                <span className="harness-name mono">/{sn.name}</span>
+                <span className="snippet-text">{sn.text}</span>
+                <button className="icon-btn xs" onClick={() => set('snippets', (s.snippets || []).filter((x) => x.name !== sn.name))} title="Delete"><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </section>
+        )}
+
         <section>
           <h4>Code editor</h4>
           <label>Command used by “Open” <span className="hint">(blank auto-detects Cursor, VS Code, Windsurf or Zed)</span>

@@ -78,7 +78,13 @@ export function useComposerAssist(ref: RefObject<HTMLTextAreaElement | null>, va
 
   // Returns true when the key was for the popover and the composer should ignore it.
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!open) return false;
+    if (!open) {
+      // "/save some text" + Enter: a known command with an argument runs instead of being sent to the agent.
+      const typed = /^\/([\w-]+)(?:\s+([\s\S]*))?$/.exec(value);
+      const cmd = typed && e.key === 'Enter' && !e.shiftKey ? commands.find((c) => c.name === typed[1]) : null;
+      if (cmd) { e.preventDefault(); setValue(''); cmd.run((typed![2] || '').trim()); return true; }
+      return false;
+    }
     if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => (h + 1) % matches.length); return true; }
     if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => (h - 1 + matches.length) % matches.length); return true; }
     if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); matches[hi]?.apply(); return true; }

@@ -30,13 +30,38 @@ const PLACEHOLDER: Record<Annotation['kind'], string> = {
   note: 'The comment',
 };
 
+export function ImageChips({ annotations, overlayImage, onOverlay, onRemove, onActive }: { annotations: Annotation[]; overlayImage: string | null; onOverlay(a: Annotation): void; onRemove(id: string): void; onActive(id: string): void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const refs = annotations.filter((a) => a.kind === 'reference' && a.image);
+  if (!refs.length) return null;
+  const shown = refs.find((a) => a.id === open);
+  return (
+    <>
+      <div className="img-chips">
+        {refs.map((a) => (
+          <span key={a.id} className={`img-chip ${open === a.id ? 'on' : ''}`}>
+            <button onClick={() => { setOpen(open === a.id ? null : a.id); onActive(a.id); }} title={a.note || a.name || 'Reference image'}>
+              <img src={a.image} alt="" /><span className="badge sm" style={{ background: a.color }}>{a.n}</span><span className="img-chip-name">{a.name || 'image'}</span>
+            </button>
+            <button onClick={() => onOverlay(a)} className={overlayImage === a.image ? 'on' : ''} title="Lay this image over the page to compare"><Blend size={11} /></button>
+            <button onClick={() => onRemove(a.id)} title="Remove"><X size={11} /></button>
+          </span>
+        ))}
+      </div>
+      {shown && <img className="img-chip-full" src={shown.image} alt="" onClick={() => setOpen(null)} />}
+    </>
+  );
+}
+
 export function AnnotationList(p: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const pending = p.pageMarks + p.sketchMarks;
-  if (!p.annotations.length && !pending) return null;
+  // Reference images show as chips inside the composer instead (ImageChips).
+  const rows = p.annotations.filter((a) => a.kind !== 'reference');
+  if (!rows.length && !pending) return null;
   return (
     <div className="ann-list">
-      {p.annotations.map((a) => {
+      {rows.map((a) => {
         const d = describe(a, p.root);
         return (
           <div key={a.id} className={`ann compact ${p.activeId === a.id ? 'active' : ''} ${open === a.id ? 'expanded' : ''}`} onClick={() => p.onFocus(a)}>

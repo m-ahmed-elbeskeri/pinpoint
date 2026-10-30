@@ -13,11 +13,17 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 - **Palette search inside chats.** Type a phrase to find the chats that mention it; the commands you used last appear first.
 - **Shortcuts sheet** on `?`, and Ctrl/Cmd+, for Settings.
 - **Status bar** (off by default; turn it on from the palette): branch, dev server, page errors, agent and model, and what this chat has cost.
+- **Queued messages.** Messages waiting for the current run to end are listed above the composer, where you can take one back to edit or drop it.
+- **Prompt history.** ↑ in an empty composer brings back what you sent before (↓ goes forward); Ctrl/Cmd+R searches it.
+- **Snippets.** `/save <text>` keeps a reusable prompt that then appears in the `/` menu; messages have Save as snippet too, and Settings lists them.
+- **Long pastes become chips** that go with the message, and **any file** can be dropped on the chat: images become references, others are mentioned by path (`@path` inside the project).
 
 ### Changed
 
 - **Less clutter.** The page tools fold into one ⋯ that opens a labelled menu on hover and shows what's switched on. Share, variants and background runs sit behind ⋯ in the composer. DevTools moved to the palette; Settings sits in the sidebar; New chat in the chat panel hides while the sidebar has its own.
 - Shorter placeholder and hint text.
+- Reference images show as chips inside the composer instead of rows above it.
+- **Cleaner result cards.** Review and Undo stay on the card; commit, build size, load stats and reload are under ⋯; an all-clear page check is a quiet line, while warnings stay prominent.
 - Desktop notifications use Pinpoint's icon and bring the window back when clicked.
 
 ### Fixed

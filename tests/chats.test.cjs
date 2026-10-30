@@ -289,6 +289,43 @@ server.listen(0, '127.0.0.1', () => {
       log('? opens the shortcuts sheet', await ui(`!!document.querySelector('.modal.shortcuts')`));
       await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0`);
 
+      // Batch 2: history, snippets, paste chips, image chips.
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      await typeIn('');
+      await key('ArrowUp');
+      await sleep(150);
+      const recalled = await ui(`document.querySelector('.composer-box textarea').value`);
+      log('↑ in an empty composer brings back what was sent last', /Continue|Try again|quick-ask/.test(recalled), recalled);
+      await key('ArrowDown');
+      await sleep(150);
+      log('and ↓ returns to an empty box', (await ui(`document.querySelector('.composer-box textarea').value`)) === '');
+      await typeIn('/save make the header sticky');
+      await until(`document.querySelector('.assist-item') ? 1 : 0`, 3000);
+      await key('Enter');
+      await sleep(500);
+      const snips = JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8')).snippets || [];
+      log('/save keeps a snippet', snips.some((x) => x.name === 'make-the-header' && x.text === 'make the header sticky'), JSON.stringify(snips));
+      await typeIn('/make');
+      const offered = await until(`[...document.querySelectorAll('.assist-item')].map((b) => b.textContent).join(' | ')`, 3000);
+      log('and offers it in the / menu', /make-the-header/.test(offered || ''), offered);
+      await key('Enter');
+      await sleep(200);
+      log('picking it fills the composer', (await ui(`document.querySelector('.composer-box textarea').value`)) === 'make the header sticky');
+      await typeIn('');
+
+      await ui(`(() => { const t = document.querySelector('.composer-box textarea'); t.focus(); const dt = new DataTransfer(); dt.setData('text/plain', Array.from({ length: 60 }, (_, i) => 'log line ' + i).join(String.fromCharCode(10))); t.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+      await sleep(200);
+      log('a long paste becomes a chip, not text in the box', /60 lines/.test(await ui(`document.querySelector('.paste-chip')?.textContent || ''`)) && (await ui(`document.querySelector('.composer-box textarea').value`)) === '');
+      await ui(`(async () => { const c = document.createElement('canvas'); c.width = c.height = 4; const blob = await new Promise((r) => c.toBlob(r, 'image/png')); const dt = new DataTransfer(); dt.items.add(new File([blob], 'mock.png', { type: 'image/png' })); document.querySelector('.composer-box textarea').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })()`);
+      const chip = await until(`document.querySelector('.img-chip') ? 1 : 0`, 4000);
+      log('a pasted image shows as a chip in the composer, not a row above it', chip === 1 && !(await ui(`[...document.querySelectorAll('.ann-list .ann')].some((a) => /mock/.test(a.textContent))`)));
+      const usersNow = await ui(`document.querySelectorAll('.chat .msg.user').length`);
+      await ui(`document.querySelector('.send-btn.primary').click(); 0`);
+      await until(`document.querySelectorAll('.chat .msg.user').length > ${usersNow} ? 1 : 0`, 6000);
+      const sent = await ui(`[...document.querySelectorAll('.chat .msg.user')].pop().textContent`);
+      log('the pasted text goes with the message and the chips clear', /Pasted text/.test(sent) && /log line 59/.test(sent) && !(await ui(`!!document.querySelector('.paste-chip, .img-chip')`)), sent.slice(0, 120));
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }
     } catch (e) { log('exception', false, e.stack); }
