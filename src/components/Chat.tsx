@@ -442,6 +442,19 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Under a request: what the turn changed, with a jump to its result.
+function TurnSummary({ done, onReview }: { done: Extract<ChatItem, { kind: 'done' }>; onReview(runId: string, path?: string): void }) {
+  const n = done.changes.length;
+  const add = done.changes.reduce((s, c) => s + (c.add || 0), 0), del = done.changes.reduce((s, c) => s + (c.del || 0), 0);
+  return (
+    <div className="turn-summary">
+      <button onClick={() => document.getElementById(`done-${done.id}`)?.scrollIntoView({ block: 'center' })} title="Jump to the result">{n} file{n > 1 ? 's' : ''} changed <i className="add">+{add}</i> <i className="del">−{del}</i> ↓</button>
+      {done.changes.slice(0, 3).map((c) => <button key={c.path} className="mono" onClick={() => onReview(done.runId, c.path)} title={`Review ${c.path}`}>{c.path.split('/').pop()}</button>)}
+      {n > 3 && <span>+{n - 3}</span>}
+    </div>
+  );
+}
+
 // After a finished run: one-click follow-ups.
 function QuickReplies({ ok, onSend }: { ok: boolean; onSend(text: string): void }) {
   const replies = ok
@@ -594,7 +607,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
       const added = counted.reduce((s, c) => s + (c.add || 0), 0), removed = counted.reduce((s, c) => s + (c.del || 0), 0);
       const quiet = !!item.verify && n === 0;
       return (
-        <div className={`done-card ${item.ok ? 'ok' : 'fail'} ${item.undone ? 'undone' : ''} ${quiet ? 'quiet' : ''}`}>
+        <div id={`done-${item.id}`} className={`done-card ${item.ok ? 'ok' : 'fail'} ${item.undone ? 'undone' : ''} ${quiet ? 'quiet' : ''}`}>
           <div className="done-head">
             <i className="done-icon">{item.verify && item.ok ? <SealCheck size={quiet ? 14 : 15} weight="fill" /> : item.ok ? <CheckCircle2 size={15} weight="fill" /> : <XCircle size={15} weight="fill" />}</i>
             <span>
@@ -804,6 +817,14 @@ export const ChatList = memo(function ChatList({ items, actions, root, busy, git
     }
     const item = items[i];
     out.push(<ChatRow key={item.id} item={item} live={busy && i > lastDone && (item.kind === 'user' || item.kind === 'plan')} root={root} busy={busy} gitRepo={gitRepo} {...actions} />);
+    if (item.kind === 'user') {
+      const rest = items.slice(i + 1);
+      const end = rest.findIndex((x) => x.kind === 'user');
+      const turn = end < 0 ? rest : rest.slice(0, end);
+      const done = turn.find((x): x is Extract<ChatItem, { kind: 'done' }> => x.kind === 'done' && x.changes.length > 0 && !x.undone);
+      // Only worth it when the result is a scroll away.
+      if (done && turn.length >= 4) out.push(<TurnSummary key={`sum-${item.id}`} done={done} onReview={actions.onReview} />);
+    }
     i++;
   }
   const last = items[items.length - 1];

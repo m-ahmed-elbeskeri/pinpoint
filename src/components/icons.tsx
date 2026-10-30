@@ -59,6 +59,8 @@ export {
   CircleNotchIcon as Loader2,
   ChatIcon as MessageSquare,
   MonitorIcon as Monitor,
+  MoonIcon as Moon,
+  SunIcon as Sun,
   DevicesIcon as MonitorSmartphone,
   CursorIcon as MousePointer2,
   CursorClickIcon as MousePointerClick,

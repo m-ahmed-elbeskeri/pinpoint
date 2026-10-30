@@ -64,6 +64,29 @@ const prop = (n) => card.props.find((p) => p.name === n);
 check('components found with their export kind', found.length === 2 && card && !card.isDefault && found.find((c) => c.name === 'Page').isDefault, JSON.stringify(found.map((c) => c.name)));
 check('prop types and defaults read from the source', prop('title').type === 'string' && prop('title').required && prop('size').type === 'enum' && prop('size').options.join() === 'sm,md,lg' && prop('size').default === 'md' && prop('featured').type === 'boolean' && prop('count').type === 'number' && prop('children').type === 'node' && !prop('onClick'), JSON.stringify(card.props));
 
+const runsLib = require(path.join(repo, 'electron', 'runs.cjs'));
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hunk-'));
+  const dir = path.join(root, '.pinpoint', 'runs', 'r1');
+  fs.mkdirSync(dir, { recursive: true });
+  const lines = (edit) => Array.from({ length: 30 }, (_, i) => (edit[i] ? edit[i] : `line ${i}`)).join('\n') + '\n';
+  const before = lines({}), after = lines({ 2: 'first change', 25: 'second change' });
+  fs.writeFileSync(path.join(dir, '0.before'), before);
+  fs.writeFileSync(path.join(dir, '0.after'), after);
+  fs.writeFileSync(path.join(root, 'a.txt'), after);
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ changes: [{ i: 0, path: 'a.txt', kind: 'modify', hasBefore: true, hasAfter: true, binary: false, reverted: false }] }));
+  let r = runsLib.revertHunk(root, 'r1', 'a.txt', 0);
+  const now = fs.readFileSync(path.join(root, 'a.txt'), 'utf8');
+  check('reverting one hunk undoes only that change', !now.includes('first change') && now.includes('second change') && !r.allReverted, now.slice(0, 40));
+  check('and the diff then shows only the other one', !runsLib.diff(root, 'r1')[0].after.includes('first change') && runsLib.diff(root, 'r1')[0].after.includes('second change'));
+  fs.writeFileSync(path.join(root, 'a.txt'), now.replace('second change', 'edited by hand'));
+  r = runsLib.revertHunk(root, 'r1', 'a.txt', 0);
+  check('a hunk edited since is reported, not overwritten', r.conflicts.includes('a.txt') && fs.readFileSync(path.join(root, 'a.txt'), 'utf8').includes('edited by hand'));
+  fs.writeFileSync(path.join(root, 'a.txt'), now);
+  r = runsLib.revertHunk(root, 'r1', 'a.txt', 0);
+  check('reverting the last hunk restores the file and marks it reverted', fs.readFileSync(path.join(root, 'a.txt'), 'utf8') === before && r.restored.includes('a.txt') && r.allReverted);
+}
+
 const { translate } = require(path.join(repo, 'electron', 'agent-generic.cjs'));
 const { harnesses, splitArgs } = require(path.join(repo, 'electron', 'harnesses.cjs'));
 const tr = (lines) => { const st = { sessionId: null, sawText: false }; return lines.flatMap((l) => translate(l, st) || [{ type: 'unknown' }]); };

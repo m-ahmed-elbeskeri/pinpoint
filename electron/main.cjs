@@ -663,6 +663,7 @@ const projectDir = () => {
 };
 ipcMain.handle('run:diff', (_e, runId) => runs.diff(projectDir(), runId));
 ipcMain.handle('run:revert', (_e, { runId, paths, force }) => runs.revert(projectDir(), runId, paths || null, !!force));
+ipcMain.handle('run:revertHunk', (_e, { runId, path: file, index }) => runs.revertHunk(projectDir(), runId, file, index));
 ipcMain.handle('run:apply', (_e, runId) => runs.apply(projectDir(), runId));
 ipcMain.handle('routes:prewarm', (_e, { list, partition }) => {
   const settings = loadSettings();

@@ -11,7 +11,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 - [x] Collapsible "Worked · N steps" groups for tool steps
 - [x] Side chats as tabs in the chat panel (several at once, read-only, own session)
 - [x] Selection bubble in the chat: start a side chat, or quote into a reply
-- [x] Running section in the sidebar: working chats, background runs, side chats, dev server, terminals
+- [x] ~~Running section in the sidebar~~ removed: working chats show in the list, side chats on their tabs, background runs by the composer
 - [x] Annotate mode: click an element, or drag to draw a mark
 - [x] Compact annotations; images open on click
 - [x] Quieter colour: yellow only for the logo, pins and the annotate outline
@@ -46,13 +46,13 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 - [ ] Branch / worktree per thread, shown on the thread
 - [x] Thread states: needs you, failed, done-while-away; pin, rename, archive
-- [ ] Diff side panel next to the chat (not only a modal)
-- [ ] Accept or reject per hunk; "Explain this change"; inline review comments that feed the next message
-- [ ] Change summary at the top of a turn with jump links
-- [ ] Compare two runs or branches side by side
+- [x] Diff docked beside the chat
+- [x] Keep or revert per hunk; "Explain this change"; inline review comments that feed the next message
+- [x] Change summary at the top of a turn with jump links
+- [x] Compare runs (timeline) and branches (git panel)
 - [ ] File tree with recently-changed badges; quick code viewer
 - [ ] Split panes, saved layouts, zen mode; one window per project; tray status
-- [x] Terminal tabs in the drawer header; open terminals listed under Running
+- [x] Terminal tabs in the drawer header
 - [x] Timeline scrubber of page screenshots across a thread's runs
 - [x] Annotation pins kept on the page across reloads, per thread
 

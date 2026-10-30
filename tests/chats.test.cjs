@@ -207,7 +207,6 @@ server.listen(0, '127.0.0.1', () => {
       await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);
       await sleep(200);
       log('the Chat tab brings the main chat back', await ui(`getComputedStyle(document.querySelector('.chat')).display !== 'none' && !document.querySelector('.side-chat:not(.hidden)')`));
-      log('nothing is left under Running once the side question is answered', (await until(`document.querySelector('.threads .task') ? 0 : 1`, 5000)) === 1, await ui(`[...document.querySelectorAll('.threads .task')].map((t) => t.textContent).join(' | ')`));
 
       await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);
       const cardsBeforeAsk = await ui(`document.querySelectorAll('.chat .done-card').length`);
@@ -325,6 +324,29 @@ server.listen(0, '127.0.0.1', () => {
       const sent = await ui(`[...document.querySelectorAll('.chat .msg.user')].pop().textContent`);
       log('the pasted text goes with the message and the chips clear', /Pasted text/.test(sent) && /log line 59/.test(sent) && !(await ui(`!!document.querySelector('.paste-chip, .img-chip')`)), sent.slice(0, 120));
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+
+      // Review: docked beside the chat, per-hunk actions, comments go to the agent.
+      const doneBefore = await ui(`document.querySelectorAll('.chat .done-card').length`);
+      await send('quick-zeta please');
+      await until(`document.querySelectorAll('.chat .done-card').length > ${doneBefore} ? 1 : 0`, 10000);
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 10000);
+      await sleep(300);
+      await ui(`[...document.querySelectorAll('.chat .done-card')].pop().querySelector('.done-actions .btn').click(); 0`);
+      const docked = await until(`document.querySelector('.diff-dock .hunk-actions') ? 1 : 0`, 5000);
+      log('review opens docked with the chat still usable', docked === 1 && (await ui(`!document.querySelector('.diff-dock').closest('.modal-backdrop') && getComputedStyle(document.querySelector('.composer-box')).display !== 'none'`)));
+      await ui(`document.querySelector('.hunk-actions button[title^="Comment"]').click(); 0`);
+      await sleep(150);
+      await ui(`(() => { const t = document.querySelector('.hunk-input'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'Use a better name'); t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
+      await sleep(200);
+      log('a comment sits on its hunk', /Use a better name/.test(await ui(`document.querySelector('.hunk-comment')?.textContent || ''`)));
+      const usersBeforeReview = await ui(`document.querySelectorAll('.chat .msg.user').length`);
+      await ui(`document.querySelector('.send-comments').click(); 0`);
+      await until(`document.querySelectorAll('.chat .msg.user').length > ${usersBeforeReview} ? 1 : 0`, 5000);
+      const reviewMsg = await ui(`[...document.querySelectorAll('.chat .msg.user')].pop().textContent`);
+      log('and goes to the agent as one message with its file and diff', /Review comments/.test(reviewMsg) && /Use a better name/.test(reviewMsg) && /quick-zeta\.txt/.test(reviewMsg), reviewMsg.slice(0, 120));
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      await ui(`document.querySelector('.diff-dock .diff-head .icon-btn').click(); 0`);
+      await sleep(150);
 
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }

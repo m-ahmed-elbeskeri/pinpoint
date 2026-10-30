@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { structuredPatch } = require('diff');
+const { applyPatch, reversePatch, structuredPatch } = require('diff');
 
 function lineStats(before, after) {
   if (!before && !after) return {};
@@ -112,6 +112,31 @@ function revert(root, runId, paths, force) {
   return result;
 }
 
+// Undo one hunk of a file on disk. The run's "after" copy follows, so the diff shows only what's left.
+function revertHunk(root, runId, file, index) {
+  const run = load(root, runId);
+  const dir = runDir(root, runId);
+  const c = run.changes.find((x) => x.path === file);
+  const result = { restored: [], conflicts: [], failed: [], allReverted: false };
+  if (!c || c.reverted || c.binary || !c.hasAfter || (c.kind !== 'add' && !c.hasBefore)) { result.failed.push(file); return result; }
+  const before = c.hasBefore ? readMaybe(path.join(dir, `${c.i}.before`))?.toString('utf8') ?? '' : '';
+  const after = readMaybe(path.join(dir, `${c.i}.after`))?.toString('utf8') ?? '';
+  const abs = path.join(root, file);
+  const current = readMaybe(abs)?.toString('utf8');
+  const patch = structuredPatch(file, file, before, after, '', '', { context: 3 });
+  const hunk = patch.hunks[index];
+  if (!hunk || current == null) { result.failed.push(file); return result; }
+  const undone = applyPatch(current, reversePatch({ ...patch, hunks: [hunk] }));
+  if (undone === false) { result.conflicts.push(file); return result; }
+  fs.writeFileSync(abs, undone);
+  const left = applyPatch(after, reversePatch({ ...patch, hunks: [hunk] }));
+  fs.writeFileSync(path.join(dir, `${c.i}.after`), left === false ? undone : left);
+  if ((left === false ? undone : left) === before) { c.reverted = true; result.restored.push(file); }
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify(run, null, 2));
+  result.allReverted = run.changes.every((x) => x.reverted);
+  return result;
+}
+
 function apply(root, runId) {
   const run = load(root, runId);
   const dir = runDir(root, runId);
@@ -187,4 +212,4 @@ function shotPair(root, runId) {
   return before && after ? { before, after } : null;
 }
 
-module.exports = { shotPair, writeInto, save, diff, revert, apply, readMeta, setMeta, saveShot, saveShotBuffer, shots };
+module.exports = { shotPair, writeInto, save, diff, revert, revertHunk, apply, readMeta, setMeta, saveShot, saveShotBuffer, shots };

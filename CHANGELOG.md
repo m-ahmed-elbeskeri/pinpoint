@@ -4,6 +4,24 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+- **Review beside the chat.** The diff docks over the page area while the chat stays usable. Each change can be kept, reverted on its own, explained in a side chat or commented on; comments go to the agent as one message.
+- **Turn summary.** A request whose result is a scroll away shows what changed under it, with a jump to the result and to each file.
+- **Compare runs.** The timeline can compare a run with the one before it.
+
+### Changed
+
+- **Tools are tabs.** Terminal, Dev server, Network and Agent logs open as tabs beside your pages instead of a bottom drawer. Hover + to pick one; click + for a blank tab that offers them all.
+- Access levels are icons in the composer: eye for Plan only, pencil for Edit files, lightning for Full access.
+- Test conditions is a window you can drag around, open until you close it.
+- Modes are icons only, and the theme switch is a sun or moon.
+- The Running section is gone from the sidebar: working chats show in the list, side chats on their tabs and background runs by the composer.
+
+### Fixed
+
+- Tall items in the composer (long text, previews, annotations) could squeeze the chat; they are capped now, and the chat and composer keep a minimum size.
+
 ## [0.9.0] - 2026-10-30
 
 ### Added

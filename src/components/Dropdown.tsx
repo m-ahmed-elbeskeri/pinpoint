@@ -15,13 +15,14 @@ interface Props {
   onChange(value: string): void;
   icon?: ReactNode;
   title?: string;
+  tooltip?: string;
   display?: string;
   disabled?: boolean;
   align?: 'left' | 'right';
   className?: string;
 }
 
-export function Dropdown({ value, items, onChange, icon, title, display, disabled, align = 'left', className = '' }: Props) {
+export function Dropdown({ value, items, onChange, icon, title, tooltip, display, disabled, align = 'left', className = '' }: Props) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,7 +49,7 @@ export function Dropdown({ value, items, onChange, icon, title, display, disable
 
   return (
     <div className={`dd ${className}`} ref={ref} onKeyDown={onKey}>
-      <button type="button" className={`dd-btn ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} disabled={disabled} title={title}>
+      <button type="button" className={`dd-btn ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} disabled={disabled} title={tooltip ?? title}>
         {icon}
         <span className="dd-label">{display ?? current?.label ?? 'Select'}</span>
         <ChevronDown size={12} className="dd-chev" />

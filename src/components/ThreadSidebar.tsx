@@ -1,17 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, Keyboard, Palette, Check, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, Square, SquarePen, Trash2, X } from './icons';
+import { Archive, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, X } from './icons';
 import { Logo } from './Logo';
 import type { ChatMeta, OtherChat } from '../lib/types';
 
-export interface RunningTask {
-  id: string;
-  kind: 'chat' | 'bg' | 'dev' | 'term' | 'side';
-  label: string;
-  detail?: string;
-  status: 'running' | 'done' | 'failed';
-  onOpen?(): void;
-  onStop?(): void;
-}
 
 interface Props {
   mod: string;
@@ -22,7 +13,6 @@ interface Props {
   currentRunning: boolean;
   currentNeedsInput: boolean;
   others: OtherChat[];
-  tasks: RunningTask[];
   refreshKey: unknown;
   disabled: boolean;
   onOpen(id: string): void;
@@ -34,10 +24,9 @@ interface Props {
   onPalette(): void;
   onTheme(): void;
   onShortcuts(): void;
+  light: boolean;
   onHide(): void;
 }
-
-const KIND: Record<RunningTask['kind'], string> = { chat: 'chat', bg: 'background', dev: 'dev server', term: 'terminal', side: 'side chat' };
 
 const base = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p;
 
@@ -162,22 +151,6 @@ export function ThreadSidebar(p: Props) {
           <FolderOpen size={14} /><span>{p.projectDir ? base(p.projectDir) : 'Open a project'}</span>
         </button>
 
-        {p.tasks.length > 0 && (
-          <div className="thread-group tasks">
-            <div className="threads-label">Running</div>
-            {p.tasks.map((t) => (
-              <div key={t.id} className={`task ${t.status}`} onClick={t.onOpen} title={t.detail || t.label}>
-                <i className="thread-state">{t.status === 'running' ? <Loader2 size={12} className="spin" /> : t.status === 'done' ? <Check size={12} /> : <X size={12} />}</i>
-                <span className="thread-title">{t.label}</span>
-                <span className="task-kind">{t.detail || KIND[t.kind]}</span>
-                {t.onStop && (
-                  <button className="thread-x" onClick={(e) => { e.stopPropagation(); t.onStop!(); }} title="Stop"><Square size={10} weight="fill" /></button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
         {p.projectDir && list.length === 0 && (
           <div className="threads-empty">{query ? 'No chats match' : 'No chats yet'}</div>
         )}
@@ -260,7 +233,7 @@ export function ThreadSidebar(p: Props) {
 
       <div className="threads-foot">
         <button onClick={p.onPalette} title={`Commands (${p.mod}+K)`}><Command size={15} /><span>Commands</span></button>
-        <button onClick={p.onTheme} title="Switch light / dark"><Palette size={15} /><span>Theme</span></button>
+        <button onClick={p.onTheme} title={p.light ? 'Switch to dark' : 'Switch to light'}>{p.light ? <Moon size={15} /> : <Sun size={15} />}<span>Theme</span></button>
         <button onClick={p.onShortcuts} title="Keyboard shortcuts (?)"><Keyboard size={15} /><span>Shortcuts</span></button>
         <div className="spacer" />
         <button onClick={p.onSettings} title={`Settings (${p.mod}+,)`}><SettingsIcon size={15} /><span>Settings</span></button>

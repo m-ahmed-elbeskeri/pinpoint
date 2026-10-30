@@ -1,4 +1,4 @@
-import { ShieldCheck } from './icons';
+import { Eye, Pencil, ShieldCheck, Zap } from './icons';
 import { Dropdown, type DropdownItem } from './Dropdown';
 import { ModelPicker } from './ModelPicker';
 import type { HarnessInfo, ModelCatalog, Settings } from '../lib/types';
@@ -33,6 +33,19 @@ interface Props {
   harness?: HarnessInfo;
 }
 
+// Each access level has its own icon, so the composer needs no words for it.
+function accessIcon(label = '', size = 13) {
+  if (/plan/i.test(label)) return <Eye size={size} />;
+  if (/full/i.test(label)) return <Zap size={size} />;
+  if (/edit/i.test(label)) return <Pencil size={size} />;
+  return <ShieldCheck size={size} />;
+}
+const withIcons = (items: readonly { value: string; label: string; desc?: string }[]) => items.map((i) => ({ ...i, icon: accessIcon(i.label, 15) }));
+const accessProps = (items: readonly { value: string; label: string }[], value: string) => {
+  const label = items.find((i) => i.value === value)?.label || '';
+  return { icon: accessIcon(label), tooltip: `Access: ${label}`, className: `dd-access ${/full/i.test(label) ? 'access-full' : ''}` };
+};
+
 export function AgentControls({ settings, catalog, onChange, disabled, harness }: Props) {
   const agent = settings.agent;
   if (agent !== 'claude' && agent !== 'codex') {
@@ -43,11 +56,10 @@ export function AgentControls({ settings, catalog, onChange, disabled, harness }
         {model && <span className="harness-model" title="Model (change it in Settings)">{model}</span>}
         {access.length > 0 && (
           <Dropdown
-            className="dd-access"
-            icon={<ShieldCheck size={12} />}
+            {...accessProps(access, settings.agentAccess?.[agent] || harness?.defaultAccess || access[0].value)}
             title="Access"
             value={settings.agentAccess?.[agent] || harness?.defaultAccess || access[0].value}
-            items={access}
+            items={withIcons(access)}
             onChange={(v) => onChange({ agentAccess: { ...settings.agentAccess, [agent]: v } })}
             disabled={disabled}
             align="right"
@@ -100,11 +112,10 @@ export function AgentControls({ settings, catalog, onChange, disabled, harness }
         disabled={disabled}
       />
       <Dropdown
-        className="dd-access"
-        icon={<ShieldCheck size={12} />}
+        {...accessProps(ACCESS[agent as keyof typeof ACCESS], access)}
         title="Access"
         value={access}
-        items={[...ACCESS[agent as keyof typeof ACCESS]]}
+        items={withIcons(ACCESS[agent as keyof typeof ACCESS])}
         onChange={(v) => onChange({ [accessKey]: v } as Partial<Settings>)}
         disabled={disabled}
         align="right"

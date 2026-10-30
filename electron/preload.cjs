@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   openFile: (rel, line) => ipcRenderer.invoke('shell:openFile', { rel, line }),
   runDiff: (runId) => ipcRenderer.invoke('run:diff', runId),
   revertRun: (runId, paths, force) => ipcRenderer.invoke('run:revert', { runId, paths, force }),
+  revertHunk: (runId, path, index) => ipcRenderer.invoke('run:revertHunk', { runId, path, index }),
   applyRun: (runId) => ipcRenderer.invoke('run:apply', runId),
   forceState: (webContentsId, selector, classes) => ipcRenderer.invoke('page:force', { webContentsId, selector, classes }),
   emulate: (webContentsId, env) => ipcRenderer.invoke('page:emulate', { webContentsId, ...env }),

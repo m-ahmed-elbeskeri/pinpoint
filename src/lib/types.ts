@@ -355,6 +355,7 @@ export interface PinpointAPI {
   openFile(rel: string, line?: number): Promise<{ via: string }>;
   runDiff(runId: string): Promise<DiffFile[]>;
   revertRun(runId: string, paths?: string[] | null, force?: boolean): Promise<RevertResult>;
+  revertHunk(runId: string, path: string, index: number): Promise<RevertResult>;
   applyRun(runId: string): Promise<RevertResult>;
   forceState(webContentsId: number, selector: string, classes: string[]): Promise<number>;
   emulate(webContentsId: number, env: PageEnv & { focus: boolean; touch?: boolean }): Promise<boolean>;

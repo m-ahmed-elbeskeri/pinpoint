@@ -41,7 +41,7 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(300);
       const picked1 = await pick(guests()[0], '#h');
       await key('Escape');
-      await ui(`document.querySelector('.tab-new').click(); 0`);
+      await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 't', ctrlKey: true, bubbles: true })); 0`);
       await sleep(2500);
       log('new tab opens the same site', (await titles()).length === 2 && guests().length === 2, (await titles()).join(' | '));
       await ui(`(() => { const i = document.querySelector('.urlbar input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, ${JSON.stringify(base + '/about')}); i.dispatchEvent(new Event('input', { bubbles: true })); i.form.requestSubmit(); })()`);

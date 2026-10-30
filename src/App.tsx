@@ -15,7 +15,7 @@ import { DrawSurface } from './components/DrawSurface';
 import { DrawToolbar, TOOL_KEYS } from './components/DrawToolbar';
 import { ChatList, invalidateDiff, shortPath, type ChatActions } from './components/Chat';
 import { SettingsModal } from './components/SettingsModal';
-import { Drawer, type DrawerTab } from './components/Drawer';
+import { Drawer, TOOLS, type DrawerTab } from './components/Drawer';
 import { AgentControls } from './components/AgentControls';
 import { Welcome } from './components/Welcome';
 import { ContextSheet, type ContextTab } from './components/ContextSheet';
@@ -24,7 +24,7 @@ import { DiffViewer } from './components/DiffViewer';
 import { BranchCompare } from './components/BranchCompare';
 import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
-import { ThreadSidebar, type RunningTask } from './components/ThreadSidebar';
+import { ThreadSidebar } from './components/ThreadSidebar';
 import { SideChat } from './components/SideChat';
 import { ShortcutsSheet, StatusBar } from './components/StatusBar';
 import { ContextMeter, ReadingStrip } from './components/AgentStatus';
@@ -43,7 +43,7 @@ import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverl
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
 import { ANNOTATION_COLORS, composite, samplePoints, thumbnail, uid, unionBounds } from './lib/draw';
 import type {
-  OtherChat, ChatMeta, HarnessInfo, TermSession, ApprovalDecision,
+  OtherChat, ChatMeta, HarnessInfo, ApprovalDecision,
   A11yIssue, ApiHandler, Mock, NetRequest, NetworkFailure, AgentEvent, AgentId, Annotation, BgRun, ChatItem, Profile, UpdateState, ConsoleEntry, DesignDoc, DesignSystem, DevDetection, FlowResult, FlowStep, ForcedState, Handoff, MemoryItem, Mode, ModelCatalog,
   GitStatus, PageEnv, Rect, RevertResult, ReviewComment, RouteInfo, Settings, SourceInfo, SweepPage, Tool,
 } from './lib/types';
@@ -145,7 +145,10 @@ export default function App() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState<number | null>(null);
-  const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
+  // Terminal, dev server, network and logs open as tabs beside the page tabs.
+  const [toolTabs, setToolTabs] = useState<DrawerTab[]>([]);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const plusTimer = useRef(0);
   const [resizing, setResizing] = useState<'panel' | 'drawer' | 'device' | null>(null);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('term');
   const { devLog, agentLog, setDevLog, setAgentLog, addLog } = useLogs();
@@ -164,6 +167,8 @@ export default function App() {
   const [pastes, setPastes] = useState<{ id: string; text: string }[]>([]);
   const [pasteOpen, setPasteOpen] = useState<string | null>(null);
   const historyAt = useRef(-1);
+  useEffect(() => { if (drawerOpen) setToolTabs((l) => (l.includes(drawerTab) ? l : [...l, drawerTab])); }, [drawerOpen, drawerTab]);
+  const plusLeft = Math.max(8, (document.querySelector('.tab-new-wrap') as HTMLElement | null)?.offsetLeft ?? 8);
   const chatBox = useRef<HTMLDivElement>(null);
   const markBelow = () => {
     const c = chatBox.current;
@@ -183,7 +188,6 @@ export default function App() {
   const [sides, setSides] = useState<{ id: string; title: string; seed: string | null; running: boolean }[]>([]);
   const [activeSide, setActiveSide] = useState<string | null>(null);
   const [askAside, setAskAside] = useState<{ text: string; x: number; y: number } | null>(null);
-  const [terms, setTerms] = useState<TermSession[]>([]);
   const [paletteChats, setPaletteChats] = useState<ChatMeta[]>([]);
   const [paletteHits, setPaletteHits] = useState<{ id: string; title: string; snippet: string }[]>([]);
   const searchTimer = useRef(0);
@@ -1754,13 +1758,6 @@ export default function App() {
   useEffect(() => {
     if (paletteOpen && projectDir) api.listChats().then(setPaletteChats).catch(() => setPaletteChats([]));
   }, [paletteOpen, projectDir]);
-  useEffect(() => {
-    if (!projectDir) return;
-    const tick = () => api.termList().then(setTerms).catch(() => {});
-    tick();
-    const t = setInterval(tick, 4000);
-    return () => clearInterval(t);
-  }, [projectDir]);
   // What the side chat gets to know about the main conversation: the last few requests and replies.
   const sideContext = () => {
     const lines: string[] = [];
@@ -2072,7 +2069,7 @@ export default function App() {
     return true;
   };
 
-  const startResize = (which: 'panel' | 'drawer') => (e: React.PointerEvent) => {
+  const startResize = (which: 'panel') => (e: React.PointerEvent) => {
     e.preventDefault();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     setResizing(which);
@@ -2085,7 +2082,6 @@ export default function App() {
       frame = 0;
       if (!grid || !last) return;
       if (which === 'panel') grid.style.gridTemplateColumns = left ? `${tw}px ${last}px 1fr` : `${tw}px 1fr ${last}px`;
-      else grid.style.gridTemplateRows = `52px 1fr ${last}px${settingsRef.current?.statusBar === true ? ' 24px' : ''}`;
     };
     const move = (ev: PointerEvent) => {
       if (which === 'panel') {
@@ -2101,11 +2097,11 @@ export default function App() {
       window.removeEventListener('pointerup', up);
       if (frame) cancelAnimationFrame(frame);
       dragging.current = false;
-      if (last) { if (which === 'panel') setPanelWidth(last); else setDrawerHeight(last); }
+      if (last) setPanelWidth(last);
       const a = area.current;
       if (a) setAvail({ w: Math.floor(a.clientWidth), h: Math.floor(a.clientHeight) });
       setResizing(null);
-      if (last) saveSettings(which === 'panel' ? { panelWidth: last } : { drawerHeight: last });
+      if (last) saveSettings({ panelWidth: last });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -2115,6 +2111,7 @@ export default function App() {
     page.set([...page.shapes, { id: uid(), tool: 'pen', color, size, points }]);
     if (!page.shapes.length) flash(`Mark added. It goes with your next message (press D for arrows, boxes and text).`);
   };
+  const openTool = (t: DrawerTab) => { setPlusOpen(false); setDrawerTab(t); setDrawerOpen(true); };
   const togglePanel = () => saveSettings({ panelHidden: !settingsRef.current?.panelHidden });
   const toggleThreads = () => saveSettings({ threadsHidden: !settingsRef.current?.threadsHidden });
 
@@ -2234,20 +2231,6 @@ export default function App() {
 
   useEffect(() => { markBelow(); });
 
-  const tasks: RunningTask[] = [
-    ...(runId ? [{ id: `chat:${chatId}`, kind: 'chat' as const, label: chatTitle(chat) || 'This chat', status: 'running' as const, onStop: cancel }] : []),
-    ...others.filter((o) => o.running).map((o) => ({ id: `chat:${o.id}`, kind: 'chat' as const, label: o.title || 'Untitled', status: 'running' as const, onOpen: () => openChat(o.id), onStop: () => { const r = parked.current.get(o.id)?.runId; if (r) api.cancelAgent(r); } })),
-    ...bgRuns.map((r) => ({
-      id: `bg:${r.id}`, kind: 'bg' as const, label: r.title, status: r.status,
-      detail: r.status === 'running' ? r.step || 'background' : r.status === 'done' ? `${r.files?.length || 0} files · apply?` : 'failed',
-      onOpen: r.status === 'done' && r.files?.length ? () => api.bgDiff(r.id).then((text) => setPatchView({ title: r.title, text })) : undefined,
-      onStop: r.status === 'running' ? () => discardBg(r) : undefined,
-    })),
-    ...sides.filter((x) => x.running).map((x) => ({ id: x.id, kind: 'side' as const, label: x.title, status: 'running' as const, onOpen: () => setActiveSide(x.id), onStop: () => api.sideCancel(x.id) })),
-    ...(devRunning ? [{ id: 'dev', kind: 'dev' as const, label: devCommand || 'Dev server', status: 'running' as const, onOpen: () => { setDrawerOpen(true); setDrawerTab('dev'); }, onStop: () => api.stopDev() }] : []),
-    ...terms.filter((t) => !t.exited).map((t) => ({ id: `term:${t.id}`, kind: 'term' as const, label: t.name || t.shell, status: 'running' as const, onOpen: () => { setDrawerOpen(true); setDrawerTab('term'); } })),
-  ];
-
   const commands: Command[] = !settings ? [] : [
     { id: 'chat:timeline', group: 'Chat', label: 'Timeline of this chat', hint: 'the page after each run', icon: History, disabled: !chat.some((it) => it.kind === 'done' && it.shots), run: () => setTimelineOpen(true) },
     { id: 'chat:aside', group: 'Chat', label: 'New side chat', hint: 'ask without touching this chat', icon: MessageSquare, keys: combo('A', true), disabled: !projectDir, run: () => newSide() },
@@ -2291,14 +2274,12 @@ export default function App() {
   const threadsOn = !settings.threadsHidden;
   const tw = threadsOn ? THREADS_W : 0;
   const pw = settings.panelHidden ? 0 : panelWidth ?? settings.panelWidth ?? 400;
-  const dh = drawerHeight ?? settings.drawerHeight ?? 240;
   const row2 = left ? "'threads panel stage'" : "'threads stage panel'";
-  const row3 = left ? "'threads panel drawer'" : "'threads drawer panel'";
   const statusOn = settings.statusBar === true;
   const gridStyle: React.CSSProperties = {
     gridTemplateColumns: left ? `${tw}px ${pw}px 1fr` : `${tw}px 1fr ${pw}px`,
-    gridTemplateRows: `52px 1fr${drawerOpen ? ` ${dh}px` : ''}${statusOn ? ' 24px' : ''}`,
-    gridTemplateAreas: `'threads top top' ${row2}${drawerOpen ? ' ' + row3 : ''}${statusOn ? " 'threads status status'" : ''}`,
+    gridTemplateRows: `52px 1fr${statusOn ? ' 24px' : ''}`,
+    gridTemplateAreas: `'threads top top' ${row2}${statusOn ? " 'threads status status'" : ''}`,
   };
   const chatCost = chat.reduce((sum, it) => sum + (it.kind === 'done' && it.cost ? it.cost : 0), 0);
   const modelName = settings.agent === 'claude' ? settings.claudeModel : settings.agent === 'codex' ? settings.codexModel : settings.agentModels?.[settings.agent];
@@ -2309,11 +2290,11 @@ export default function App() {
         <ThreadSidebar
           mod={MOD} projectDir={projectDir} recentProjects={settings.recentProjects || []}
           chatId={chatId} currentTitle={chat.length ? chatTitle(chat) : ''} currentRunning={!!runId} currentNeedsInput={needsInput(chat)}
-          others={others} tasks={tasks} refreshKey={`${chatId}:${chat.length}:${others.map((o) => o.id + o.running).join()}`} disabled={!!job}
+          others={others} refreshKey={`${chatId}:${chat.length}:${others.map((o) => o.id + o.running).join()}`} disabled={!!job}
           onOpen={openChat} onDelete={deleteChat} onNew={newChat} onPickProject={pickProject}
           onOpenIn={(dir, id) => { wantChat.current = id; pickProject(dir); }}
           onSettings={() => setSettingsOpen(true)} onPalette={() => setPaletteOpen(true)} onHide={toggleThreads}
-          onTheme={() => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' })} onShortcuts={() => setShortcutsOpen(true)}
+          onTheme={() => saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' })} onShortcuts={() => setShortcutsOpen(true)} light={theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)}
         />
       )}
       <TopBar
@@ -2341,8 +2322,8 @@ export default function App() {
           <div className="tabstrip">
             {tabs.map((t) => (
               <div
-                key={t.id} className={`tab ${t.id === activeTab ? 'on' : ''}`} title={t.url || 'New tab'}
-                onClick={() => switchTab(t.id)}
+                key={t.id} className={`tab ${t.id === activeTab && !drawerOpen ? 'on' : ''}`} title={t.url || 'New tab'}
+                onClick={() => { setDrawerOpen(false); switchTab(t.id); }}
                 onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.id); } }}
               >
                 {t.loading ? <Loader2 size={11} className="spin" /> : <Globe size={11} />}
@@ -2351,9 +2332,33 @@ export default function App() {
                 <button className="tab-x" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} title="Close tab"><X size={11} /></button>
               </div>
             ))}
-            <button className="tab-new" onClick={() => newTab()} title={`New tab (${MOD}+T)`}><Plus size={13} /></button>
+            {toolTabs.map((t) => {
+              const tool = TOOLS.find((x) => x.id === t)!;
+              return (
+                <div key={t} className={`tab tool-tab ${drawerOpen && drawerTab === t ? 'on' : ''}`} title={tool.label} onClick={() => { setDrawerTab(t); setDrawerOpen(true); }}>
+                  <tool.icon size={11} />
+                  <span>{tool.label}</span>
+                  {t === 'dev' && devRunning && <i className="live-dot" />}
+                  {t === 'net' && requests.filter(requestFailed).length > 0 && <i className="tool-count">{requests.filter(requestFailed).length}</i>}
+                  <button className="tab-x" onClick={(e) => { e.stopPropagation(); setToolTabs((l) => l.filter((x) => x !== t)); if (drawerTab === t) setDrawerOpen(false); }} title="Close tab"><X size={11} /></button>
+                </div>
+              );
+            })}
+            <div
+              className="tab-new-wrap"
+              onMouseEnter={() => { clearTimeout(plusTimer.current); setPlusOpen(true); }}
+              onMouseLeave={() => { plusTimer.current = window.setTimeout(() => setPlusOpen(false), 200); }}
+            >
+              <button className="tab-new" onClick={() => { setPlusOpen(false); setDrawerOpen(false); newTab('about:blank'); }} title="New tab: choose what to open"><Plus size={13} /></button>
+            </div>
           </div>
         </div>
+        {plusOpen && (
+          <div className="plus-menu" onMouseEnter={() => { clearTimeout(plusTimer.current); setPlusOpen(true); }} onMouseLeave={() => { plusTimer.current = window.setTimeout(() => setPlusOpen(false), 200); }} style={{ left: plusLeft }}>
+            <button onClick={() => { setPlusOpen(false); setDrawerOpen(false); newTab(); }}><Globe size={14} /><span>New page</span><kbd>{combo('T')}</kbd></button>
+            {TOOLS.map((t) => <button key={t.id} onClick={() => openTool(t.id)}><t.icon size={14} /><span>{t.label}</span></button>)}
+          </div>
+        )}
         <div className="navbar">
           <div className="nav-btns">
             <button className="icon-btn" disabled={!nav.canBack} onClick={() => browser.current?.back()} title="Back"><ArrowLeft size={16} /></button>
@@ -2388,7 +2393,7 @@ export default function App() {
           )}
           <ProfileMenu profiles={profiles} current={tab?.profile || ''} onPick={(p) => tab && setTabProfile(tab.id, p)} onSave={saveProfiles} />
           {/* Page tools: one button that shows what's on, and opens a labelled menu on hover (click pins it). */}
-          <div className={`vp-tools ${pageToolsOpen ? 'pinned' : ''}`} onMouseEnter={() => { clearTimeout(toolsTimer.current); setToolsHover(true); }} onMouseLeave={() => { toolsTimer.current = window.setTimeout(() => setToolsHover(false), 220); }}>
+          <div className={`vp-tools ${pageToolsOpen ? 'pinned' : ''}`} onMouseEnter={(e) => { if ((e.target as HTMLElement).closest?.('.cond-pop')) return; clearTimeout(toolsTimer.current); setToolsHover(true); }} onMouseLeave={() => { toolsTimer.current = window.setTimeout(() => setToolsHover(false), 220); }}>
             <button type="button" className={`vp-more ${pageToolsOpen || toolsHover ? 'on' : ''}`} onClick={() => setPageToolsOpen(!pageToolsOpen)} title="Page tools: sizes, side by side, components, other browsers, page check, freeze, conditions">
               {device.on && !multi && (() => { const I = device.w < 600 ? Smartphone : device.w < 1000 ? Tablet : Monitor; return <I size={14} className="vp-state" />; })()}
               {multi && <Columns3 size={14} className="vp-state" />}
@@ -2533,6 +2538,7 @@ export default function App() {
                 onOpenUrl={go}
                 onStartDev={quickStartDev}
                 onSketch={() => setMode('sketch')}
+                onTool={openTool}
               />
             )}
             {loadError && nav.url !== 'about:blank' && (
@@ -2565,6 +2571,34 @@ export default function App() {
           )}
           {multi && <MultiView url={nav.url} onNavigate={go} onPick={(w, h) => { setMulti(false); setDevice({ on: true, w, h, zoom: 'fit', touch: device.touch }); }} onClose={() => setMulti(false)} />}
         </div>
+      {drawerOpen && (
+        <div className="tool-view">
+        <Drawer
+          tab={drawerTab} setTab={setDrawerTab} devLog={devLog} agentLog={agentLog}
+          netFailed={requests.filter(requestFailed).length}
+          network={
+            <NetworkPanel
+              requests={requests} mocks={mocks} setMocks={setMocks}
+              findHandler={(url, method) => api.findHandler(url, method)}
+              onAdd={addRequest} onReplay={replayRequest} onOpenFile={openFile} onBuild={buildMock} onClear={clearRequests}
+            />
+          }
+          cwd={projectDir} shell={settings.terminalShell} onShell={(terminalShell) => { if (terminalShell !== settingsRef.current?.terminalShell) saveSettings({ terminalShell }); }}
+          devRunning={devRunning} devCommand={devCommand} devCandidates={devInfo?.candidates}
+          onStartDev={startDev} onStopDev={() => api.stopDev()} onClose={() => setDrawerOpen(false)}
+        />
+        </div>
+      )}
+      {diffView && (
+        <DiffViewer
+          runId={diffView.runId} initialPath={diffView.path}
+          onClose={() => setDiffView(null)}
+          onReverted={(r) => applyRevert(diffView.runId, r)}
+          onOpen={openFile}
+          onExplain={(text) => newSide(text)}
+          onSendComments={(text) => sendText(text)}
+        />
+      )}
       </main>
       {askAside && (
         <div className="ask-aside" style={{ left: askAside.x, top: askAside.y }} onMouseDown={(e) => e.preventDefault()}>
@@ -2787,25 +2821,6 @@ export default function App() {
         </div>
       </aside>
 
-      {drawerOpen && (
-        <div className="drawer-wrap">
-        <div className={`resizer row ${resizing === 'drawer' ? 'on' : ''}`} onPointerDown={startResize('drawer')} />
-        <Drawer
-          tab={drawerTab} setTab={setDrawerTab} devLog={devLog} agentLog={agentLog}
-          netFailed={requests.filter(requestFailed).length}
-          network={
-            <NetworkPanel
-              requests={requests} mocks={mocks} setMocks={setMocks}
-              findHandler={(url, method) => api.findHandler(url, method)}
-              onAdd={addRequest} onReplay={replayRequest} onOpenFile={openFile} onBuild={buildMock} onClear={clearRequests}
-            />
-          }
-          cwd={projectDir} shell={settings.terminalShell} onShell={(terminalShell) => { if (terminalShell !== settingsRef.current?.terminalShell) saveSettings({ terminalShell }); }}
-          devRunning={devRunning} devCommand={devCommand} devCandidates={devInfo?.candidates}
-          onStartDev={startDev} onStopDev={() => api.stopDev()} onClose={() => setDrawerOpen(false)}
-        />
-        </div>
-      )}
       {resizing && <div className={`drag-shield ${resizing}`} />}
 
       {sheet && (
@@ -2863,14 +2878,6 @@ export default function App() {
         </div>
       )}
       {compare && <CompareView {...compare} onClose={() => setCompare(null)} captureSizes={captureSizes} />}
-      {diffView && (
-        <DiffViewer
-          runId={diffView.runId} initialPath={diffView.path}
-          onClose={() => setDiffView(null)}
-          onReverted={(r) => applyRevert(diffView.runId, r)}
-          onOpen={openFile}
-        />
-      )}
       {branchCompare && gitStatus?.repo && (
         <BranchCompare status={gitStatus} initialBase={branchCompare.base} initialRemote={branchCompare.remote} prDefaults={prDefaults} flash={flash} onOpen={openFile} onClose={() => { setBranchCompare(null); refreshGit(); }} />
       )}
@@ -2894,7 +2901,7 @@ export default function App() {
           onClose={() => setHistoryOpen(false)}
         />
       )}
-      {timelineOpen && <Timeline items={chat} onClose={() => setTimelineOpen(false)} />}
+      {timelineOpen && <Timeline items={chat} onClose={() => setTimelineOpen(false)} onCompare={(images, labels, title) => { setTimelineOpen(false); setCompare({ images, labels, title }); }} />}
       {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
       {paletteOpen && <CommandPalette commands={commands} onQuery={searchChats} onClose={() => { setPaletteOpen(false); setPaletteHits([]); }} />}
       {toast && <div className="toast">{toast}</div>}

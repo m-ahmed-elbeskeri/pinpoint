@@ -5,7 +5,7 @@ import type { ChatItem } from '../lib/types';
 interface Frame { key: string; label: string; image: string }
 
 // The page across a chat: the "before" of its first run, then the "after" of every run, on a scrubber.
-export function Timeline({ items, onClose }: { items: ChatItem[]; onClose(): void }) {
+export function Timeline({ items, onClose, onCompare }: { items: ChatItem[]; onClose(): void; onCompare(images: { before: string; after: string }, labels: [string, string], title: string): void }) {
   const [frames, setFrames] = useState<Frame[] | null>(null);
   const [at, setAt] = useState(0);
 
@@ -49,7 +49,7 @@ export function Timeline({ items, onClose }: { items: ChatItem[]; onClose(): voi
         {frame && (
           <>
             <div className="timeline-stage"><img src={frame.image} alt={frame.label} /></div>
-            <div className="timeline-caption"><b>{at === 0 && frame.label === 'Before' ? 'Before any change' : `After: ${frame.label}`}</b><span>{at + 1} of {frames!.length}</span></div>
+            <div className="timeline-caption"><b>{at === 0 && frame.label === 'Before' ? 'Before any change' : `After: ${frame.label}`}</b><span>{at > 0 && <button className="link-btn" onClick={() => onCompare({ before: frames![at - 1].image, after: frame.image }, ['Previous', 'This one'], frame.label)}>Compare with previous</button>} {at + 1} of {frames!.length}</span></div>
             <input className="timeline-scrub" type="range" min={0} max={frames!.length - 1} value={at} onChange={(e) => setAt(Number(e.target.value))} />
             <div className="timeline-strip">
               {frames!.map((f, i) => (

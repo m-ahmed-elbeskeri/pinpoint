@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Download, FlaskConical, Layers, Loader2, MessageSquare, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from './icons';
 import type { NetworkMode, PageEnv, Pin } from '../lib/types';
 
@@ -73,22 +74,42 @@ function CondSeg<T>({ options, value, set }: { options: { id: T; label: React.Re
 
 export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLayout }: ConditionsProps) {
   const [open, setOpen] = useState(false);
-  const ref = useClickAway(open, () => setOpen(false));
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [open]);
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const box = e.currentTarget.parentElement!.getBoundingClientRect();
+    const dx = e.clientX - box.left, dy = e.clientY - box.top;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => setPos({
+      x: Math.max(0, Math.min(window.innerWidth - box.width, ev.clientX - dx)),
+      y: Math.max(0, Math.min(window.innerHeight - 60, ev.clientY - dy)),
+    });
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   const count = describeConditions(value).length + (env.colorScheme ? 1 : 0) + (env.reducedMotion ? 1 : 0);
   const toggle = (id: string) => set({ ...value, stress: value.stress.includes(id) ? value.stress.filter((s) => s !== id) : [...value.stress, id] });
   const reset = () => { set(NO_CONDITIONS); setEnv({ colorScheme: null, reducedMotion: false }); };
   const net = NETWORK.find((n) => n.id === value.network)!;
 
   return (
-    <div className="cond-wrap" ref={ref}>
+    <div className="cond-wrap">
       <button type="button" className={count ? 'on' : ''} onClick={() => setOpen(!open)} title="Test conditions: theme, motion, awkward content, slow or failing data, animation speed">
         <FlaskConical size={14} />{count > 0 && <i className="cond-count">{count}</i>}
       </button>
-      {open && (
-        <div className="cond-pop">
-          <div className="cond-head">
+      {open && createPortal(
+        <div className="cond-pop" style={pos ? { left: pos.x, top: pos.y, right: 'auto' } : undefined}>
+          <div className="cond-head" onPointerDown={startDrag} title="Drag to move">
             <div><b>Test conditions</b><small>{count ? `${count} changed from normal` : 'The page as it normally is'}</small></div>
             <button type="button" className="cond-reset" disabled={!count} onClick={reset}>Reset</button>
+            <button type="button" className="cond-close" onClick={() => setOpen(false)} title="Close (Esc)"><X size={14} /></button>
           </div>
 
           <section>
@@ -123,7 +144,8 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
               </button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

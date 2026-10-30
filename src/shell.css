@@ -835,3 +835,74 @@ button:focus:not(:focus-visible) { outline: none; }
 .msg.agent { color: color-mix(in srgb, var(--text) 90%, transparent); }
 .msg.agent strong, .msg.agent b { color: var(--text); }
 @media (prefers-reduced-motion: reduce) { .dd-menu, .thread-menu, .git-pop, .assist, .composer-tray { animation: none !important; } }
+
+/* ---- review docked beside the chat: per-hunk actions, comments, turn summary ---- */
+.diff-dock { position: absolute; inset: 0; z-index: 45; display: flex; background: var(--bg-2); animation: enter .14s ease-out; }
+.diff-dock-inner { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.diff-dock .diff-body { flex: 1; min-height: 0; grid-template-columns: 220px minmax(0, 1fr); }
+.hunk-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hunk-actions { display: flex; gap: 1px; opacity: .55; transition: opacity .12s; }
+.hunk:hover .hunk-actions { opacity: 1; }
+.hunk-actions button { display: grid; place-items: center; width: 24px; height: 22px; border-radius: 6px; color: var(--text-2); }
+.hunk-actions button:hover:not(:disabled), .hunk-actions button.on { color: var(--text); background: var(--bg-4); }
+.hunk.kept .dl { opacity: .45; }
+.hunk-comment { display: flex; align-items: flex-start; gap: 8px; margin: 6px 10px; padding: 6px 8px 6px 10px; border-left: 2px solid var(--text-2); border-radius: 0 6px 6px 0; background: var(--bg-3); font-size: 12.5px; color: var(--text); }
+.hunk-comment span { flex: 1; min-width: 0; white-space: pre-wrap; }
+.hunk-comment button { color: var(--muted); }
+.hunk-input { display: block; width: calc(100% - 20px); margin: 6px 10px; padding: 7px 9px; resize: vertical; border-radius: 8px; border: 1px solid var(--ring); background: var(--bg); outline: 0; font-size: 12.5px; }
+.turn-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-top: -4px; font-size: 11.5px; color: var(--muted); }
+.turn-summary button { height: 20px; padding: 0 6px; border-radius: 5px; color: var(--muted); font-size: 11px; }
+.turn-summary button:hover { color: var(--text); background: var(--bg-3); }
+.turn-summary i { font-style: normal; }
+.turn-summary .add { color: var(--add-fg, #9ff0d6); }
+.turn-summary .del { color: var(--del-fg, #ffb3c1); }
+
+/* ---- modes are icons only; the name and key are in the tooltip ---- */
+.mode-seg button:not(.rec-btn) span { display: none; }
+.mode-seg button { padding: 0 8px; }
+
+/* ---- test conditions: a floating window, dragged by its header ---- */
+.cond-pop { position: fixed; top: 112px; right: 24px; left: auto; bottom: auto; z-index: 150; width: 340px; max-height: calc(100vh - 140px); overflow-y: auto; animation: menu-in .14s ease-out; }
+.cond-head { display: flex; align-items: center; gap: 8px; cursor: grab; user-select: none; position: sticky; top: 0; z-index: 1; background: var(--bg-2); }
+.cond-head:active { cursor: grabbing; }
+.cond-head > div:first-child { flex: 1; min-width: 0; }
+.cond-close { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--muted); }
+.cond-close:hover { color: var(--text); background: var(--bg-4); }
+
+/* ---- the chat and the composer always keep room ---- */
+.panel > .composer, .composer-box, .composer-foot, .panel-head { flex-shrink: 0; }
+.composer-box textarea { max-height: min(220px, 28vh); }
+.chat-wrap { min-height: 140px; }
+.ann-list { max-height: 26vh; }
+.paste-preview { max-height: min(160px, 18vh); }
+.img-chip-full { max-height: min(220px, 22vh); }
+.queue-tray { max-height: 18vh; overflow-y: auto; }
+.cond-head { background: var(--bg-3); }
+/* Test conditions in the neutral palette. */
+.cond-toggle.on .cond-knob { background: var(--text); }
+.cond-toggle.on .cond-knob::after { background: var(--bg-2); }
+.cond-toggle.on .cond-label b { color: var(--text); }
+.cond-pop .cond-seg button.on { color: var(--text); background: var(--bg-4); box-shadow: 0 0 0 1px var(--line-2) inset; }
+.cond-count { background: var(--text-2); color: var(--bg); }
+
+/* Access: an icon per level, no words; Full access stands out. */
+.composer-foot .dd-access .dd-label { display: none; }
+.composer-foot .dd-access .dd-btn svg:first-child { color: var(--text-2); }
+.composer-foot .access-full .dd-btn svg:first-child { color: var(--warn); }
+.dd-access .dd-item-icon { display: grid; place-items: center; width: 18px; color: var(--text-2); }
+
+
+/* ---- tools open as tabs; + chooses what to open ---- */
+.tool-view { position: absolute; top: 34px; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; background: var(--bg-2); }
+.tool-view .drawer { border-top: 0; }
+.tool-view .drawer .tabs { display: none; }
+.tool-view .drawer-head { justify-content: flex-end; }
+.tab-new-wrap { position: relative; flex-shrink: 0; align-self: flex-end; }
+.plus-menu { position: absolute; top: 32px; z-index: 60; min-width: 190px; padding: 4px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line-2); box-shadow: 0 14px 36px rgba(0, 0, 0, .42); animation: menu-in .14s ease-out; }
+.plus-menu button { display: flex; align-items: center; gap: 9px; width: 100%; height: 30px; padding: 0 9px; border-radius: 6px; font-size: 12.5px; color: var(--text-2); text-align: left; }
+.plus-menu button:hover { background: var(--bg-4); color: var(--text); }
+.plus-menu span { flex: 1; }
+.tool-count { min-width: 14px; padding: 0 3px; border-radius: 7px; background: var(--bad); color: #fff; font: 700 9.5px/14px var(--mono); text-align: center; }
+.tool-tab .live-dot { margin-left: 2px; flex-shrink: 0; }
+.start-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 150px)); justify-content: center; gap: 8px; max-width: 640px; }
+.start-btn { flex-direction: column; justify-content: center; gap: 8px; height: 84px; padding: 8px 10px; border-radius: 12px; white-space: normal; text-align: center; }

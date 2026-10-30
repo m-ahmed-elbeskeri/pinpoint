@@ -1,10 +1,16 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Play, Square, X } from './icons';
+import { FileText, Globe, Play, Square, TerminalSquare, X } from './icons';
 import type { DevCandidate } from '../lib/types';
 
 const TerminalPane = lazy(() => import('./Terminal').then((m) => ({ default: m.TerminalPane })));
 
 export type DrawerTab = 'term' | 'dev' | 'agent' | 'net';
+export const TOOLS: { id: DrawerTab; label: string; icon: typeof Globe }[] = [
+  { id: 'term', label: 'Terminal', icon: TerminalSquare },
+  { id: 'dev', label: 'Dev server', icon: Play },
+  { id: 'net', label: 'Network', icon: Globe },
+  { id: 'agent', label: 'Agent logs', icon: FileText },
+];
 interface Props {
   tab: DrawerTab;
   setTab(t: DrawerTab): void;
