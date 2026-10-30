@@ -160,6 +160,19 @@ ipcMain.handle('agents:detect', () => detectAgents(loadSettings()));
 ipcMain.handle('agents:models', () => modelCatalog());
 ipcMain.handle('agents:list', () => harnessList(loadSettings()));
 // Desktop notifications carry Pinpoint's own icon (a page-side Notification would show a generic one), and a click brings the window back.
+ipcMain.handle('app:badge', (_e, count) => {
+  const n = Math.max(0, count | 0);
+  try { app.setBadgeCount(n); } catch { /* not supported here */ }
+  if (process.platform === 'win32' && win && !win.isDestroyed()) {
+    // Windows has no number badge; a small dot over the taskbar icon says "look".
+    if (!n) win.setOverlayIcon(null, '');
+    else {
+      const dot = nativeImage.createFromDataURL('data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="#ff4f3a"/></svg>').toString('base64'));
+      win.setOverlayIcon(dot.isEmpty() ? null : dot, `${n} chat${n > 1 ? 's' : ''} need you`);
+    }
+  }
+  return true;
+});
 ipcMain.handle('app:notify', (_e, { title, body }) => {
   const { Notification } = require('electron');
   if (!Notification.isSupported()) return false;

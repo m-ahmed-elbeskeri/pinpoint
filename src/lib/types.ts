@@ -226,7 +226,7 @@ export interface DiffFile {
 }
 export interface RevertResult { restored: string[]; conflicts: string[]; failed: string[]; allReverted: boolean }
 
-export interface ChatMeta { id: string; title: string; createdAt: number; updatedAt: number; count: number; agent?: AgentId; renamed?: boolean; pinned?: boolean; archived?: boolean }
+export interface ChatMeta { id: string; title: string; createdAt: number; updatedAt: number; count: number; agent?: AgentId; renamed?: boolean; pinned?: boolean; archived?: boolean; failed?: boolean }
 export interface Chat {
   id: string; title: string; createdAt: number; updatedAt: number; agent: AgentId;
   session: { id: string; agent: AgentId } | null;
@@ -278,6 +278,9 @@ export interface Settings {
   theme?: 'system' | 'dark' | 'light';
   statusBar?: boolean;
   snippets?: { name: string; text: string }[];
+  sounds?: boolean;
+  textSize?: 'small' | 'normal' | 'large';
+  density?: 'compact' | 'comfortable';
   drawerHeight: number;
   useDesign: boolean;
   useMemory: boolean;
@@ -339,6 +342,7 @@ export interface PinpointAPI {
   listAgents(): Promise<HarnessInfo[]>;
   pathForFile(file: File): string;
   notify(title: string, body: string): Promise<boolean>;
+  badge(count: number): Promise<boolean>;
   projectFiles(): Promise<string[]>;
   setWindowTheme(light: boolean): Promise<boolean>;
   pickFolder(known?: string): Promise<string | null>;

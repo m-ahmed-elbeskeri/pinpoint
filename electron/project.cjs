@@ -18,7 +18,8 @@ function listChats(root) {
   for (const f of files) {
     try {
       const c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-      out.push({ id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent });
+      const last = [...(c.items || [])].reverse().find((it) => it.kind === 'done' || it.kind === 'user');
+      out.push({ id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent, failed: last?.kind === 'done' && !last.ok && !last.undone });
     } catch {  }
   }
   return out.sort((a, b) => b.updatedAt - a.updatedAt);

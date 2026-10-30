@@ -25,13 +25,13 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 ## Chat and transcript
 
 - [x] "Thought for 12s" and per-step timers
-- [ ] Context / token meter by the composer; cost per message, per thread, daily total
+- [x] Context meter by the composer; cost per run, per chat and per day
 - [x] Message hover actions: copy, edit and resend, retry (fork from here still open)
-- [ ] Rewind to any message (restore files to that point)
-- [ ] Subagent / parallel-task lanes
-- [ ] Live strip of files the agent is reading
-- [ ] Rate-limit and quota warnings before the limit
-- [ ] MCP / hooks status per server
+- [x] Rewind to any message (undo the runs after it)
+- [x] Subagent lanes (steps nested under the Task that started them)
+- [x] Live strip of files the agent is reading
+- [x] Rate-limit and quota warnings before the limit
+- [x] MCP server status (in the agent menu)
 - [x] Quick-reply chips after a result
 
 ## Composer
@@ -45,16 +45,16 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 ## Threads and workspace
 
 - [ ] Branch / worktree per thread, shown on the thread
-- [x] Thread states: needs approval; pin, rename, archive (error / unread still open)
+- [x] Thread states: needs you, failed, done-while-away; pin, rename, archive
 - [ ] Diff side panel next to the chat (not only a modal)
 - [ ] Accept or reject per hunk; "Explain this change"; inline review comments that feed the next message
 - [ ] Change summary at the top of a turn with jump links
 - [ ] Compare two runs or branches side by side
 - [ ] File tree with recently-changed badges; quick code viewer
 - [ ] Split panes, saved layouts, zen mode; one window per project; tray status
-- [ ] Terminal tabs with a running indicator
-- [ ] Timeline scrubber of page screenshots across a thread's runs
-- [ ] Annotation pins kept on the page across reloads, per thread
+- [x] Terminal tabs in the drawer header; open terminals listed under Running
+- [x] Timeline scrubber of page screenshots across a thread's runs
+- [x] Annotation pins kept on the page across reloads, per thread
 
 ## Sharing
 
@@ -65,11 +65,11 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 
 ## Feel
 
-- [ ] Dock badge on done / needs input; optional sounds
-- [x] Shortcuts sheet (`?`) (density, font size and accent still open)
-- [x] Shimmer on "Thinking…" and "Working" (enter animations still open)
+- [x] Taskbar / dock badge on done or needs input; optional sounds
+- [x] Shortcuts sheet (`?`); text size and density settings (accent colour dropped: the palette stays neutral)
+- [x] Shimmer on "Thinking…" and "Working"; gentle enter and menu animations
 - [x] ~~Empty states that rotate tips~~ dropped: empty states stay clean
 - [x] Palette: recent section, search inside chat contents
-- [ ] Resume card for interrupted runs
+- [x] Resume on interrupted runs
 - [x] Status bar: branch, dev server, errors, agent, model, cost (off by default)
 - [ ] Onboarding that detects installed CLIs and helps sign in

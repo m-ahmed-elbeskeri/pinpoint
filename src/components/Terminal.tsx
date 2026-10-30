@@ -28,7 +28,7 @@ function Screen({ id, active }: { id: string; active: boolean }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const t = new Xterm({ fontFamily: 'ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace', fontSize: 12.5, lineHeight: 1.25, cursorBlink: true, scrollback: 5000, theme: themeNow(), allowProposedApi: true });
+    const t = new Xterm({ fontFamily: 'ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace', fontSize: 12.5, lineHeight: 1.25, cursorBlink: true, cursorInactiveStyle: 'block', scrollback: 5000, theme: themeNow(), allowProposedApi: true });
     const f = new FitAddon();
     t.loadAddon(f);
     t.open(box.current!);

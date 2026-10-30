@@ -102,7 +102,7 @@ export function ModelPicker({ model, models, modelLabel, onModel, level, levels,
               >
                 <div className="mp-fill" style={{ width: current ? `${(index / last) * 100}%` : 0 }} />
                 {levels.map((l, i) => <span key={l.value} className={`mp-stop ${current && i <= index ? 'on' : ''}`} style={{ left: `${(i / last) * 100}%` }} />)}
-                {(level || current) && <div className={`mp-thumb ${level ? '' : 'auto'}`} style={{ left: `${(index / last) * 100}%` }} />}
+                <div className={`mp-thumb ${level ? '' : 'auto'}`} style={{ left: `${((current ? index : Math.round(last / 2)) / last) * 100}%` }} />
               </div>
               <div className="mp-ends"><span>{levels[0].label}</span><span>{levels[levels.length - 1].label}</span></div>
               <div className="mp-current">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Globe, Loader2, Monitor,
   Plus, RotateCw, Smartphone, Square, Tablet,
-  Bug, Brain, AlertTriangle, Search, Keyboard, DotsThree, Pencil, Pin, FileText, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
+  Bug, Brain, AlertTriangle, History, Search, Keyboard, DotsThree, Pencil, Pin, FileText, FolderOpen, MousePointer2, MousePointerClick, Palette, PanelLeft, PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare, MessageSquare,
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
   AppWindow, Boxes, GitCompareArrows, CircleDot, Columns3, ShieldCheck, Snowflake, SquareStack,
 } from './components/icons';
@@ -28,6 +28,7 @@ import { ThreadSidebar, type RunningTask } from './components/ThreadSidebar';
 import { SideChat } from './components/SideChat';
 import { ShortcutsSheet, StatusBar } from './components/StatusBar';
 import { ContextMeter, ReadingStrip } from './components/AgentStatus';
+import { Timeline } from './components/Timeline';
 import { useComposerAssist, type SlashCommand } from './components/ComposerAssist';
 import { AgentPicker } from './components/AgentPicker';
 import { CommandPalette, type Command } from './components/CommandPalette';
@@ -153,6 +154,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   // Rarely used controls stay folded behind a ⋯ until asked for.
   const [pageToolsOpen, setPageToolsOpen] = useState(false);
   const [composerMore, setComposerMore] = useState(false);
@@ -162,6 +164,11 @@ export default function App() {
   const [pastes, setPastes] = useState<{ id: string; text: string }[]>([]);
   const [pasteOpen, setPasteOpen] = useState<string | null>(null);
   const historyAt = useRef(-1);
+  const chatBox = useRef<HTMLDivElement>(null);
+  const markBelow = () => {
+    const c = chatBox.current;
+    if (c) c.parentElement?.classList.toggle('more-below', c.scrollHeight - c.scrollTop - c.clientHeight > 6);
+  };
   useEffect(() => {
     if (!composerMore) return;
     const away = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('.composer-tray-wrap')) setComposerMore(false); };
@@ -302,6 +309,10 @@ export default function App() {
   const projectDir = settings?.projectDir || '';
   const theme = settings?.theme || 'dark';
   useEffect(() => {
+    document.documentElement.dataset.textSize = settings?.textSize || 'normal';
+    document.documentElement.dataset.density = settings?.density || 'comfortable';
+  }, [settings?.textSize, settings?.density]);
+  useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
     const apply = () => {
       const light = theme === 'light' || (theme === 'system' && mq.matches);
@@ -348,7 +359,23 @@ export default function App() {
 
   const parked = useRef(new Map<string, ParkedChat>());
   // A desktop notification, only when the window isn't the one you're looking at.
+  // A short, quiet tone for "done" and "needs you", if switched on in Settings.
+  const chime = (kind: 'done' | 'ask') => {
+    if (!settingsRef.current?.sounds) return;
+    try {
+      const ctx = new AudioContext();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = kind === 'ask' ? 660 : 520;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+      o.connect(g).connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.36);
+      o.onended = () => ctx.close();
+    } catch { /* audio unavailable */ }
+  };
   const notify = (body: string) => {
+    chime(/needs your OK|Waiting for your OK/.test(body) ? 'ask' : 'done');
     if (document.hasFocus()) return;
     api.notify('Pinpoint', body).catch(() => {});
   };
@@ -364,6 +391,8 @@ export default function App() {
     id: p.id, title: chatTitle(p.items), createdAt: p.createdAt, updatedAt: Date.now(), agent: p.agent, session: p.session, designAtStart: p.designAtStart, items: p.items,
   }).catch(() => {});
 
+  // Unsent annotations belong to the chat they were made in: put aside on switching away, back on return.
+  const annByChat = useRef(new Map<string, Annotation[]>());
   const leaveChat = () => {
     if (job || variantJob.current) { flash('Variants are being made in this chat. Wait for them before switching.'); return false; }
     if (queuedRef.current.length) { flash('A message is waiting to be sent in this chat. Switch once it has gone out.'); return false; }
@@ -378,11 +407,21 @@ export default function App() {
     setRunId(null);
     runRef.current = null;
     verifyPending.current = null;
+    const key = chatId || 'new';
+    if (annRef.current.length) annByChat.current.set(key, annRef.current); else annByChat.current.delete(key);
+    setAnnotations([]);
+    setPopover(null);
     return true;
+  };
+  const restoreAnnotations = (id: string | null) => {
+    const back = annByChat.current.get(id || 'new') || [];
+    annByChat.current.delete(id || 'new');
+    setAnnotations(back);
   };
   const showChatReset = () => setUsage(null);
   const showChat = (c: { id: string; createdAt: number; items: ChatItem[]; session: ParkedChat['session']; designAtStart?: string | null }, running: string | null) => {
     showChatReset();
+    restoreAnnotations(c.id);
     setChatId(c.id); setChatCreated(c.createdAt); setChat(c.items); setSession(c.session); setDesignAtStart(c.designAtStart ?? null);
     setRunId(running);
     runRef.current = running;
@@ -1706,6 +1745,7 @@ export default function App() {
     if (job || !chatRef.current.length) return;
     if (!leaveChat()) return;
     setChat([]); setSession(null); setChatId(null); setDesignAtStart(null); setUsage(null);
+    restoreAnnotations(null);
     syncOthers();
     setTimeout(() => composerRef.current?.focus({ preventScroll: true }), 30);
   };
@@ -1925,6 +1965,15 @@ export default function App() {
   const refreshGitRef = useRef(refreshGit);
   refreshGitRef.current = refreshGit;
 
+  // Undo every run that came after a message, newest first.
+  const rewindTo = async (itemId: string) => {
+    if (runRef.current || job) { flash('Wait for the agent to finish before rewinding.'); return; }
+    const at = chatRef.current.findIndex((it) => it.id === itemId);
+    const runs = chatRef.current.slice(at).filter((it): it is Extract<ChatItem, { kind: 'done' }> => it.kind === 'done' && !it.undone && it.changes.length > 0).reverse();
+    if (!runs.length) { flash('Nothing to rewind: no files were changed after this message.'); return; }
+    for (const r of runs) await undoRun(r.id, r.runId);
+    flash(`Rewound ${runs.length} run${runs.length > 1 ? 's' : ''}.`);
+  };
   const approve = (id: string, decision: ApprovalDecision) => {
     const item = chatRef.current.find((it) => it.id === id);
     if (item?.kind !== 'approval' || item.status !== 'pending') return;
@@ -1933,6 +1982,7 @@ export default function App() {
   };
   const chatHandlers = {
     onApprove: approve,
+    onRewind: (itemId: string) => rewindTo(itemId),
     onEditMessage: (text: string) => {
       setInstruction(text);
       setActiveSide(null);
@@ -2152,6 +2202,7 @@ export default function App() {
   const setPlanMode = (on: boolean) => saveSettings(settingsRef.current?.agent === 'codex' ? { codexSandbox: on ? 'read-only' : 'workspace-write' } : { claudePermission: on ? 'plan' : 'acceptEdits' });
   const slashCommands: SlashCommand[] = [
     { name: 'new', hint: 'Start a new chat', icon: SquarePen, run: newChat },
+    { name: 'timeline', hint: 'The page after each run in this chat', icon: History, run: () => setTimelineOpen(true) },
     { name: 'side', hint: 'Ask something in a side chat', icon: MessageSquare, run: (rest) => newSide(rest || undefined) },
     { name: 'annotate', hint: 'Click or draw on the page (S)', icon: MousePointerClick, run: () => setMode('select') },
     { name: 'draw', hint: 'Arrows, boxes and text on the page (D)', icon: PenTool, run: () => setMode('draw') },
@@ -2178,6 +2229,11 @@ export default function App() {
   };
   const assist = useComposerAssist(composerRef, instruction, setInstruction, slashCommands);
 
+  const waitingCount = others.filter((o) => o.needsInput || !o.running).length + (needsInput(chat) ? 1 : 0);
+  useEffect(() => { api.badge(waitingCount).catch(() => {}); }, [waitingCount]);
+
+  useEffect(() => { markBelow(); });
+
   const tasks: RunningTask[] = [
     ...(runId ? [{ id: `chat:${chatId}`, kind: 'chat' as const, label: chatTitle(chat) || 'This chat', status: 'running' as const, onStop: cancel }] : []),
     ...others.filter((o) => o.running).map((o) => ({ id: `chat:${o.id}`, kind: 'chat' as const, label: o.title || 'Untitled', status: 'running' as const, onOpen: () => openChat(o.id), onStop: () => { const r = parked.current.get(o.id)?.runId; if (r) api.cancelAgent(r); } })),
@@ -2193,6 +2249,7 @@ export default function App() {
   ];
 
   const commands: Command[] = !settings ? [] : [
+    { id: 'chat:timeline', group: 'Chat', label: 'Timeline of this chat', hint: 'the page after each run', icon: History, disabled: !chat.some((it) => it.kind === 'done' && it.shots), run: () => setTimelineOpen(true) },
     { id: 'chat:aside', group: 'Chat', label: 'New side chat', hint: 'ask without touching this chat', icon: MessageSquare, keys: combo('A', true), disabled: !projectDir, run: () => newSide() },
     ...sides.map((x) => ({ id: `chat:${x.id}`, group: 'Chat', label: x.title, hint: 'side chat', icon: MessageSquare, run: () => setActiveSide(x.id) })),
     { id: 'chat:new', group: 'Chat', label: 'New chat', icon: SquarePen, keys: combo('O', true), disabled: !!job || !chat.length, run: newChat },
@@ -2541,6 +2598,7 @@ export default function App() {
                 <button className="ptab-x" onClick={(e) => { e.stopPropagation(); closeSide(x.id); }} title="Close side chat"><X size={11} /></button>
               </div>
             ))}
+            {chat.some((it) => it.kind === 'done' && it.shots) && <button className="ptab-new ptab-timeline" onClick={() => setTimelineOpen(true)} title="Timeline: the page after each run in this chat"><History size={13} /></button>}
             <button className="ptab-new" onClick={() => newSide()} disabled={!projectDir} title={`New side chat: ask without touching this chat (${combo('A', true)})`}><Plus size={13} /></button>
           </div>
           <div className="spacer" />
@@ -2564,8 +2622,8 @@ export default function App() {
           </div>
         )}
 
-        <div className="chat-wrap">
-        <div className="chat" onScroll={(e) => { onChatScroll(e); if (askAside) setAskAside(null); }} onWheel={onChatWheel} onMouseUp={onChatMouseUp}>
+        <div className={`chat-wrap ${away ? 'away' : ''}`}>
+        <div className="chat" ref={chatBox} onScroll={(e) => { onChatScroll(e); markBelow(); if (askAside) setAskAside(null); }} onWheel={onChatWheel} onMouseUp={onChatMouseUp}>
           {chat.length === 0 ? (
             <EmptyChat agentName={agentName} cliMissing={!!agents && !agentReady} />
           ) : <ChatList items={chat} actions={chatActions} root={root} gitRepo={!!gitStatus?.repo} busy={!!runId || !!job} />}
@@ -2836,6 +2894,7 @@ export default function App() {
           onClose={() => setHistoryOpen(false)}
         />
       )}
+      {timelineOpen && <Timeline items={chat} onClose={() => setTimelineOpen(false)} />}
       {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
       {paletteOpen && <CommandPalette commands={commands} onQuery={searchChats} onClose={() => { setPaletteOpen(false); setPaletteHits([]); }} />}
       {toast && <div className="toast">{toast}</div>}
@@ -2846,5 +2905,5 @@ export default function App() {
 function markerList(anns: Annotation[], activeId: string | null) {
   return anns
     .filter((a) => a.kind === 'element' && a.element?.uid)
-    .map((a) => ({ uid: a.element!.uid, n: a.n, color: a.color, active: a.id === activeId }));
+    .map((a) => ({ uid: a.element!.uid, selector: a.element!.selector, n: a.n, color: a.color, active: a.id === activeId }));
 }

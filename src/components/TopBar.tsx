@@ -84,7 +84,7 @@ export function TopBar(p: Props) {
             <Download size={13} /> {u.status === 'ready' ? 'Restart to update' : u.status === 'available' ? `Get ${u.version}` : `Updating${u.percent ? ` ${u.percent}%` : '…'}`}
           </button>
         )}
-        <button className={`icon-btn ${p.drawerOpen ? 'on' : ''}`} onClick={p.onToggleDrawer} title="Terminal, dev server and logs">
+        <button className={`icon-btn ${p.drawerOpen ? 'on' : ''}`} onClick={p.onToggleDrawer} title={`Terminal, dev server and logs (${p.mod}+J)`}>
           <TerminalSquare size={16} />{p.devRunning && <span className="live-dot abs" />}
         </button>
         <button

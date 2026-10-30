@@ -765,3 +765,73 @@ html, body, #root, .app { overflow: clip; }
 .ann textarea::placeholder { color: var(--muted); font-style: italic; }
 /* 10. Agent menu shows whole rows. */
 .agent-menu { max-height: min(460px, 70vh); }
+
+/* ---- batch 4: text size, density, enter motion, rewind, resume, failed chats ---- */
+:root[data-text-size="small"] :is(.threads, .topbar, .panel, .drawer-wrap, .statusbar) { zoom: .92; }
+:root[data-text-size="large"] :is(.threads, .topbar, .panel, .drawer-wrap, .statusbar) { zoom: 1.1; }
+:root[data-density="compact"] .chat { gap: 6px; padding-top: 10px; }
+:root[data-density="compact"] .msg.agent { line-height: 1.5; }
+:root[data-density="compact"] .thread, :root[data-density="compact"] .task, :root[data-density="compact"] .proj-row { height: 26px; }
+:root[data-density="compact"] .threads-label { padding-top: 10px; }
+:root[data-density="compact"] .done-card { padding: 8px 10px; }
+.chat > .msg, .chat > .done-card, .chat > .work-log, .chat > .plan-card, .chat > .approval, .chat > .quick-replies { animation: enter .18s ease-out both; }
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .chat > * { animation: none !important; } }
+.msg-actions button.sure { color: #fff; background: var(--bad); }
+.resume-btn { margin-left: 8px; font-size: 12px; }
+.thread-time.failed { color: var(--bad-fg, #ff8aa0); }
+
+/* ================= Design review, round 4 ================= */
+/* 1. Share opens beside the tray; the context row steps aside while the tray is open. */
+.composer-tray .git-pop { bottom: -4px; left: calc(100% + 8px); }
+.composer.more .ctx-bar { visibility: hidden; }
+/* 3 + 5. Fade the bottom only when scrolled up (that's when Latest shows); at the bottom, content sits close to the composer. */
+.chat-wrap > .chat { padding-bottom: 12px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px); mask-image: linear-gradient(to bottom, transparent 0, #000 14px); }
+.chat-wrap.away > .chat { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%); }
+.chat-wrap > .to-latest { bottom: 18px; }
+/* 4. Links in the transcript are neutral, not brand-coloured. */
+.chat .link-btn, .where .link-btn { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; }
+/* 6. A shorter agent menu. */
+.agent-menu { max-height: 360px; }
+.more-row small { color: var(--muted); }
+/* Toward 10: even row hover in cards, and visible keyboard focus everywhere. */
+.done-card .done-files li > * { border-radius: 6px; }
+.done-card .done-files li:hover > * { background: var(--bg-3); }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+button:focus:not(:focus-visible) { outline: none; }
+.composer-box textarea:focus-visible, .cmd-input input:focus-visible, .threads-search input:focus-visible { outline: none; }
+
+/* ---- timeline: the page across a chat's runs ---- */
+.timeline { width: min(1100px, calc(100vw - 48px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 16px; border-radius: 14px; background: var(--bg-2); border: 1px solid var(--line-2); box-shadow: 0 30px 80px rgba(0, 0, 0, .55); }
+.timeline .diff-head { display: flex; align-items: center; gap: 10px; }
+.timeline .diff-head h3 { margin: 0; font-size: 14px; }
+.timeline-stage { flex: 1; min-height: 0; display: grid; place-items: center; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.timeline-stage img { max-width: 100%; max-height: 60vh; object-fit: contain; display: block; }
+.timeline-caption { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--text-2); }
+.timeline-caption b { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-scrub { width: 100%; accent-color: var(--text-2); }
+.timeline-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.timeline-strip button { flex: 0 0 auto; width: 96px; height: 60px; padding: 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--line-2); opacity: .7; }
+.timeline-strip button.on { opacity: 1; border-color: var(--text-2); box-shadow: 0 0 0 1px var(--text-2); }
+.timeline-strip img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.timeline-empty { padding: 40px; text-align: center; color: var(--muted); }
+
+/* ================= Design review, round 5 ================= */
+/* 1. Bottom fade whenever there's more below. */
+.chat-wrap.more-below > .chat { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%); }
+/* 2. Agent menu rows line up; a divider before setup. */
+.more-icon { width: 16px; height: 16px; font-size: 12px; }
+.dd-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+/* 3. The context row sits close to the composer. */
+.composer { padding-top: 2px; gap: 6px; }
+/* 4. Share opens beside the whole tray. */
+.composer-tray .git-wrap { position: static; }
+.composer-tray .git-pop { left: calc(100% + 8px); bottom: 0; }
+/* 6. A fade where a diff scrolls sideways. */
+.step-diff { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
+/* Toward 10: menus open with one gentle motion; agent prose is a touch softer than headings. */
+.dd-menu, .thread-menu, .vp-tools > .vp-toggles.open, .git-pop, .assist, .composer-tray-wrap.open .composer-tray { animation: menu-in .14s ease-out; transform-origin: bottom left; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(3px) scale(.985); } }
+.msg.agent { color: color-mix(in srgb, var(--text) 90%, transparent); }
+.msg.agent strong, .msg.agent b { color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .dd-menu, .thread-menu, .git-pop, .assist, .composer-tray { animation: none !important; } }

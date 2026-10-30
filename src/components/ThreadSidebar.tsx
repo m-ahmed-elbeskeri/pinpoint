@@ -205,7 +205,7 @@ export function ThreadSidebar(p: Props) {
                       onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenaming(null); }}
                     />
                   ) : <span className="thread-title">{c.pinned && <Pin size={10} className="thread-pinned" />}{c.title || 'Untitled'}</span>}
-                  <span className="thread-time">{waiting ? 'needs you' : running ? 'working' : finished ? 'done' : ago(c.updatedAt)}</span>
+                  <span className={`thread-time ${c.failed && !running ? 'failed' : ''}`}>{waiting ? 'needs you' : running ? 'working' : finished ? 'done' : c.failed ? 'failed' : ago(c.updatedAt)}</span>
                   <button
                     className={`thread-x thread-more ${menuFor === c.id ? 'open' : ''}`}
                     onClick={(e) => { e.stopPropagation(); setConfirm(null); setMenuFor(menuFor === c.id ? null : c.id); }}

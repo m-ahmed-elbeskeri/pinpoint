@@ -190,7 +190,7 @@ server.listen(0, '127.0.0.1', () => {
       log('finished runs offer no Send now button', (await ui(`document.querySelectorAll('.steer-now').length`)) === 0);
 
       const mainBefore = await userText();
-      await ui(`document.querySelector('.ptab-new').click(); 0`);
+      await ui(`document.querySelector('.ptab-new:not(.ptab-timeline)').click(); 0`);
       await sleep(300);
       log('a side chat opens as a tab in the chat panel', await ui(`document.querySelectorAll('.ptab.side.on').length === 1 && !!document.querySelector('.side-chat:not(.hidden)') && getComputedStyle(document.querySelector('.chat')).display === 'none'`));
       await ui(`(() => { const t = document.querySelector('.side-chat:not(.hidden) .side-foot textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'quick-aside what is this?'); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
@@ -201,7 +201,7 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(400);
       log('and leaves the main chat alone', (await userText()) === mainBefore && !(await ui(`document.querySelector('.chat').innerText.includes('quick-aside')`)));
       log('the tab is named after the question', /quick-aside/.test(await ui(`document.querySelector('.ptab.side').textContent`)));
-      await ui(`document.querySelector('.ptab-new').click(); 0`);
+      await ui(`document.querySelector('.ptab-new:not(.ptab-timeline)').click(); 0`);
       await sleep(200);
       log('several side chats can be open, each starting empty', (await ui(`document.querySelectorAll('.ptab.side').length`)) === 2 && (await ui(`document.querySelectorAll('.side-chat:not(.hidden) .side-body .side-q, .side-chat:not(.hidden) .side-body .side-a').length`)) === 0);
       await ui(`document.querySelector('.ptab:not(.side)').click(); 0`);

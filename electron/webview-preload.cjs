@@ -118,8 +118,8 @@ function ensureUI() {
   root.innerHTML = `
     <style>
       .box{position:fixed;box-sizing:border-box;pointer-events:none;border-radius:3px;transition:all .06s ease-out}
-      .hover{border:1.5px solid ${ACCENT};background:${ACCENT}1f}
-      .label{position:fixed;pointer-events:none;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;color:#fff;background:${ACCENT};
+      .hover{border:1.5px solid ${ACCENT};background:transparent}
+      .label{position:fixed;pointer-events:none;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;color:#fff;background:#18181b;
         padding:4px 6px;border-radius:4px;white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis}
       .label .dim{opacity:.75;font-weight:500;margin-left:6px}
       .mark{border:2px solid var(--c);background:color-mix(in srgb,var(--c) 10%,transparent)}
@@ -249,6 +249,7 @@ function renderHover() {
 
 const markEls = new Map();
 function renderMarkers() {
+  if (markers.length) retag(markers);
   const u = ensureUI();
   u.marks.style.display = hidden ? 'none' : '';
   if (u.marks.childElementCount !== markers.length * 2) {
@@ -660,7 +661,14 @@ ipcRenderer.on('mode', (_e, m) => {
   renderHover();
   renderMarkers();
 });
-ipcRenderer.on('markers', (_e, list) => { markers = list || []; if (!pickHold || Date.now() - pickHold > 1500) hidden = false; ensureUI(); renderMarkers(); });
+// After a reload (or hot reload) the page has lost our data-pinpoint tags: find each pinned element again by its selector.
+function retag(list) {
+  for (const m of list) {
+    if (!m.selector || byUid(m.uid)) continue;
+    try { const el = document.querySelector(m.selector); if (el && !el.hasAttribute('data-pinpoint')) el.setAttribute('data-pinpoint', m.uid); } catch { /* selector no longer valid */ }
+  }
+}
+ipcRenderer.on('markers', (_e, list) => { markers = list || []; retag(markers); if (!pickHold || Date.now() - pickHold > 1500) hidden = false; ensureUI(); renderMarkers(); });
 // With a token, answer once the markers are really off screen (two frames later), so a screenshot never catches them.
 ipcRenderer.on('hide', (_e, h, token) => {
   pickHold = 0; hidden = !!h; renderMarkers(); renderHover();

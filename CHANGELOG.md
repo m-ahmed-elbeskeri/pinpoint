@@ -4,6 +4,23 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Added
+
+- **See what the agent is doing.** A context meter by the send button, a warning before you hit a usage limit, MCP server status in the agent menu, today's spend in the status bar, a strip of the files it is touching, and a subagent's steps nested under the Task that started them.
+- **Timeline.** Step through the page as it looked after each run in a chat.
+- **Pins that stay.** Annotation pins find their element again after a reload or hot reload, and unsent annotations stay with the chat they were made in.
+- **Rewind** to any message (undoes the runs after it), **Resume** on interrupted runs, chats that failed say so in the sidebar.
+- **Taskbar badge** when a chat needs you or finished while you were away, optional sounds, and text size and density settings.
+- **Agent logos** in the agent picker and Settings, from LobeHub's icon set.
+
+### Changed
+
+- **A design pass across every surface**, reviewed screen by screen against Codex, Claude and t3code: one menu style, a composer that keeps its shape with extras in a tray, the transcript fading at its edges with a floating Latest button, approvals folded into their step, a one-row terminal header with a light theme, a regular agent settings grid, a calmer result card, model menu, shortcuts sheet and draw toolbar, keyboard focus rings, and box-model guides only while Alt is held.
+
+### Fixed
+
+- **A CLI that was slow to report its version** showed as not installed.
+
 ## [0.8.0] - 2026-10-30
 
 ### Added

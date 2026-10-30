@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   listAgents: () => ipcRenderer.invoke('agents:list'),
   pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   notify: (title, body) => ipcRenderer.invoke('app:notify', { title, body }),
+  badge: (count) => ipcRenderer.invoke('app:badge', count),
   projectFiles: () => ipcRenderer.invoke('project:files'),
   setWindowTheme: (light) => ipcRenderer.invoke('window:theme', light),
   pickFolder: (known) => ipcRenderer.invoke('dialog:pickFolder', known),

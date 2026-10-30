@@ -100,6 +100,26 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
         <section>
           <h4>Layout</h4>
           <div className="setting-row">
+            <span>Text size</span>
+            <div className="seg">
+              {(['small', 'normal', 'large'] as const).map((t) => (
+                <button key={t} className={(s.textSize || 'normal') === t ? 'on' : ''} onClick={() => set('textSize', t)}>{t[0].toUpperCase() + t.slice(1)}</button>
+              ))}
+            </div>
+          </div>
+          <div className="setting-row">
+            <span>Density</span>
+            <div className="seg">
+              {(['compact', 'comfortable'] as const).map((t) => (
+                <button key={t} className={(s.density || 'comfortable') === t ? 'on' : ''} onClick={() => set('density', t)}>{t[0].toUpperCase() + t.slice(1)}</button>
+              ))}
+            </div>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={!!s.sounds} onChange={(e) => set('sounds', e.target.checked)} />
+            Play a quiet sound when a run finishes or needs your OK
+          </label>
+          <div className="setting-row">
             <span>Theme</span>
             <div className="seg">
               {(['system', 'light', 'dark'] as const).map((t) => (

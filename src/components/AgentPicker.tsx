@@ -15,6 +15,7 @@ interface Props {
 
 export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetup, mcp = [] }: Props) {
   const [open, setOpen] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = harnesses.find((h) => h.id === value);
   const ok = (id: string) => !agents || !!agents[id]?.ok;
@@ -55,8 +56,9 @@ export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetu
         <div className="dd-menu left agent-menu">
           <div className="dd-title">Agents</div>
           {installed.map(row)}
-          {missing.length > 0 && <div className="dd-title">Not installed</div>}
-          {missing.map(row)}
+          {missing.length > 0 && (showMissing
+            ? <><div className="dd-title">Not installed</div>{missing.map(row)}</>
+            : <button className="dd-item more-row" onClick={() => setShowMissing(true)}><span className="agent-icon letter more-icon" aria-hidden="true">+</span><span className="dd-item-text"><span>{missing.length} more agents</span><small>Not installed: {missing.slice(0, 3).map((h) => h.name).join(', ')}{missing.length > 3 ? '…' : ''}</small></span></button>)}
           {mcp.length > 0 && (
             <>
               <div className="dd-title">MCP servers</div>
@@ -67,6 +69,7 @@ export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetu
               ))}
             </>
           )}
+          <div className="dd-sep" />
           <button className="dd-item" onClick={() => { setOpen(false); onSetup(); }}>
             <Plus size={14} className="dd-item-icon" />
             <span className="dd-item-text"><span>Add or set up agents…</span></span>

@@ -407,6 +407,7 @@ interface ItemProps {
   onEditMessage(text: string): void;
   onSendText(text: string): void;
   onSaveSnippet(text: string): void;
+  onRewind(itemId: string): void;
   onMeasureBuild(runId: string): void;
   onOpenLocal(): void;
   onFlowFix(runId: string): void;
@@ -421,6 +422,16 @@ const STEER_TAG = {
   now: { icon: Zap, text: 'Interrupted and sent' },
   later: { icon: Clock, text: 'Queued: sends when the agent finishes' },
 };
+
+function RewindButton({ onRewind }: { onRewind(): void }) {
+  const [sure, setSure] = useState(false);
+  useEffect(() => { if (!sure) return; const t = setTimeout(() => setSure(false), 2500); return () => clearTimeout(t); }, [sure]);
+  return (
+    <button className={sure ? 'sure' : ''} onClick={() => (sure ? (setSure(false), onRewind()) : setSure(true))} title={sure ? 'Click again to undo every run after this message' : 'Rewind: undo the file changes made after this message'}>
+      <Undo2 size={12} />
+    </button>
+  );
+}
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
@@ -461,7 +472,7 @@ function Attachments({ annotations }: { annotations: Extract<ChatItem, { kind: '
   );
 }
 
-export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, onSaveSnippet, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
+export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessage, onSendText, onSaveSnippet, onRewind, root, busy, onReload, onUndo, onReview, onMemory, onRevertFile, onOpenFile, onCommit, onCompare, onPickVariant, onMeasureBuild, onOpenLocal, onFlowFix, onVariantsLive, gitRepo }: ItemProps) {
   const [loadStats, setLoadStats] = useState(false);
   const [moreActs, setMoreActs] = useState(false);
   switch (item.kind) {
@@ -489,6 +500,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
               <button onClick={() => onEditMessage(item.text)} title="Put this back in the composer to edit and send"><Pencil size={12} /></button>
               {!busy && <button onClick={() => onSendText(item.text)} title="Send it again"><RotateCw size={12} /></button>}
               <button onClick={() => onSaveSnippet(item.text)} title="Save as a snippet you can reuse from the / menu"><Pin size={12} /></button>
+              {!busy && <RewindButton onRewind={() => onRewind(item.id)} />}
             </div>
           )}
           {item.annotations.filter((a) => a.note.trim()).map((a) => (
@@ -545,7 +557,12 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
     case 'status':
       return <div className="msg status">{item.text}</div>;
     case 'error':
-      return <div className={`msg error ${item.text === INTERRUPTED ? 'soft' : ''}`}><AlertTriangle size={14} /> <span>{item.text}</span></div>;
+      return (
+        <div className={`msg error ${item.text === INTERRUPTED ? 'soft' : ''}`}>
+          <AlertTriangle size={14} /> <span>{item.text}</span>
+          {item.text === INTERRUPTED && !busy && <button className="link-btn resume-btn" onClick={() => onSendText('Pick up where you left off: check what is already changed, then finish the request.')}>Resume</button>}
+        </div>
+      );
     case 'memory':
       return (
         <div className={`memory-card ${item.status}`}>
@@ -638,7 +655,7 @@ export function ChatItemView({ item, live, onForceSteer, onApprove, onEditMessag
             <div className="where quiet">
               <div className="where-head">
                 <Route size={12} />
-                <span>Visual check · <button className="link-btn" onClick={() => onCompare(item.runId, `route-${moved[0].key}`)} title="Compare this page before and after">{moved[0].pct}% changed</button>{moved[0].areas?.length ? ` on ${moved[0].areas.join(', ')}` : ''}{others ? ` · ${others} other page${others === 1 ? '' : 's'} unchanged` : ''}</span>
+                <span>Visual check · <button className="link-btn" onClick={() => onCompare(item.runId, `route-${moved[0].key}`)} title="Compare this page before and after">{moved[0].pct}%</button>{moved[0].areas?.length ? ` on ${moved[0].areas.join(', ')}` : ''}{others ? ` · ${others} other${others === 1 ? '' : 's'} unchanged` : ''}</span>
               </div>
             </div>
           ) : item.routeCheck && (
