@@ -44,8 +44,8 @@ server.listen(0, '127.0.0.1', () => {
   process.env.PINPOINT_USER_DATA = ud;
   const { app, webContents } = require('electron');
   require(path.join(repo, 'electron', 'main.cjs'));
-  const apiroutes = require(path.join(repo, 'electron', 'apiroutes.cjs'));
-  const { buildPrompt, buildVerifyPrompt } = require(path.join(repo, 'electron', 'prompt.cjs'));
+  const apiroutes = require(path.join(repo, 'electron', 'page', 'apiroutes.cjs'));
+  const { buildPrompt, buildVerifyPrompt } = require(path.join(repo, 'electron', 'prompt', 'index.cjs'));
 
   app.whenReady().then(async () => {
     const win = await started(require('electron'));

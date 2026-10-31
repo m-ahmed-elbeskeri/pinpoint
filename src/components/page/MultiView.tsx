@@ -1,0 +1,68 @@
+import { useEffect, useRef, useState } from 'react';
+import type { DidNavigateEvent, WebviewTag } from 'electron';
+import { X } from '../ui/icons';
+import { useScrollSync } from '../../lib/hooks';
+
+const SIZES = [
+  { label: 'Phone', w: 390, h: 844 },
+  { label: 'Tablet', w: 820, h: 1180 },
+  { label: 'Desktop', w: 1440, h: 900 },
+];
+const GAP = 18;
+
+interface Props {
+  url: string;
+  onNavigate(url: string): void;
+  onPick(w: number, h: number): void;
+  onClose(): void;
+}
+
+export function MultiView({ url, onNavigate, onPick, onClose }: Props) {
+  const body = useRef<HTMLDivElement>(null);
+  const views = useRef<(WebviewTag | null)[]>([]);
+  const [scale, setScale] = useState(0.4);
+  const cb = useRef(onNavigate);
+  cb.current = onNavigate;
+
+  useEffect(() => {
+    const el = body.current!;
+    const fit = () => {
+      const w = el.clientWidth - GAP * (SIZES.length + 1), h = el.clientHeight - 60;
+      setScale(Math.max(0.15, Math.min(1, w / SIZES.reduce((s, x) => s + x.w, 0), h / Math.max(...SIZES.map((x) => x.h)))));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useScrollSync(views, url);
+  useEffect(() => {
+    const onNav = (e: DidNavigateEvent) => { if (e.url && e.url !== url) cb.current(e.url); };
+    const live = views.current.filter((v) => !!v);
+    live.forEach((v) => v.addEventListener('did-navigate', onNav));
+    return () => live.forEach((v) => v.removeEventListener('did-navigate', onNav));
+  }, [url]);
+
+  return (
+    <div className="multi">
+      <div className="multi-head">
+        <b>All sizes</b><span className="hint">Live and scroll-synced. Click a size to work on the page at that width.</span>
+        <div className="spacer" />
+        <button className="icon-btn xs" onClick={onClose} title="Back to one view"><X size={14} /></button>
+      </div>
+      <div className="multi-body" ref={body}>
+        {SIZES.map((s, i) => (
+          <figure key={s.label} style={{ width: s.w * scale }}>
+            <figcaption><button className="chip mono" onClick={() => onPick(s.w, s.h)}>{s.label} · {s.w}×{s.h}</button></figcaption>
+            <div className="multi-box" style={{ width: s.w * scale, height: s.h * scale }}>
+              <div style={{ width: s.w, height: s.h, transform: `scale(${scale})` }}>
+                <webview ref={(el) => { views.current[i] = el as unknown as WebviewTag | null; }} src={url} partition="persist:pinpoint" className="webview" />
+              </div>
+            </div>
+          </figure>
+        ))}
+      </div>
+    </div>
+  );
+}

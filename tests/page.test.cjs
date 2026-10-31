@@ -116,7 +116,7 @@ app.whenReady().then(async () => {
   } catch (err) { log('exception', false, err.stack); }
 
   try {
-    const routecheck = require(path.join(repo, 'electron', 'routecheck.cjs'));
+    const routecheck = require(path.join(repo, 'electron', 'page', 'routecheck.cjs'));
     const proj = path.join(dir, 'proj');
     fs.mkdirSync(proj);
     const a = path.join(proj, 'a.html'), b = path.join(proj, 'b.html');

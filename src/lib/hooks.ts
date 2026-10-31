@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { ChatItem, ConsoleEntry, NetRequest, NetworkFailure } from './types';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
+import type { IpcMessageEvent, WebviewTag } from 'electron';
+import type { ChatItem, ConsoleEntry, NetRequest, NetworkFailure } from '../types';
 
 const api = window.pinpoint;
 
@@ -108,6 +109,56 @@ export function useStableActions<T extends Record<string, (...args: any[]) => an
   const stable = useRef<T | null>(null);
   stable.current ??= Object.fromEntries(Object.keys(handlers).map((k) => [k, (...a: unknown[]) => latest.current[k](...a)])) as T;
   return stable.current;
+}
+
+// Calls fn when Esc is pressed anywhere in the window, while active.
+export function useEscape(fn: (e: KeyboardEvent) => void, active = true) {
+  const latest = useRef(fn);
+  latest.current = fn;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') latest.current(e); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
+}
+
+// Closes a popup on Esc or on a press outside it. Outside means outside `ref` and anything matching `ignore`.
+export function useDismiss(open: boolean, close: () => void, { ref, ignore, esc = true }: { ref?: RefObject<HTMLElement | null>; ignore?: string; esc?: boolean } = {}) {
+  const latest = useRef(close);
+  latest.current = close;
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      const t = e.target as Element;
+      if (ref?.current?.contains(t) || (ignore && t.closest?.(ignore))) return;
+      latest.current();
+    };
+    window.addEventListener('mousedown', away);
+    return () => window.removeEventListener('mousedown', away);
+  }, [open]);
+  useEscape(() => latest.current(), open && esc);
+}
+
+// Keeps a row of webviews scrolled together. Sending throws until a webview is ready, so every send is guarded.
+export function useScrollSync(views: MutableRefObject<(WebviewTag | null)[]>, dep: unknown) {
+  useEffect(() => {
+    const send = (v: WebviewTag, channel: string, value: unknown) => { try { v.send(channel, value); } catch { /* not ready yet: 'dom-ready' or 'ready' sends it again */ } };
+    const offs = views.current.map((v, i) => {
+      if (!v) return () => {};
+      const share = () => send(v, 'scrollSync', true);
+      const onMsg = (e: IpcMessageEvent) => {
+        if (e.channel === 'ready') { share(); return; }
+        if (e.channel !== 'scroll') return;
+        views.current.forEach((o, j) => { if (o && j !== i) send(o, 'syncScroll', e.args?.[0] ?? 0); });
+      };
+      v.addEventListener('dom-ready', share);
+      share();
+      v.addEventListener('ipc-message', onMsg);
+      return () => { v.removeEventListener('dom-ready', share); v.removeEventListener('ipc-message', onMsg); };
+    });
+    return () => offs.forEach((off) => off());
+  }, [dep]);
 }
 
 export function useRequests() {

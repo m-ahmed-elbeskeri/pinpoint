@@ -19,16 +19,7 @@ To try it against a real site, open any local project in Pinpoint, start its dev
 
 ## Project layout
 
-| Path | What lives there |
-|---|---|
-| `electron/main.cjs` | Window, IPC, settings, captures, dev server, run lifecycle |
-| `electron/agent-claude.cjs` | Claude Code as a live, steerable session (`stream-json` in and out) |
-| `electron/agent-codex.cjs` | Codex over `codex app-server` (JSON-RPC), with an `exec` fallback |
-| `electron/prompt.cjs` | Turns annotations, drawings and context into the agent prompt |
-| `electron/snapshot.cjs`, `runs.cjs` | Change detection, per-run before/after copies, diff and revert |
-| `electron/routes.cjs`, `sourcemap.cjs` | Route discovery and source-map lookup |
-| `electron/webview-preload.cjs` | In-page picker: hover box, numbered markers, hit-testing |
-| `src/` | React UI |
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the code is organised and where to add things.
 
 ## Before you open a pull request
 

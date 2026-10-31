@@ -29,7 +29,7 @@ function start(notify) {
   if (process.platform === 'darwin') {
     const check = () => latestRelease()
       .then((r) => { if (newer(r.version, app.getVersion())) set({ status: 'available', version: r.version, url: r.url, manual: true }); })
-      .catch(() => {});
+      .catch(() => { /* offline or no release: the next check tries again */ });
     check();
     setInterval(check, CHECK_EVERY_MS).unref();
     return;
@@ -44,7 +44,7 @@ function start(notify) {
   autoUpdater.on('download-progress', (p) => set({ ...state, status: 'downloading', percent: Math.round(p.percent) }));
   autoUpdater.on('update-downloaded', (i) => set({ status: 'ready', version: i.version }));
   autoUpdater.on('error', () => { if (state.status === 'downloading') set({ status: 'error' }); });
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  const check = () => autoUpdater.checkForUpdates().catch(() => { /* offline or no release: the next check tries again */ });
   check();
   setInterval(check, CHECK_EVERY_MS).unref();
 }
@@ -55,4 +55,4 @@ function install() {
   return false;
 }
 
-module.exports = { start, install, newer, latestRelease, current: () => state };
+module.exports = { start, install, newer, current: () => state };

@@ -15,7 +15,7 @@ const server = http.createServer((req, res) => {
 app.whenReady().then(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${server.address().port}/`;
-  const engines = require(path.join(repo, 'electron', 'engines.cjs'));
+  const engines = require(path.join(repo, 'electron', 'page', 'engines.cjs'));
   const base = path.join(FIX, 'engines-data');
   try {
     const before = engines.status(base);

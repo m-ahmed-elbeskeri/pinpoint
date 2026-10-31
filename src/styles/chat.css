@@ -1,0 +1,938 @@
+/* Chat transcript: messages, work log, plan, approvals, result cards, side chats, timeline. */
+
+.panel-head .btn { white-space: nowrap; flex-shrink: 0; }
+@container panel (max-width: 340px) {
+  .panel-head .btn-text { display: none; }
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+}
+
+/* A longer, visible fade under the floating Latest pill. */
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  container: chat / inline-size;
+  padding: 16px 16px 8px;
+  gap: 10px;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 44px), transparent 100%);
+  padding-bottom: 40px;
+}
+.chat-empty { color: var(--text-2); padding: 10px 4px 6px; }
+.chat-empty h3 {
+  margin: 0 0 14px 2px;
+  font: 600 10.5px/1 Inter, sans-serif;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.chat-empty ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+}
+.chat-empty li { position: relative; }
+.chat-empty li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  top: 40px;
+  bottom: -8px;
+  width: 1px;
+  background: var(--line-2);
+}
+.chat-empty .step {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 10px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background .12s;
+}
+.chat-empty button.step { cursor: pointer; }
+.chat-empty button.step:hover { background: var(--bg-3); }
+.warn-box {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 176, 32, .1);
+  border: 1px solid rgba(255, 176, 32, .3);
+  color: var(--warn-fg);
+  font-size: 12px;
+}
+
+/* ---- message hover actions and quick replies ---- */
+.msg { border-radius: 12px; max-width: 100%; position: relative; }
+.msg.user {
+  align-self: flex-end;
+  max-width: 92%;
+  margin-top: 6px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 4px 16px;
+  padding: 9px 13px;
+}
+.msg-text { white-space: pre-wrap; }
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.msg-att {
+  position: relative;
+  width: 72px;
+  height: 52px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+}
+.msg-att img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+.msg-att .badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  min-width: 17px;
+  height: 17px;
+  font-size: 10px;
+  border-width: 1px;
+}
+.msg-note {
+  display: flex;
+  align-items: flex-start;
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+.msg.status {
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 0 2px;
+  padding-left: 2px;
+}
+
+/* ---- chat: informational notes are quiet; real errors keep a red edge ---- */
+.msg.error {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  word-break: break-word;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid var(--bad);
+  border-radius: 0 8px 8px 0;
+  padding: 4px 10px;
+  color: var(--bad-fg, #ff9db0);
+}
+.msg.error svg { flex-shrink: 0; margin-top: 2px; }
+.tool-row { border-radius: 8px; }
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 12px;
+  padding: 2px 4px;
+  color: var(--muted);
+}
+.tool-head:hover { background: var(--bg-3); }
+.tool-icon { color: var(--muted); flex-shrink: 0; }
+.tool-name { flex-shrink: 0; font-weight: 500; color: var(--text-2); }
+.tool-detail {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tool-row.error .tool-name { color: var(--bad-fg-2); }
+.tool-output {
+  margin: 2px 0 4px 28px;
+  max-height: 220px;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 8px;
+  font: 11px/1.45 var(--mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-width: 100%;
+  border: 0;
+  background: var(--bg-2);
+  margin-left: 20px;
+}
+.thinking-body {
+  margin: 4px 0 4px 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-2);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* ---- result card: one clear summary line, details quieter, everything still there ---- */
+.done-card {
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  margin: 6px 0 8px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 12px;
+  border-color: var(--line);
+  background: var(--bg-2);
+  box-shadow: none;
+}
+.done-card.fail { border-color: rgba(255, 77, 109, .35); }
+.done-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--text-2);
+  padding: 2px;
+}
+.done-head > span:first-of-type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.done-icon { display: grid; place-items: center; flex-shrink: 0; }
+
+/* Success is quiet: an icon on a result means "look at this". */
+.done-card.ok .done-icon { color: var(--ok); display: none; }
+.done-card.fail .done-icon { color: var(--bad); }
+.done-meta {
+  flex: 1;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  opacity: .85;
+}
+.done-card.undone { opacity: .7; }
+.done-card.undone .done-icon { color: var(--muted); }
+.done-head .btn.xs { flex-shrink: 0; }
+.done-card.quiet {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  margin: 2px 0 6px;
+}
+.done-card.quiet .done-head { font-weight: 500; font-size: 12px; color: var(--text-2); }
+.working {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  padding: 2px 4px;
+}
+.done-actions { display: flex; align-items: center; gap: 4px; }
+.done-files {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  font: inherit;
+}
+.file-row {
+  border-radius: 8px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  padding-right: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+.file-row.open { background: rgba(0,0,0,.18); }
+.file-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 4px 3px 6px;
+  border-radius: 7px;
+}
+.file-line:hover { background: var(--tint); }
+.file-row.add .file-icon { color: var(--ok); }
+.file-row.modify .file-icon { color: var(--warn); }
+.file-row.delete .file-icon { color: var(--bad); }
+.file-name b {
+  font: 500 12px var(--mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.file-name:hover b { color: var(--accent-2); }
+.file-name small {
+  font: 10.5px var(--mono);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  min-width: 0;
+}
+.file-row.reverted .file-name b { text-decoration: line-through; opacity: .55; }
+.file-line:hover .file-actions, .file-row.open .file-actions, .file-actions:focus-within { opacity: 1; }
+.file-warn { margin: 0 6px 6px 30px; font-size: 11px; color: var(--warn-fg); }
+@container chat (max-width: 340px) {
+  .file-name small { display: none; }
+  .done-meta { display: none; }
+  .done-actions .btn { padding: 0 6px; }
+}
+.msg.user.steer { border-style: dashed; border-color: rgba(255, 214, 10, .45); }
+.steer-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--accent-2);
+}
+.memory-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 214, 10, .45);
+  background: var(--accent-soft);
+}
+.memory-card > svg { color: var(--accent-2); flex-shrink: 0; }
+.memory-text small {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 600;
+}
+.memory-card.saved {
+  border-style: solid;
+  border-color: rgba(30, 201, 155, .35);
+  background: rgba(30, 201, 155, .07);
+}
+.memory-card.saved > svg { color: var(--ok); }
+.memory-card.dismissed { opacity: .5; background: none; border-color: var(--line-2); }
+.drop-zone svg { color: var(--accent-2); }
+.drop-zone b { color: var(--text); }
+.drop-zone span { font-size: 12px; color: var(--muted); }
+.msg.agent.streaming .md > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  border-radius: 2px;
+  background: var(--accent-2);
+  animation: caret 1s steps(2) infinite;
+}
+.route-check.moved { color: var(--warn-fg); }
+.route-check .chip { height: 20px; font-size: 10.5px; }
+.route-check .worse { color: var(--warn-fg); }
+.route-check .better { color: var(--ok); }
+.route-check span + span::before { content: '· '; color: var(--muted); }
+.done-actions .btn { white-space: nowrap; flex-shrink: 0; }
+.done-actions .spacer { min-width: 4px; }
+@container chat (max-width: 470px) {
+  .done-actions .btn-text { display: none; }
+  .done-actions .btn.ghost { padding: 0 7px; }
+}
+.route-check span { min-width: 0; }
+.where {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.where.moved .where-head { color: var(--warn-fg); }
+.where-head { display: flex; align-items: center; gap: 5px; }
+.where-row .chip {
+  height: 20px;
+  font-size: 10.5px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.where-row > span {
+  min-width: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+  flex: 1 1 190px;
+}
+.where-row i { font-style: normal; color: var(--muted); }
+
+/* "No visible change" notes: one line; the explanation shows on hover. */
+.no-visual {
+  display: flex;
+  gap: 9px;
+  margin-top: 8px;
+  border-radius: 9px;
+  background: rgba(255, 176, 32, .09);
+  border: 1px solid rgba(255, 176, 32, .35);
+  color: var(--warn-fg);
+  padding: 7px 10px;
+  align-items: flex-start;
+}
+.no-visual svg { flex-shrink: 0; margin-top: 1px; }
+.no-visual div { display: grid; gap: 2px; min-width: 0; }
+.no-visual span { font-size: 11.5px; line-height: 1.45; color: var(--text-2); }
+.plan-why { margin: 6px 0 0; line-height: 1.4; }
+.other-chats::-webkit-scrollbar { display: none; }
+.other-chats button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.other-chats button.finished svg { color: var(--ok); }
+.load-stats {
+  margin-top: 9px;
+  padding: 4px 10px 8px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.load-stats > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px 68px;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.load-stats > div span + span { text-align: right; font: 500 11px var(--mono); font-variant-numeric: tabular-nums; }
+.load-stats > div.diff span:last-child { color: var(--accent-2); }
+.load-stats .load-stats-head { color: var(--muted); font-size: 10.5px; }
+.load-stats .load-stats-head span + span { font: inherit; }
+.load-stats small { color: var(--muted); font-size: 10.5px; }
+.load-stats p { margin: 7px 0 0; font-size: 10.5px; color: var(--muted); }
+.load-stats-btn.on { background: var(--bg-4); color: var(--text); }
+.no-visual.unseen {
+  background: rgba(255, 77, 109, .07);
+  border-color: rgba(255, 77, 109, .3);
+  color: var(--bad-fg-2);
+}
+.flow-check {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  border: 1px solid var(--line-2);
+  background: var(--tint);
+}
+.flow-check.ok { color: var(--ok-fg); border-color: rgba(30, 201, 155, .3); background: rgba(30, 201, 155, .07); }
+.flow-check.bad { color: var(--warn-fg); border-color: rgba(255, 176, 32, .35); background: rgba(255, 176, 32, .09); }
+.flow-head { display: flex; align-items: center; gap: 7px; }
+.flow-head span { flex: 1; min-width: 0; }
+.flow-head svg { flex-shrink: 0; }
+.flow-check ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 2px;
+  color: var(--text-2);
+  font: 10.5px/1.45 var(--mono);
+}
+.flow-check li { overflow-wrap: anywhere; }
+.msg.agent {
+  font-size: 13.5px;
+  line-height: 1.6;
+  padding: 0 2px;
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+}
+
+/* ---- work log: tool steps collapsed into one row ---- */
+.work-log {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.work-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.work-head:hover { background: var(--bg-3); }
+.work-log.live .work-head > .spin { color: var(--accent); flex-shrink: 0; }
+.work-body {
+  display: grid;
+  gap: 1px;
+  max-height: 340px;
+  overflow-y: auto;
+  grid-template-columns: minmax(0, 1fr);
+  border-top: 0;
+  padding: 0 0 2px 18px;
+}
+.no-visual .why { display: none; }
+.no-visual:hover .why { display: block; }
+.msg-attachments.compact { gap: 4px; }
+.msg-attachments.compact .msg-att {
+  width: auto;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 4px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.msg-attachments.compact .msg-att .badge.sm { position: static; margin: 0; }
+.msg-attachments.compact .msg-att:hover:not(:disabled), .msg-attachments.compact .msg-att.on {
+  color: var(--text);
+  border-color: var(--ring);
+}
+.msg-attachments.compact .msg-att:disabled { cursor: default; opacity: 1; }
+.msg-att-full {
+  display: block;
+  max-width: 100%;
+  max-height: 280px;
+  margin: 2px 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  cursor: zoom-out;
+}
+.panel-tabs::-webkit-scrollbar { display: none; }
+.ptab:hover { color: var(--text); background: var(--bg-3); }
+.ptab.on { color: var(--text); background: var(--bg-4); }
+.ptab-x {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  border-radius: 4px;
+  color: var(--muted);
+  opacity: 0;
+}
+.ptab:hover .ptab-x, .ptab.on .ptab-x { opacity: 1; }
+.ptab-x:hover { color: var(--text); background: var(--bg-3); }
+.ptab-new:hover:not(:disabled) { color: var(--text); background: var(--bg-3); }
+.side-chat.hidden { display: none; }
+.side-sub {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Side chat: orientation and suggestions. */
+.side-empty {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: auto 12px;
+  text-align: center;
+}
+.side-q { white-space: pre-wrap; }
+.side-a { display: grid; gap: 4px; }
+.side-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.side-foot:focus-within { border-color: var(--ring); }
+.side-foot textarea {
+  flex: 1;
+  resize: none;
+  background: none;
+  border: 0;
+  outline: 0;
+  font-size: 13.5px;
+  field-sizing: content;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 3px 0;
+}
+.side-send.stop { background: var(--text); color: #0b0b0d; }
+
+/* ---- selection bubble: start a side chat or quote it in a reply ---- */
+.ask-aside {
+  position: fixed;
+  z-index: 120;
+  transform: translate(-50%, calc(-100% - 6px));
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+  animation: pop .1s ease-out;
+}
+.panel-tabs.fade-l { --fl: 28px; }
+.panel-tabs.fade-r { --fr: 28px; }
+
+/* ---- approval card: the agent asks before running something ---- */
+.approval {
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--bg-2);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+.approval.pending { border-color: var(--ring); box-shadow: 0 0 0 3px var(--accent-soft); }
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  min-width: 0;
+}
+.approval-said {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.approval.deny .approval-said, .approval.expired .approval-said { color: var(--bad-fg, #ff8aa0); }
+.approval-detail {
+  margin: 0;
+  max-height: 140px;
+  overflow: auto;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font: 11.5px/1.5 var(--mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.approval-actions { display: flex; align-items: center; gap: 6px; }
+.approval:not(.pending) .approval-detail { display: none; }
+
+/* ---- plan checklist: sticks to the top of the chat while the agent works ---- */
+.plan-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-2);
+  padding: 9px 12px 10px;
+}
+.plan-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  margin: 0;
+}
+.plan-head span { font-variant-numeric: tabular-nums; }
+.plan-card ol {
+  list-style: none;
+  margin: 0;
+  display: grid;
+  gap: 3px;
+  padding: 2px 0 2px 20px;
+}
+.plan-card li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.plan-card li.completed span { text-decoration: line-through; text-decoration-color: var(--line-2); }
+.plan-card li.completed .plan-mark { border-color: transparent; background: var(--bg-4); }
+.plan-card li.in_progress { color: var(--text); font-weight: 500; }
+.plan-card li.in_progress .plan-mark { border-color: var(--text-2); }
+
+/* ---- diffs inside edit steps ---- */
+.tool-head .df-stat { flex-shrink: 0; }
+
+/* A fade where a diff scrolls sideways. */
+.step-diff {
+  white-space: pre;
+  word-break: normal;
+  overflow-x: auto;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+.step-diff .add { display: block; color: var(--add-fg, #7ee0b8); background: rgba(30, 201, 155, .08); }
+.step-diff .del { display: block; color: var(--del-fg, #ff8aa0); background: rgba(255, 77, 109, .08); }
+.step-diff .meta { display: block; color: var(--muted); }
+.msg-actions {
+  position: absolute;
+  bottom: -12px;
+  right: 6px;
+  z-index: 2;
+  display: none;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+}
+.msg.agent .msg-actions { right: auto; left: 0; }
+.msg:hover .msg-actions { display: flex; }
+
+/* The chat panel's New chat duplicates the sidebar's while the sidebar is open. */
+.panel-new.quiet { display: none; }
+.msg.user .msg-text { max-height: 320px; overflow-y: auto; }
+.done-card .done-files {
+  margin-top: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 2px 0 0 18px;
+  padding: 0;
+  border-left: 0;
+}
+.done-actions:not(.more) .more-act { display: none; }
+
+/* The card's ⋯ is as visible as Undo. */
+.done-actions .done-more {
+  width: 26px;
+  padding: 0;
+  margin-left: 0;
+  color: var(--text-2);
+}
+.done-actions .done-more.on { color: var(--text); background: var(--bg-4); }
+.where.quiet { margin-top: 6px; font-size: 11px; }
+.where.quiet .where-head svg { opacity: .7; }
+.done-card .no-visual {
+  margin-top: 8px;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+}
+.msg.error.soft { border-left-color: var(--line-2); color: var(--muted); font-size: 12px; }
+.msg.error.soft svg { color: var(--warn); }
+.ctx-meter circle { fill: none; stroke-width: 2.2; }
+.ctx-track { stroke: var(--line-2); }
+.ctx-fill { stroke: var(--text-2); stroke-linecap: round; }
+.ctx-meter.mid .ctx-fill { stroke: var(--warn); }
+.ctx-meter.high .ctx-fill { stroke: var(--bad); }
+.ctx-meter.high { color: var(--bad-fg, #ff8aa0); }
+.limit-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 176, 32, .35);
+  background: rgba(255, 176, 32, .08);
+  color: var(--warn-fg, #ffcf73);
+}
+.limit-banner.rejected {
+  border-color: rgba(255, 77, 109, .4);
+  background: rgba(255, 77, 109, .08);
+  color: var(--bad-fg, #ff8aa0);
+}
+.reading-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 2px;
+}
+.reading-file.now { color: var(--text-2); }
+
+/* Result card: a single summary line, plain file rows. */
+.done-head .done-meta { flex: 0 0 auto; margin-left: 2px; }
+.done-head .done-meta:not(:empty)::before { content: '· '; }
+.done-head > .no-visual-tag, .done-head > .commit-chip { margin-left: auto; }
+.done-card .done-files button.icon-btn { border: 0; background: none; }
+
+/* Work log: one row style; thinking isn't italic; settled approvals are a quiet line; nothing spills sideways. */
+.work-log, .work-body, .tool-row, .tool-head { min-width: 0; }
+.approval:not(.pending) { border: 0; background: none; padding: 2px 8px; }
+.approval:not(.pending) .approval-head { font-size: 12px; }
+.approval:not(.pending) .approval-head b { font-weight: 600; color: var(--text-2); }
+.side-empty span { font-size: 12px; color: var(--muted); }
+.tool-approved::before { content: '· '; }
+
+/* Fade the bottom only when scrolled up (that's when Latest shows); at the bottom, content sits close to the composer. */
+.chat-wrap > .chat {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 12px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+}
+.chat-wrap > .to-latest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: auto;
+  z-index: 4;
+  bottom: 18px;
+}
+:root[data-density="compact"] .chat { gap: 6px; padding-top: 10px; }
+:root[data-density="compact"] .msg.agent { line-height: 1.5; }
+:root[data-density="compact"] .done-card { padding: 8px 10px; }
+.chat > .msg, .chat > .done-card, .chat > .work-log, .chat > .plan-card, .chat > .approval, .chat > .quick-replies {
+  animation: enter .18s ease-out both;
+}
+.resume-btn { margin-left: 8px; font-size: 12px; }
+.chat-wrap.away > .chat {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%);
+}
+
+/* Links in the transcript are neutral, not brand-coloured. */
+.chat .link-btn, .where .link-btn {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 2px;
+}
+
+/* Even row hover in cards, and visible keyboard focus everywhere. */
+.done-card .done-files li > * { border-radius: 6px; }
+.done-card .done-files li:hover > * { background: var(--bg-3); }
+.timeline .diff-head { display: flex; align-items: center; gap: 10px; }
+.timeline .diff-head h3 { margin: 0; font-size: 14px; }
+.timeline-stage img {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  display: block;
+}
+.timeline-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.timeline-caption b {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-scrub { width: 100%; accent-color: var(--text-2); }
+.timeline-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.timeline-strip button {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 60px;
+  padding: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  opacity: .7;
+}
+.timeline-strip button.on { opacity: 1; border-color: var(--text-2); box-shadow: 0 0 0 1px var(--text-2); }
+.timeline-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.timeline-empty { padding: 40px; text-align: center; color: var(--muted); }
+
+/* Bottom fade whenever there's more below. */
+.chat-wrap.more-below > .chat {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 64px), transparent 100%);
+}
+.turn-summary i { font-style: normal; }
+.turn-summary .add { color: var(--add-fg, #9ff0d6); }
+.turn-summary .del { color: var(--del-fg, #ffb3c1); }
+
+/* ---- the chat reads as one flow: steps, plan and result blend in instead of sitting in boxes ---- */
+.work-log, .plan-card, .done-card {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+.work-head, .plan-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 3px 2px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+}
+.work-head:hover, .plan-head:hover { color: var(--text-2); background: none; }
+.plan-head span { color: var(--muted); font-size: 11.5px; }
+.plan-card li.completed { color: var(--muted); }
+.plan-card.live {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+  box-shadow: 0 6px 10px -6px var(--bg);
+}
+.where, .done-card .no-visual { margin-left: 20px; }
+.done-card.fail .done-head { color: var(--bad-fg, #ff8aa0); }
+.done-card.ok .done-files, .done-card.ok .where, .done-card.ok .no-visual, .done-card.ok .shot-strip {
+  margin-left: 2px;
+}
+.done-card.ok .done-actions { margin-left: -2px; }
+.file-row:hover { background: var(--bg-3); color: var(--text); }
+.file-row.on { background: var(--bg-4); color: var(--text); }

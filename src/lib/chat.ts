@@ -1,7 +1,7 @@
-import type { Breakpoint } from '../components/DeviceBar';
-import type { FrameTarget } from '../components/BrowserView';
+import type { Breakpoint } from '../components/page/DeviceBar';
+import type { FrameTarget } from '../components/page/BrowserView';
 import { uid } from './draw';
-import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, FlowResult, NetworkFailure, PageEnv, PlanStep, RequestNote } from './types';
+import type { A11yIssue, AgentId, Annotation, ChatItem, ConsoleEntry, FlowResult, NetworkFailure, PageEnv, PlanStep, RequestNote } from '../types';
 
 export interface AgentRequest {
   url: string; title: string; viewport: { width: number; height: number; responsive?: boolean };
@@ -43,7 +43,7 @@ export function mergeRequests(reqs: AgentRequest[]): AgentRequest {
   };
 }
 
-export type Delta = { kind: 'text' | 'thinking'; text: string };
+type Delta = { kind: 'text' | 'thinking'; text: string };
 export function mergeDeltas(items: ChatItem[], buf: Delta[]): ChatItem[] {
   if (!buf.length) return items;
   const next = [...items];

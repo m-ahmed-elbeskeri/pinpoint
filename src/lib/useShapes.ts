@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Shape } from './types';
+import type { Shape } from '../types';
 
 export function useShapes() {
   const [shapes, setShapes] = useState<Shape[]>([]);

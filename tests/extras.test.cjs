@@ -64,7 +64,7 @@ app.whenReady().then(async () => {
   const js = (code) => wc.executeJavaScript(code);
 
   try {
-    const tailwind = require(path.join(repo, 'electron', 'tailwind.cjs'));
+    const tailwind = require(path.join(repo, 'electron', 'page', 'tailwind.cjs'));
     const v4 = await tailwind.generate(proj, { entry: path.join(proj, 'src', 'app.css'), config: '' }, ['p-7', 'bg-brand', 'hover:underline', 'definitely-not-a-class']);
     log('tailwind 4: generates the asked utilities', v4.includes('.p-7') && v4.includes('.bg-brand') && /hover\\:underline/.test(v4) && !v4.includes('definitely-not'), `${v4.length} bytes`);
     log('tailwind 4: theme token carried, base styles left out', v4.includes('--color-brand') && !/@layer base/.test(v4) && !/box-sizing:\s*border-box/.test(v4));

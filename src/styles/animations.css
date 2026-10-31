@@ -1,0 +1,12 @@
+/* Shared @keyframes. */
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes slide { from { transform: translateX(24px); opacity: 0; } }
+@keyframes caret { 50% { opacity: 0; } }
+@keyframes breathe { 50% { opacity: .45; } }
+@keyframes recpulse { 50% { opacity: .55; } }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+@keyframes menu-in { from { opacity: 0; transform: translateY(3px) scale(.985); } }

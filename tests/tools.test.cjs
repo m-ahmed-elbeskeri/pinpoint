@@ -141,7 +141,7 @@ app.whenReady().then(async () => {
   } catch (err) { log('exception', false, err.stack); }
 
   try {
-    const routecheck = require(path.join(repo, 'electron', 'routecheck.cjs'));
+    const routecheck = require(path.join(repo, 'electron', 'page', 'routecheck.cjs'));
     const check = routecheck.begin(proj, [], base + '/');
     const perf = await routecheck.finishPerf(check);
     log('perf probe', !!perf && perf.after.js > 100000 && perf.after.nodes > 5 && perf.after.requests >= 3, JSON.stringify(perf && perf.after));

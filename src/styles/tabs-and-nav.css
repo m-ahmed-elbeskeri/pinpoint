@@ -1,0 +1,149 @@
+/* Browser tabs and the navigation bar. */
+
+.nav-btns, .top-right, .mode-seg, .project-btn { flex-shrink: 0; }
+.nav-btns { display: flex; gap: 2px; }
+.urlbar {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 4px 0 12px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.urlbar input {
+  flex: 1;
+  background: none;
+  border: 0;
+  outline: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 0;
+}
+.url-icon { color: var(--muted); flex-shrink: 0; }
+.pin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.pin-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  font-size: 11.5px;
+}
+.pin-list li small { color: var(--muted); font-size: 10.5px; }
+.pin-list li small.err { color: var(--bad-fg); }
+.pin-list .chip { height: 19px; font-size: 10.5px; }
+.tabbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 25;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 0 8px 0 6px;
+  background: var(--bg-2);
+  height: 34px;
+  padding-right: 6px;
+  border-bottom: 0;
+}
+.tab:hover { background: var(--bg-3); color: var(--text); }
+.tab.on {
+  color: var(--text);
+  margin-bottom: 0;
+  height: 30px;
+  background: var(--bg-3);
+  border-color: transparent;
+}
+.tab > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-x:hover { background: var(--bg-4); color: var(--text); }
+.tab-new:hover { background: var(--bg-3); color: var(--text); }
+.tabbar .vp-toggles {
+  align-self: center;
+  border-left: 0;
+  padding-left: 0;
+  margin-left: 0;
+}
+.navbar {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  right: 0;
+  z-index: 24;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--line);
+}
+.navbar .nav-btns .icon-btn { width: 28px; height: 28px; }
+.navbar .urlbar { height: 28px; border-radius: 8px; }
+.navbar .vp-toggles { border-left: 0; padding-left: 0; margin-left: 0; }
+@container stage (max-width: 560px) {
+  .navbar .vp-toggles > button:nth-of-type(-n+3) { display: none; }
+}
+@container stage (max-width: 420px) {
+  .navbar .vp-toggles { display: none; }
+}
+.tab-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 8px;
+  background: rgba(255, 77, 109, .18);
+  color: var(--bad-fg);
+  font: 600 10px/1 var(--mono);
+}
+.urlbar:focus-within { border-color: var(--ring); box-shadow: none; }
+
+/* Toolbar details: the tab shows its dot or its ✕, the site pill is quiet. */
+.tab .tab-x { opacity: 0; }
+.tab:hover .tab-x, .tab.on .tab-x { opacity: 1; }
+.tab:hover .tab-pin, .tab.on .tab-pin { display: none; }
+.nav-pins .chip:hover { background: var(--bg-4); }
+.plus-menu {
+  position: absolute;
+  top: 32px;
+  z-index: 60;
+  min-width: 190px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .42);
+  animation: menu-in .14s ease-out;
+}
+.tool-count {
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--bad);
+  color: #fff;
+  font: 700 9.5px/14px var(--mono);
+  text-align: center;
+}
+.tool-tab .live-dot { margin-left: 2px; flex-shrink: 0; }

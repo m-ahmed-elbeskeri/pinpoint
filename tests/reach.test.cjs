@@ -88,9 +88,9 @@ server.listen(0, '127.0.0.1', () => {
   const site = require(path.join(OUT, 'site.cjs'));
   const sweepLib = require(path.join(OUT, 'sweep.cjs'));
   const { flowVerdict } = require(path.join(OUT, 'flow.cjs'));
-  const { buildPrompt, buildVerifyPrompt } = require(path.join(repo, 'electron', 'prompt.cjs'));
-  const gitx = require(path.join(repo, 'electron', 'git.cjs'));
-  const runs = require(path.join(repo, 'electron', 'runs.cjs'));
+  const { buildPrompt, buildVerifyPrompt } = require(path.join(repo, 'electron', 'prompt', 'index.cjs'));
+  const gitx = require(path.join(repo, 'electron', 'git', 'index.cjs'));
+  const runs = require(path.join(repo, 'electron', 'project', 'runs.cjs'));
 
   app.whenReady().then(async () => {
     const win = await started(electron);

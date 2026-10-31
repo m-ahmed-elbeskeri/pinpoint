@@ -170,7 +170,7 @@ server.listen(0, '127.0.0.1', () => {
       await shot('end');
       log('no errors in the app console', errors.length === 0, errors.join(' | ').slice(0, 400));
 
-      const cssrules = require(path.join(repo, 'electron', 'cssrules.cjs'));
+      const cssrules = require(path.join(repo, 'electron', 'page', 'cssrules.cjs'));
       log('cssrules module loads', typeof cssrules.matched === 'function');
     } catch (err) { log('exception', false, err.stack); }
     server.close();

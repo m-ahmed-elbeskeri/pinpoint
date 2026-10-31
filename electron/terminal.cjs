@@ -4,6 +4,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const KEEP = 200_000;
+const SHELLS_CACHE_MS = 60000;
 
 let pty = null;
 function lib() {
@@ -25,7 +26,7 @@ function onPath(name) {
 
 let found = null;
 function shells() {
-  if (found && Date.now() - found.at < 60000) return found.list;
+  if (found && Date.now() - found.at < SHELLS_CACHE_MS) return found.list;
   found = { at: Date.now(), list: findShells() };
   return found.list;
 }
@@ -47,12 +48,12 @@ function findShells() {
       try {
         const out = execFileSync(wsl, ['-l', '-q'], { encoding: 'utf16le', timeout: 3000, windowsHide: true });
         if (out.replace(/\0/g, '').trim()) add('wsl', 'WSL', wsl);
-      } catch {  }
+      } catch { /* no distributions */ }
     }
   } else {
     const names = { zsh: 'zsh', bash: 'Bash', fish: 'fish', sh: 'sh', nu: 'Nushell', pwsh: 'PowerShell', ksh: 'ksh', tcsh: 'tcsh', dash: 'dash' };
     let files = [];
-    try { files = fs.readFileSync('/etc/shells', 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')); } catch {  }
+    try { files = fs.readFileSync('/etc/shells', 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')); } catch { /* not there */ }
     for (const file of [process.env.SHELL, ...files, onPath('pwsh')].filter(Boolean)) {
       const base = path.basename(file);
       add(base, names[base] || base, file, base === 'pwsh' ? ['-NoLogo'] : ['-l']);
@@ -118,13 +119,13 @@ function write(id, data) { const s = sessions.get(id); if (s && !s.exited) s.pro
 function resize(id, cols, rows) {
   const s = sessions.get(id);
   if (!s || s.exited || !(cols > 1) || !(rows > 1)) return;
-  try { s.proc.resize(Math.floor(cols), Math.floor(rows)); s.cols = Math.floor(cols); s.rows = Math.floor(rows); } catch {  }
+  try { s.proc.resize(Math.floor(cols), Math.floor(rows)); s.cols = Math.floor(cols); s.rows = Math.floor(rows); } catch { /* already gone */ }
 }
 function close(id) {
   const s = sessions.get(id);
   if (!s) return;
   sessions.delete(id);
-  if (!s.exited) { try { s.proc.kill(); } catch {  } }
+  if (!s.exited) { try { s.proc.kill(); } catch { /* already gone */ } }
 }
 function closeAll() { for (const id of [...sessions.keys()]) close(id); }
 

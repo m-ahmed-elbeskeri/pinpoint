@@ -415,7 +415,7 @@ server.listen(0, '127.0.0.1', () => {
 
       log('no errors in the app console', errors.length === 0, errors.join(' | '));
       try { fs.writeFileSync(path.join(OUT, 'chats-end.png'), (await host.capturePage()).toPNG()); } catch {  }
-    } catch (e) { log('exception', false, e.stack); }
+    } catch (e) { log('exception', false, `${e.stack} | console: ${errors.slice(-3).join(' | ')}`); }
     server.close();
     fs.appendFileSync(path.join(OUT, 'chats.out'), '[done]' + String.fromCharCode(10));
     app.exit(0);

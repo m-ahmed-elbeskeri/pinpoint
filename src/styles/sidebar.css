@@ -1,0 +1,208 @@
+/* Chats sidebar: project tree, threads, history. */
+
+.history-menu { width: 300px; }
+.history-item { cursor: pointer; }
+.history-item .icon-btn { opacity: 0; }
+.history-item:hover .icon-btn { opacity: 1; }
+.history-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+.threads-head button { -webkit-app-region: no-drag; }
+.threads-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -.005em;
+}
+.threads-head .icon-btn { color: var(--muted); }
+.threads-actions { display: grid; gap: 6px; padding: 0 8px 6px; }
+.threads-new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 500;
+  transition: background .12s;
+}
+.threads-new:hover:not(:disabled) { background: var(--bg-4); }
+.threads-new kbd, .threads-foot kbd { margin-left: auto; opacity: 0; transition: opacity .12s; }
+.threads-new:hover kbd, .threads-foot button:hover kbd { opacity: 1; }
+.threads-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  cursor: text;
+  transition: border-color .12s;
+}
+.threads-search:focus-within { border-color: var(--ring); }
+.threads-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  font-size: 12.5px;
+}
+.threads-search input::placeholder { color: var(--muted); }
+.threads-label {
+  padding: 14px 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.threads-empty {
+  padding: 4px 8px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.proj-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background .12s, color .12s;
+}
+.proj-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-row svg { flex-shrink: 0; color: var(--muted); }
+.proj-row:hover:not(:disabled) { background: var(--bg-3); color: var(--text); }
+.proj-row.current { color: var(--text); font-weight: 600; margin-top: 4px; }
+.proj-row.add { color: var(--muted); }
+.thread {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 4px 0 2px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.thread:hover { background: var(--bg-3); color: var(--text); }
+.thread.on { background: var(--bg-4); color: var(--text); cursor: default; }
+.thread.finished .thread-title { color: var(--text); font-weight: 500; }
+.thread.running .thread-time { color: var(--accent-2); }
+.thread:hover .thread-x, .thread-x.confirm { display: grid; }
+.thread:hover .thread-time, .thread:has(.thread-x.confirm) .thread-time { display: none; }
+.thread-x:hover { color: #ff8aa0; background: rgba(255, 77, 109, .12); }
+.thread-x.confirm, .thread-x.confirm:hover { color: #fff; background: var(--bad); }
+.threads-foot svg { color: var(--muted); }
+
+/* A chat that finished while you were elsewhere: bold title and "done" in place of the time. */
+.thread.finished .thread-time { color: var(--ok); }
+.task:hover { background: var(--bg-3); color: var(--text); }
+.task.done .thread-state { color: var(--ok); }
+.task.failed .thread-state { color: var(--bad); }
+.task:hover .thread-x { display: grid; }
+
+/* ---- project tree: other projects expand to show their chats ---- */
+.proj-node .proj-row { cursor: pointer; }
+.proj-chev { color: var(--muted); transition: transform .12s; margin-left: -2px; }
+.proj-row.open .proj-chev { transform: rotate(90deg); }
+.proj-go {
+  display: none;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--bg-4);
+}
+.proj-row:hover .proj-go { display: block; }
+.proj-go:hover { color: var(--text); }
+.thread.nested { padding-left: 14px; }
+.threads-empty.nested { padding: 2px 8px 6px 32px; }
+
+/* ---- chat menu: rename, pin, archive, export, delete ---- */
+.thread-more.open { display: grid; color: var(--text); background: var(--bg-4); }
+.thread:has(.thread-more.open) .thread-time { display: none; }
+.thread-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 2px;
+  min-width: 190px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .4);
+  animation: pop .1s ease-out;
+  z-index: 40;
+}
+.thread-menu button.danger:hover { color: var(--bad-fg, #ff8aa0); }
+.thread-pinned { margin-right: 5px; color: var(--muted); vertical-align: -1px; }
+.threads-more {
+  display: block;
+  width: 100%;
+  padding: 8px 8px 2px;
+  text-align: left;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.threads-more:hover { color: var(--text-2); }
+.thread-x.confirm:not(.thread-more), .thread-x.confirm:not(.thread-more):hover {
+  color: #fff;
+  background: var(--bad);
+}
+.threads-foot button span, .threads-foot kbd { display: none; }
+.threads-foot .spacer { flex: 1; }
+
+/* ---- text size, density, enter motion, rewind, resume, failed chats ---- */
+:root[data-text-size="small"] :is(.threads,.topbar,.panel,.drawer-wrap,.statusbar) { zoom: .92; }
+:root[data-text-size="large"] :is(.threads,.topbar,.panel,.drawer-wrap,.statusbar) { zoom: 1.1; }
+:root[data-density="compact"] .thread, :root[data-density="compact"] .task, :root[data-density="compact"] .proj-row {
+  height: 26px;
+}
+:root[data-density="compact"] .threads-label { padding-top: 10px; }
+.thread-time.failed { color: var(--bad-fg, #ff8aa0); }
+
+/* ---- the folder opens a menu: file manager, editor, terminal, path, switch ---- */
+.proj-anchor, .proj-node { position: relative; }
+.proj-caret { margin-left: auto; opacity: 0; color: var(--muted); }
+.proj-row:hover .proj-caret, .proj-row.open .proj-caret { opacity: 1; }
+.proj-row.open { background: var(--bg-3); }
+.proj-menu {
+  top: 32px;
+  left: 4px;
+  right: auto;
+  min-width: 210px;
+}
+.proj-menu button:disabled { opacity: .5; }

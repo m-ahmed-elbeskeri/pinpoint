@@ -1,6 +1,16 @@
-import type { Rect } from './types';
+import type { Rect } from '../types';
 
 export const errText = (e: unknown) => String((e as Error)?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+
+export function shortPath(p: string, root: string) {
+  if (!p) return p;
+  const norm = (s: string) => s.replace(/\\/g, '/');
+  const r = norm(root).replace(/\/$/, '');
+  const n = norm(p);
+  return r && n.toLowerCase().startsWith(r.toLowerCase() + '/') ? n.slice(r.length + 1) : n;
+}
+
+export const pinSelector =(uid: string) => `[data-pinpoint="${uid}"]`;
 
 export function readImage(file: File, maxEdge = 1800): Promise<string> {
   return new Promise((resolve, reject) => {

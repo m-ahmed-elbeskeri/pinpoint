@@ -1,0 +1,76 @@
+/* Start screen and first run. */
+
+.welcome {
+  --T: 7.5s;
+  --y: #ffd60a;
+  --r: #ff4f3a;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  padding: 40px;
+  container: welcome / inline-size;
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome *, .welcome *::before, .welcome *::after {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+  }
+}
+
+/* ---- start screen: just the logo and what you can do next ---- */
+.welcome.clean { display: grid; place-items: center; background: var(--bg); }
+.start .logo-mark { opacity: .9; }
+.start-project span { font: 400 11.5px var(--mono); color: var(--muted); }
+.start-btn:hover { background: var(--bg-4); color: var(--text); }
+.start-btn.primary { background: var(--text); border-color: transparent; color: #0b0b0d; }
+.start-btn.primary:hover { background: #fff; }
+
+/* First run */
+.onb {
+  position: relative;
+  width: min(520px, 100%);
+  padding: 14px 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--bg-2);
+  text-align: left;
+}
+.onb h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.onb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+.onb-row.off .onb-name { color: var(--muted); }
+.onb-name small { margin-left: 8px; color: var(--muted); font-size: 11px; }
+.onb-tick { color: var(--text-2); }
+.onb-cmd code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 11px var(--mono, ui-monospace, monospace);
+  background: none;
+  padding: 0;
+}
+.onb-cmd svg { flex: none; }
+.onb-cmd:hover { color: var(--text); background: var(--bg-4); }
+.onb-hint { margin: 2px 0 6px; color: var(--muted); font-size: 11.5px; }
+.onb-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}

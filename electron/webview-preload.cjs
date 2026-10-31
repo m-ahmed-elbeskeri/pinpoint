@@ -13,7 +13,7 @@ try {
         on: noop, off: noop, emit: noop, sub: () => noop },
     });
   })()`);
-} catch {  }
+} catch { /* no main world yet (about:blank) */ }
 
 try {
   webFrame.executeJavaScript(`(() => {
@@ -34,7 +34,7 @@ try {
       for (const run of state.held.splice(0)) { try { run(); } catch (err) { console.error(err); } }
     } });
   })()`);
-} catch {  }
+} catch { /* no main world yet */ }
 
 try {
   webFrame.executeJavaScript(`(() => {
@@ -51,7 +51,7 @@ try {
       if (b instanceof FormData) { const o = []; b.forEach((v, k) => o.push(k + '=' + (typeof v === 'string' ? v : '[file]'))); return clip(o.join('&')); }
       return '[binary]';
     };
-    const report = (entry) => { try { document.dispatchEvent(new CustomEvent('pinpoint-net', { detail: JSON.stringify(entry) })); } catch (err) {} };
+    const report = (entry) => { try { document.dispatchEvent(new CustomEvent('pinpoint-net', { detail: JSON.stringify(entry) })); } catch (err) { /* the page broke dispatch: lose this entry */ } };
     const absolute = (u) => { try { return new URL(u, location.href).href; } catch (err) { return String(u); } };
 
     const nativeFetch = window.fetch;
@@ -80,7 +80,7 @@ try {
           this.addEventListener('loadend', () => {
             const type = this.getResponseHeader('content-type') || '';
             let resBody = '';
-            try { resBody = this.responseType === '' || this.responseType === 'text' ? clip(this.responseText) : this.responseType === 'json' ? clip(JSON.stringify(this.response)) : '[' + this.responseType + ']'; } catch (err) {}
+            try { resBody = this.responseType === '' || this.responseType === 'text' ? clip(this.responseText) : this.responseType === 'json' ? clip(JSON.stringify(this.response)) : '[' + this.responseType + ']'; } catch (err) { /* body not readable as text */ }
             report(Object.assign(entry, { ms: Math.round(performance.now() - started), status: this.status, type, resBody }, this.status === 0 ? { error: 'The request did not complete' } : null));
           });
         }
@@ -88,10 +88,10 @@ try {
       };
     }
   })()`);
-} catch {  }
+} catch { /* no main world yet */ }
 
 document.addEventListener('pinpoint-net', (e) => {
-  try { ipcRenderer.sendToHost('net', JSON.parse(e.detail)); } catch {  }
+  try { ipcRenderer.sendToHost('net', JSON.parse(e.detail)); } catch { /* malformed entry, or the host is gone */ }
 });
 
 let mode = 'browse';
@@ -330,7 +330,7 @@ function selectorFor(el) {
     }
     parts.unshift(part);
     const sel = parts.join(' > ');
-    try { if (document.querySelectorAll(sel).length === 1) return sel; } catch {  }
+    try { if (document.querySelectorAll(sel).length === 1) return sel; } catch { /* keep climbing */ }
     cur = parent;
   }
   return parts.join(' > ');
@@ -596,7 +596,7 @@ function setFrozen(on, fromPage) {
   if (on === frozen) return;
   frozen = on;
   if (on) document.querySelectorAll(':hover').forEach((el) => { if (!isOurs(el)) el.setAttribute('data-pinpoint-hover', ''); });
-  try { webFrame.executeJavaScript(`window.__pinpointFreeze && window.__pinpointFreeze(${on ? 'true' : 'false'})`); } catch {  }
+  try { webFrame.executeJavaScript(`window.__pinpointFreeze && window.__pinpointFreeze(${on ? 'true' : 'false'})`); } catch { /* page is gone */ }
   if (fromPage) ipcRenderer.sendToHost('frozen', on);
 }
 

@@ -20,8 +20,8 @@ function parseArgs(argv) {
 const say = (s) => process.stdout.write(s + '\n');
 
 async function capture(args) {
-  const routecheck = require('./routecheck.cjs');
-  const { listRoutes } = require('./routes.cjs');
+  const routecheck = require('./page/routecheck.cjs');
+  const { listRoutes } = require('./project/routes.cjs');
   if (!args.url || !args.out) throw new Error('capture needs --url=<address> and --out=<folder>');
   const base = String(args.url).replace(/\/$/, '');
   const project = path.resolve(args.project || '.');
@@ -52,7 +52,7 @@ async function capture(args) {
 }
 
 async function compare(args) {
-  const routecheck = require('./routecheck.cjs');
+  const routecheck = require('./page/routecheck.cjs');
   if (!args.before || !args.after) throw new Error('compare needs --before=<folder> and --after=<folder>');
   const read = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   const before = read(args.before), after = read(args.after);
@@ -64,7 +64,7 @@ async function compare(args) {
     const b = before.routes.find((r) => r.key === a.key);
     if (a.failed) { rows.push({ route: a.route, status: 'did not load' }); changed++; continue; }
     if (!b || b.failed) { rows.push({ route: a.route, status: 'new page' }); continue; }
-    const diff = routecheck.compare(
+    const diff = await routecheck.compare(
       { jpg: fs.readFileSync(path.join(args.before, `${a.key}.jpg`)), noisy: b.noisy },
       { jpg: fs.readFileSync(path.join(args.after, `${a.key}.jpg`)), noisy: a.noisy },
     );
@@ -98,7 +98,7 @@ async function compare(args) {
 }
 
 async function buildSize(args) {
-  const buildsize = require('./buildsize.cjs');
+  const buildsize = require('./project/buildsize.cjs');
   const { now, previous } = await buildsize.measure(path.resolve(args.project || '.'));
   const kb = (n) => Math.round(n / 102.4) / 10;
   say(`JS ${kb(now.jsGzip)} kB gzipped (${kb(now.js)} kB), CSS ${kb(now.cssGzip)} kB gzipped (${kb(now.css)} kB), ${now.files} files${previous ? `; JS ${now.jsGzip - previous.jsGzip >= 0 ? '+' : ''}${kb(now.jsGzip - previous.jsGzip)} kB since last measured` : ''}`);

@@ -1,4 +1,4 @@
-import type { Rect, Shape } from './types';
+import type { Rect, Shape } from '../types';
 
 export const COLORS = ['#ff4f3a', '#ffd60a', '#2f7bff', '#12b76a', '#ff8a00', '#111318', '#ffffff'];
 export const ANNOTATION_COLORS = ['#ff4f3a', '#2f7bff', '#12b76a', '#ff8a00', '#111318', '#e0368a', '#0fb5c9'];
@@ -94,7 +94,7 @@ export function renderShapes(ctx: CanvasRenderingContext2D, shapes: Shape[]) {
   for (const s of shapes) drawShape(ctx, s);
 }
 
-export function shapeBounds(s: Shape): Rect {
+function shapeBounds(s: Shape): Rect {
   if (s.tool === 'text') {
     const lines = (s.text || '').split('\n');
     const w = Math.max(...lines.map((l) => l.length)) * (7 + s.size * 1.9);

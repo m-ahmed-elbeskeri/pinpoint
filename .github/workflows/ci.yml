@@ -39,7 +39,7 @@ jobs:
 
       - name: Syntax-check main process
         shell: bash
-        run: for f in electron/*.cjs; do node --check "$f"; done
+        run: find electron -name "*.cjs" -print0 | xargs -0 -n1 node --check
 
       # The suites that don't open a window: source edits, CI mode, page tools.
       # New on hosted runners, so a failure here is reported without failing the build.

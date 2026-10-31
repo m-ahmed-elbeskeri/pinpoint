@@ -27,7 +27,7 @@ function locate(uid: string) {
         f = decodeURIComponent(new URL(f).pathname);
         f = f.replace(/^\/@fs\//, '').replace(/^\/_next\/static\/chunks\//, '');
       }
-    } catch {  }
+    } catch { /* keep raw */ }
     return f.replace(/[?#].*$/, '');
   };
   const vendor = /node_modules|react-dom|react-server|scheduler|\/chunks\/|jsx-dev-runtime|\.vite\/deps/;
@@ -118,7 +118,7 @@ function locate(uid: string) {
     try {
       const comp = ng.getOwningComponent(el) || ng.getComponent(el);
       if (comp) { out.framework = 'Angular'; out.components = [comp.constructor.name.replace(/^_/, '')]; }
-    } catch {  }
+    } catch { /* not in dev mode */ }
   }
 
   if (out.file) out.file = cleanFile(out.file);

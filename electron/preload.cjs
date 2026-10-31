@@ -151,5 +151,7 @@ contextBridge.exposeInMainWorld('pinpoint', {
   startDev: (command) => ipcRenderer.invoke('dev:start', { command }),
   detectDev: () => ipcRenderer.invoke('dev:detect'),
   stopDev: () => ipcRenderer.invoke('dev:stop'),
+  startService: (command, label) => ipcRenderer.invoke('dev:serviceStart', { command, label }),
+  stopService: (command) => ipcRenderer.invoke('dev:serviceStop', command),
   onDevEvent: on('dev:event'),
 });

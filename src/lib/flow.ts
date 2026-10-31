@@ -1,4 +1,4 @@
-import type { FlowResult } from './types';
+import type { FlowResult } from '../types';
 
 export function flowVerdict(f: FlowResult) {
   const stopped = f.done < f.total;

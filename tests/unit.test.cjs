@@ -1,7 +1,7 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const repo = process.cwd();
-const inst = require(path.join(repo, 'electron', 'instant.cjs'));
-const comps = require(path.join(repo, 'electron', 'components.cjs'));
+const inst = require(path.join(repo, 'electron', 'project', 'instant.cjs'));
+const comps = require(path.join(repo, 'electron', 'project', 'components.cjs'));
 let pass = 0, failed = 0;
 const check = (name, ok, extra = '') => { if (ok) pass++; else failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  ' + extra}`); };
 
@@ -64,7 +64,7 @@ const prop = (n) => card.props.find((p) => p.name === n);
 check('components found with their export kind', found.length === 2 && card && !card.isDefault && found.find((c) => c.name === 'Page').isDefault, JSON.stringify(found.map((c) => c.name)));
 check('prop types and defaults read from the source', prop('title').type === 'string' && prop('title').required && prop('size').type === 'enum' && prop('size').options.join() === 'sm,md,lg' && prop('size').default === 'md' && prop('featured').type === 'boolean' && prop('count').type === 'number' && prop('children').type === 'node' && !prop('onClick'), JSON.stringify(card.props));
 
-const runsLib = require(path.join(repo, 'electron', 'runs.cjs'));
+const runsLib = require(path.join(repo, 'electron', 'project', 'runs.cjs'));
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hunk-'));
   const dir = path.join(root, '.pinpoint', 'runs', 'r1');
@@ -87,8 +87,8 @@ const runsLib = require(path.join(repo, 'electron', 'runs.cjs'));
   check('reverting the last hunk restores the file and marks it reverted', fs.readFileSync(path.join(root, 'a.txt'), 'utf8') === before && r.restored.includes('a.txt') && r.allReverted);
 }
 
-const { translate } = require(path.join(repo, 'electron', 'agent-generic.cjs'));
-const { harnesses, splitArgs } = require(path.join(repo, 'electron', 'harnesses.cjs'));
+const { translate } = require(path.join(repo, 'electron', 'agents', 'generic.cjs'));
+const { harnesses, splitArgs } = require(path.join(repo, 'electron', 'agents', 'harnesses.cjs'));
 const tr = (lines) => { const st = { sessionId: null, sawText: false }; return lines.flatMap((l) => translate(l, st) || [{ type: 'unknown' }]); };
 const types = (evts) => evts.map((e) => e.type).join();
 let ev = tr([{ type: 'init', session_id: 'g1', model: 'gemini' }, { type: 'message', role: 'assistant', content: 'Hi', delta: true }, { type: 'tool_use', tool_name: 'replace', tool_id: 't1', parameters: { file_path: 'a.css' } }, { type: 'tool_result', tool_id: 't1', status: 'success', output: 'ok' }, { type: 'result', status: 'success' }]);
@@ -107,7 +107,7 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
 
 // Branches and worktrees: switching parks uncommitted work per branch, compare shows what a PR would contain.
 (async () => {
-  const gitx = require(path.join(repo, 'electron', 'git.cjs'));
+  const gitx = require(path.join(repo, 'electron', 'git', 'index.cjs'));
   const { execFileSync } = require('child_process');
   const top = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-git-'));
   const g = (...a) => execFileSync('git', a, { cwd: top, encoding: 'utf8' }).trim();
@@ -168,7 +168,7 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   fs.rmSync(top + '.worktrees', { recursive: true, force: true });
 
   // Shared rules, handing a chat over, reading a file for the viewer.
-  const project = require(path.join(repo, 'electron', 'project.cjs'));
+  const project = require(path.join(repo, 'electron', 'project', 'store.cjs'));
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-'));
   project.writeMemory(proj, [{ id: 'a', text: 'Mine only', enabled: true, createdAt: 1 }, { id: 'b', text: 'Use pill buttons', enabled: true, createdAt: 2, shared: true }]);
   const rules = fs.readFileSync(path.join(proj, 'PINPOINT.md'), 'utf8');
@@ -248,7 +248,39 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   check('a chat keeps the branch it started on', (await project.loadChat(store, 'c')).branch === 'feature');
   fs.rmSync(store, { recursive: true, force: true });
 
-  const { buildPrompt } = require(path.join(repo, 'electron', 'prompt.cjs'));
+  // Working out how to run a project.
+  const devserver = require(path.join(repo, 'electron', 'project', 'devserver.cjs'));
+  const proj2 = () => fs.mkdtempSync(path.join(os.tmpdir(), 'stack-'));
+  const put = (root, files) => { for (const [f, body] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true }); fs.writeFileSync(path.join(root, f), typeof body === 'string' ? body : JSON.stringify(body)); } return root; };
+  const cands = (files) => { const r = put(proj2(), files); const d = devserver.detect(r); fs.rmSync(r, { recursive: true, force: true }); return d; };
+  let d2 = cands({ 'nx.json': {}, 'package-lock.json': '{}', 'apps/web/project.json': { name: 'web', projectType: 'application', targets: { serve: { executor: '@nx/vite:dev-server', options: { port: 4300 } } } }, 'apps/api/project.json': { name: 'api', targets: { serve: { executor: '@nx/js:node' } } }, 'libs/ui/project.json': { name: 'ui', targets: { build: {} } } });
+  check('Nx: the web app comes first, run through nx, with its port', d2.command === 'npx nx serve web' && d2.candidates[0].port === 4300, JSON.stringify(d2));
+  check('Nx: the API is offered as a service, libraries are not', d2.candidates.some((c) => c.command === 'npx nx serve api' && c.kind === 'api') && !d2.candidates.some((c) => /\bui\b/.test(c.command)), JSON.stringify(d2.candidates));
+  d2 = cands({ 'turbo.json': {}, 'pnpm-lock.yaml': '', 'node_modules/.x': '', 'pnpm-workspace.yaml': 'packages:\n  - "apps/*"\n  - tools/cli\n', 'package.json': { scripts: { dev: 'turbo run dev' } }, 'apps/site/package.json': { name: '@me/site', scripts: { dev: 'next dev -p 3100' } } });
+  check('Turborepo: a package runs through turbo with a filter', d2.command === 'pnpm exec turbo run dev --filter=@me/site' && d2.candidates[0].port === 3100, JSON.stringify(d2));
+  d2 = cands({ 'package.json': { workspaces: ['clients/**'] }, 'clients/admin/panel/package.json': { scripts: { dev: 'vite' } } });
+  check('workspace globs reach any folder', /cd clients.admin.panel && npm run dev/.test(d2.command), JSON.stringify(d2));
+  d2 = cands({ 'frontend/package.json': { scripts: { dev: 'vite' } }, 'frontend/node_modules/.x': '', 'backend/app/main.py': 'from fastapi import FastAPI\napi = FastAPI()\n', 'backend/uv.lock': '' });
+  check('a frontend with a Python API: the page is primary', /frontend && npm run dev/.test(d2.command), JSON.stringify(d2));
+  d2 = cands({ 'backend/main.py': 'from fastapi import FastAPI\napi = FastAPI()\n', 'backend/uv.lock': '' });
+  check('FastAPI: found with its runner, module and app name', /cd backend && uv run uvicorn main:api --reload/.test(d2.command) && d2.candidates[0].kind === 'api' && d2.candidates[0].port === 8000, JSON.stringify(d2));
+  check('Flask', cands({ 'app.py': 'from flask import Flask\napp = Flask(__name__)\n' }).command === 'flask --app app run --debug');
+  check('Django', cands({ 'manage.py': '' }).command === 'python manage.py runserver');
+  check('Go with cmd folders', cands({ 'go.mod': 'module x', 'cmd/api/main.go': '' }).command === 'go run ./cmd/api');
+  check('Rust web service', cands({ 'Cargo.toml': '[dependencies]\naxum = "1"', 'src/main.rs': '' }).command === 'cargo run');
+  check('Spring Boot with the wrapper', cands({ 'pom.xml': '<artifactId>spring-boot</artifactId>', mvnw: '' }).command === './mvnw spring-boot:run');
+  check('.NET', cands({ 'App.csproj': '<Project/>' }).command === 'dotnet watch run');
+  check('Phoenix', cands({ 'mix.exs': '{:phoenix, "~> 1.7"}' }).command === 'mix phx.server');
+  check('Deno tasks', cands({ 'deno.json': { tasks: { dev: 'deno run main.ts' } } }).command === 'deno task dev');
+  d2 = cands({ 'Procfile.dev': 'web: bin/rails s -p $PORT\nworker: bundle exec sidekiq\n' });
+  check('a Procfile lists each service', d2.candidates.some((c) => c.kind === 'web' && /-p 3000/.test(c.command)) && d2.candidates.some((c) => c.kind === 'worker'), JSON.stringify(d2.candidates));
+  check('make and just targets', cands({ Makefile: 'build:\n\tgo build\ndev:\n\tair\n' }).command === 'make dev' && cands({ justfile: 'serve port="1":\n  x\n' }).command === 'just serve');
+  d2 = cands({ 'docker-compose.yml': 'services:\n  web:\n    ports:\n      - "8088:80"\n' });
+  check('Docker Compose with its published port', d2.command === 'docker compose up' && d2.candidates[0].port === 8088, JSON.stringify(d2));
+  check('a plain Vite project is unchanged', cands({ 'package.json': { scripts: { dev: 'vite', build: 'vite build' } }, 'node_modules/.x': '', 'package-lock.json': '{}' }).command === 'npm run dev');
+  check('an empty folder finds nothing', cands({ 'notes.txt': '' }).command === '');
+
+  const { buildPrompt } = require(path.join(repo, 'electron', 'prompt', 'index.cjs'));
   const reqBase = { url: 'http://x/', title: '', viewport: { width: 1000, height: 800 }, instruction: 'Do it', annotations: [], carried: 'User: earlier words' };
   check('a new session is told the earlier conversation', buildPrompt({ request: reqBase, files: {}, projectDir: repo, followUp: false }).includes('earlier words'));
   check('a resumed session is not', !buildPrompt({ request: reqBase, files: {}, projectDir: repo, followUp: true }).includes('earlier words'));

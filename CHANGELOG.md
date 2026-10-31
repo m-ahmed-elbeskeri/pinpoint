@@ -4,6 +4,20 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-31
+
+### Added
+
+- **More project types.** Pinpoint now finds how to run Nx and Turborepo projects, pnpm, Yarn and npm workspaces at any depth, FastAPI, Flask, Django, Go, Rust, Spring Boot, Ktor, Quarkus, .NET, Rails, Laravel, Phoenix and Deno, plus Procfile, Makefile, justfile, Taskfile and Docker Compose. Monorepos run through their own tool.
+- **Run services side by side.** The Dev server tab offers the project's APIs and workers next to the main command, with their output in the same log, labelled.
+- `docs/ARCHITECTURE.md`: how the code is organised and where to add things.
+
+### Changed
+
+- Every menu and popup now closes with Esc.
+- Failures that were silently ignored now surface: review comments that couldn't be delivered, worktree setup problems, unreadable files in a run.
+- Internal: the code was reorganised by feature, with `App.tsx` split into hooks and views, the main process split by area, and CSS split by feature with dead rules removed.
+
 ## [0.11.1] - 2026-10-31
 
 ### Changed

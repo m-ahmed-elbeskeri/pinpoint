@@ -3,7 +3,7 @@ export type BuildKind = 'dev' | 'built' | 'unknown';
 
 const PRIVATE_V4 = /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0$)/;
 
-export function isLocalHost(host: string) {
+function isLocalHost(host: string) {
   const h = host.toLowerCase().replace(/^\[|\]$/g, '');
   if (h === 'localhost' || h === '::1' || PRIVATE_V4.test(h)) return true;
   if (/\.(localhost|local|test|internal|lan|home\.arpa)$/.test(h)) return true;
@@ -39,13 +39,13 @@ export const buildKindScript = `(() => {
   const dev = () => {
     if (has('script[src*="@vite/client"],style[data-vite-dev-id],script[src*="/@id/"],script[src*="/@fs/"],vite-error-overlay,nextjs-portal,script[src*="webpack-hmr"],script[src*="hot-update"],script[src*="livereload"],script[src*="browser-sync"],script[src$="/_next/static/chunks/webpack.js"]')) return true;
     if (window.__vite_plugin_react_preamble_installed__ || window.$RefreshReg$ || window.__sveltekit_dev) return true;
-    try { if (window.__NEXT_DATA__ && window.__NEXT_DATA__.buildId === 'development') return true; } catch (e) {}
-    try { if (window.__NUXT__ && window.__NUXT__.config && window.__NUXT__.config.app && window.__NUXT__.config.app.buildId === 'dev') return true; } catch (e) {}
+    try { if (window.__NEXT_DATA__ && window.__NEXT_DATA__.buildId === 'development') return true; } catch (e) { /* a page global can throw on access */ }
+    try { if (window.__NUXT__ && window.__NUXT__.config && window.__NUXT__.config.app && window.__NUXT__.config.app.buildId === 'dev') return true; } catch (e) { /* a page global can throw on access */ }
     if (Object.keys(window).some((k) => /^(webpackHotUpdate|__webpack_hmr|__turbopack|TURBOPACK|__NEXT_HMR)/.test(k))) return true;
     try {
       const hook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
       if (hook && hook.renderers) for (const r of hook.renderers.values()) if (r && r.bundleType === 1) return true;
-    } catch (e) {}
+    } catch (e) { /* a page global can throw on access */ }
     return false;
   };
   if (dev()) return 'dev';
@@ -60,6 +60,6 @@ export const buildKindScript = `(() => {
     /\\/_nuxt\\/[\\w.~-]+\\.[0-9a-f]{8}\\.(js|css)|\\/_nuxt\\/[\\w-]{8}\\.js/,
   ];
   if (srcs.some((s) => hashed.some((re) => re.test(s)))) return 'built';
-  try { if (window.__NEXT_DATA__ && window.__NEXT_DATA__.buildId) return 'built'; } catch (e) {}
+  try { if (window.__NEXT_DATA__ && window.__NEXT_DATA__.buildId) return 'built'; } catch (e) { /* a page global can throw on access */ }
   return 'unknown';
 })()`;

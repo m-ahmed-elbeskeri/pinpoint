@@ -129,7 +129,7 @@ export const closeWorkspaceScript = 'window.__pinpointWorkspace ? (window.__pinp
 function setStorage(entries: [string, string][]) {
   let changed = false;
   for (const [key, value] of entries) {
-    try { if (localStorage.getItem(key) !== value) { localStorage.setItem(key, value); changed = true; } } catch {  }
+    try { if (localStorage.getItem(key) !== value) { localStorage.setItem(key, value); changed = true; } } catch { /* storage blocked */ }
   }
   return changed;
 }

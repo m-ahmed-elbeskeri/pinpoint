@@ -13,7 +13,7 @@ function matchTokens(uid: string) {
     }
   };
   for (const sheet of [...document.styleSheets]) {
-    try { visit(sheet.cssRules, 0); } catch {  }
+    try { visit(sheet.cssRules, 0); } catch { /* cross-origin sheet */ }
   }
   if (!names.size) return null;
 

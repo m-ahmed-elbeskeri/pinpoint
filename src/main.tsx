@@ -6,12 +6,6 @@ import '@fontsource/jetbrains-mono/latin-400.css';
 import '@fontsource/jetbrains-mono/latin-500.css';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import './styles.css';
-import './features.css';
-import './welcome.css';
-import './git-compare.css';
-import './more.css';
-import './shell.css';
-import './theme-light.css';
+import './styles/index.css';
 
 createRoot(document.getElementById('root')!).render(<App />);

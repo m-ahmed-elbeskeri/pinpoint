@@ -1,0 +1,88 @@
+/* The app frame: panels, the stage, resizers, drag shields, platform and zen adjustments. */
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  grid-template-rows: 52px 1fr;
+  grid-template-areas: 'top top' 'stage panel';
+}
+.app.resizing, .app.resizing * { user-select: none; }
+.resizer { position: absolute; z-index: 30; }
+.resizer.col {
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+}
+.panel.right .resizer.col { left: -4px; }
+.panel.left .resizer.col { right: -4px; }
+.resizer.row {
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 7px;
+  cursor: row-resize;
+}
+.resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  transition: opacity .15s;
+  background: var(--ring);
+}
+.resizer.col::after { width: 2px; }
+.resizer.row::after { height: 2px; }
+.resizer:hover::after, .resizer.on::after { opacity: 1; transition-delay: .08s; }
+.drag-shield { position: fixed; inset: 0; z-index: 9999; }
+.drag-shield.panel { cursor: col-resize; }
+.drag-shield.drawer { cursor: row-resize; }
+.platform-darwin .topbar { padding-left: 88px; }
+.platform-darwin.fullscreen .topbar { padding-left: 12px; }
+:root:not(.platform-darwin) .topbar {
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 10px);
+}
+.stage {
+  grid-area: stage;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  position: relative;
+  container: stage / inline-size;
+}
+
+/* ---- agent panel ---- */
+.panel {
+  grid-area: panel;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  border-left: 1px solid var(--line);
+  container: panel / inline-size;
+  background: var(--bg);
+}
+.panel.left { border-left: 0; border-right: 1px solid var(--line); }
+.platform-darwin .threads-head { padding-left: 84px; }
+.platform-darwin.fullscreen .threads-head { padding-left: 14px; }
+.platform-darwin .app.threads-on .topbar { padding-left: 12px; }
+
+/* Containers that must never scroll: overflow:hidden still lets focus() and scrollIntoView shift them, which pushed the composer up and left a gap under it. */
+html, body, #root, .app { overflow: clip; }
+.panel.side-active > .chat, .panel.side-active > .composer, .panel.side-active > .other-chats { display: none; }
+.panel.side-active > .chat-wrap, .panel.side-active .chat { display: none; }
+
+/* Zen: the page and the chat, nothing else. */
+.app.zen .tabbar { display: none; }
+.app.zen .navbar { top: 0; }
+.app.zen .frame-wrap { top: 40px; }
+
+/* A tool beside the page instead of over it. */
+.stage.split .navbar, .stage.split .frame-wrap { right: 50%; }
+.stage.split .tool-view { left: 50%; border-left: 1px solid var(--line); }
+.stage.split .plus-menu { z-index: 40; }
+.app.zen .tool-view { top: 0; }
+.stage.split .files-panel { grid-template-columns: 170px minmax(0, 1fr); }

@@ -19,7 +19,7 @@ function setProp(uid: string, owner: string, name: string, value: unknown) {
   if (!isCurrent(fiber) && fiber.alternate && isCurrent(fiber.alternate)) fiber = fiber.alternate;
   for (const r of hook.renderers.values()) {
     if (typeof r.overrideProps !== 'function') continue;
-    try { r.overrideProps(fiber, [name], value); return true; } catch {  }
+    try { r.overrideProps(fiber, [name], value); return true; } catch { /* another renderer owns it */ }
   }
   return false;
 }
@@ -38,7 +38,7 @@ function classNames() {
     }
   };
   for (const sheet of [...document.styleSheets]) {
-    try { visit(sheet.cssRules, 0); } catch {  }
+    try { visit(sheet.cssRules, 0); } catch { /* cross-origin sheet */ }
   }
   return [...names].sort();
 }
@@ -54,7 +54,7 @@ function errorOverlay(): string | null {
   const next = document.querySelector('nextjs-portal')?.shadowRoot?.querySelector('[role="dialog"], [data-nextjs-dialog]');
   if (next) return text(next).slice(0, 4000) || null;
   const frame = document.querySelector<HTMLIFrameElement>('#webpack-dev-server-client-overlay');
-  try { if (frame?.contentDocument) return text(frame.contentDocument.body).slice(0, 4000) || null; } catch {  }
+  try { if (frame?.contentDocument) return text(frame.contentDocument.body).slice(0, 4000) || null; } catch { /* not ours to read */ }
   return null;
 }
 export const errorOverlayScript = `(${errorOverlay.toString()})()`;

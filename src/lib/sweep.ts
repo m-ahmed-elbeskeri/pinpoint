@@ -1,6 +1,6 @@
-import type { SweepIssue, SweepPage } from './types';
+import type { SweepIssue, SweepPage } from '../types';
 
-export interface GroupedIssue { issue: SweepIssue; sizes: string[]; everywhere: boolean }
+interface GroupedIssue { issue: SweepIssue; sizes: string[]; everywhere: boolean }
 
 const ORDER = ['phone', 'tablet', 'desktop'];
 const LABEL: Record<string, string> = { phone: 'Phone', tablet: 'Tablet', desktop: 'Desktop' };

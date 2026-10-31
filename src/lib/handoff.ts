@@ -1,5 +1,5 @@
-import { shortPath } from '../components/Chat';
-import type { Annotation, Handoff } from './types';
+import { shortPath } from './util';
+import type { Annotation, Handoff } from '../types';
 
 const pathOnly = (url: string) => { try { const u = new URL(url); return u.pathname + u.search; } catch { return url; } };
 

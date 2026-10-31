@@ -1,0 +1,35 @@
+/* Design tokens: the custom properties everything else reads. */
+
+/* ---- quieter colour: yellow only where it means something (logo, pins, annotate outline) ---- */
+:root {
+  --accent: #ffd60a;
+  --on-accent: #111113;
+  --mark: #ff4f3a;
+  --ok: #1ec99b;
+  --bad: #ff4d6d;
+  --warn: #ffb020;
+  --bad-fg: #ff8aa0;
+  --bad-fg-2: #ff9db0;
+  --warn-fg: #ffcf73;
+  --ok-fg: #7fe3c6;
+  --add-fg: #9ff0d6;
+  --del-fg: #ffb3c1;
+  --info-fg: #9fd8ff;
+  --code-fg: #f1e6b8;
+  --tint: rgba(255, 255, 255, .04);
+  --glass: rgba(19, 20, 25, .92);
+  --glass-solid: rgba(19, 20, 25, .97);
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  --bg: #0b0b0d;
+  --bg-2: #111114;
+  --bg-3: #17171b;
+  --bg-4: #1f1f24;
+  --line: #222227;
+  --line-2: #2d2d34;
+  --text: #ededf0;
+  --text-2: #a3a3ad;
+  --muted: #6f6f7a;
+  --ring: #3b3b44;
+  --accent-2: #d8c770;
+  --accent-soft: rgba(255, 214, 10, .06);
+}

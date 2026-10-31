@@ -1,5 +1,5 @@
 import { uid } from './draw';
-import type { RouteInfo } from './types';
+import type { RouteInfo } from '../types';
 
 export function normalizeUrl(input: string) {
   const s = input.trim();
@@ -12,7 +12,7 @@ export function normalizeUrl(input: string) {
   return 'https://' + s;
 }
 
-export function routeRegex(route: string) {
+function routeRegex(route: string) {
   const body = route.split('/').map((seg) => {
     if (/^\[\[?\.\.\./.test(seg) || seg === '*') return '.*';
     if (/^\[.+\]$/.test(seg) || /^[:$]/.test(seg)) return '[^/]+';

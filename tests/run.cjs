@@ -33,7 +33,7 @@ const out = fs.mkdtempSync(path.join(os.tmpdir(), 'pinpoint-tests-'));
 
 async function helpers() {
   const vite = await import('vite');
-  for (const [name, src] of [['tokens', 'src/lib/tokens.ts'], ['a11y', 'src/lib/a11y.ts'], ['pagetools', 'src/lib/pagetools.ts'], ['inspect', 'src/lib/inspect.ts'], ['DeviceBar', 'src/components/DeviceBar.tsx'], ['site', 'src/lib/site.ts'], ['sweep', 'src/lib/sweep.ts'], ['flow', 'src/lib/flow.ts']]) {
+  for (const [name, src] of [['tokens', 'src/lib/tokens.ts'], ['a11y', 'src/lib/a11y.ts'], ['pagetools', 'src/lib/pagetools.ts'], ['inspect', 'src/lib/inspect.ts'], ['DeviceBar', 'src/components/page/DeviceBar.tsx'], ['site', 'src/lib/site.ts'], ['sweep', 'src/lib/sweep.ts'], ['flow', 'src/lib/flow.ts']]) {
     const r = await vite.transformWithOxc(fs.readFileSync(path.join(repo, src), 'utf8'), src);
     fs.writeFileSync(path.join(out, `${name}.cjs`), r.code.replace(/^import .*$/gm, '').replace(/export const (\w+) =/g, 'exports.$1 =').replace(/export function (\w+)/g, 'exports.$1 = $1; function $1'));
   }
