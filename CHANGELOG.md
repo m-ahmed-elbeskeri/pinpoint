@@ -4,6 +4,18 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-31
+
+### Changed
+
+- **Much faster startup.** Fonts ship with the app instead of coming from the network, rarely used panels load when first opened, and the agent check waits until the window has settled and starts only a few CLIs at a time. The last result shows immediately.
+- **Chats are far lighter.** Screenshots are stored apart from the chat text and the list reads an index, so a project with many chats opens at once and saving no longer freezes the app. Existing chats are converted the first time they're listed.
+- The branch name appears as soon as git answers, without waiting for GitHub.
+
+### Fixed
+
+- Opening a chat no longer saves it, so it stays in its place in the list.
+
 ## [0.11.0] - 2026-10-30
 
 ### Added

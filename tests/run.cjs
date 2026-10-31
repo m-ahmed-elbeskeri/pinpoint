@@ -55,6 +55,7 @@ function run(suite) {
   const lines = text.split('\n').filter((l) => /^(PASS|FAIL)/.test(l));
   const fails = lines.filter((l) => l.startsWith('FAIL'));
   if (suite.runner === 'electron' && !fails.length && !text.includes('[done]')) fails.push('FAIL  the suite did not run to the end');
+  if (!lines.length && !fails.length) fails.push('FAIL  the suite ran no tests (it may not have started)');
   return { pass: lines.filter((l) => l.startsWith('PASS')).length, fails };
 }
 

@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const fsp = fs.promises;
 const path = require('node:path');
 const crypto = require('node:crypto');
 
@@ -11,56 +12,177 @@ function ensureDir(root) {
   if (!fs.existsSync(gi)) fs.writeFileSync(gi, '*\n');
 }
 
-function listChats(root) {
-  const dir = pp(root, 'chats');
+// --- Chat store ---
+// Screenshots are kept out of the chat files, each in a write-once file named by its hash, so saving a chat rewrites
+// only its words. The sidebar reads an index that is only refreshed for files that changed.
+const BLOB_MIN = 2048;
+const BLOB_MARK = 'pp-blob:';
+const chatsDir = (root) => pp(root, 'chats');
+const chatFile = (root, id) => path.join(chatsDir(root), safeId(id) + '.json');
+const blobDir = (root) => path.join(chatsDir(root), 'blobs');
+const knownBlobs = new Set();
+
+function stripBlobs(root, value) {
+  if (typeof value === 'string') {
+    if (value.length < BLOB_MIN || !value.startsWith('data:')) return value;
+    const hash = crypto.createHash('sha1').update(value).digest('hex');
+    const file = path.join(blobDir(root), hash);
+    if (!knownBlobs.has(file)) {
+      fs.mkdirSync(blobDir(root), { recursive: true });
+      if (!fs.existsSync(file)) fs.writeFileSync(file, value);
+      knownBlobs.add(file);
+    }
+    return BLOB_MARK + hash;
+  }
+  if (Array.isArray(value)) return value.map((v) => stripBlobs(root, v));
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = stripBlobs(root, value[k]);
+    return out;
+  }
+  return value;
+}
+
+function blobRefs(value, out = new Set()) {
+  if (typeof value === 'string') { if (value.startsWith(BLOB_MARK)) out.add(value.slice(BLOB_MARK.length)); }
+  else if (Array.isArray(value)) for (const v of value) blobRefs(v, out);
+  else if (value && typeof value === 'object') for (const k of Object.keys(value)) blobRefs(value[k], out);
+  return out;
+}
+
+function fillBlobs(value, blobs) {
+  if (typeof value === 'string') return value.startsWith(BLOB_MARK) ? blobs.get(value.slice(BLOB_MARK.length)) ?? '' : value;
+  if (Array.isArray(value)) return value.map((v) => fillBlobs(v, blobs));
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = fillBlobs(value[k], blobs);
+    return out;
+  }
+  return value;
+}
+
+function metaOf(c) {
+  const last = [...(c.items || [])].reverse().find((it) => it.kind === 'done' || it.kind === 'user');
+  return { id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent, branch: c.branch, failed: last?.kind === 'done' && !last.ok && !last.undone };
+}
+const keptOf = (c) => ({ renamed: c.renamed, pinned: c.pinned, archived: c.archived, branch: c.branch });
+
+// One writer per chat at a time, in order.
+const queues = new Map();
+function inQueue(root, id, job) {
+  const key = chatFile(root, id);
+  const next = (queues.get(key) || Promise.resolve()).catch(() => {}).then(job);
+  queues.set(key, next);
+  const clear = () => { if (queues.get(key) === next) queues.delete(key); };
+  next.then(clear, clear);
+  return next;
+}
+
+const indexes = new Map();
+const indexPath = (root) => pp(root, 'chats-index.json');
+function indexOf(root) {
+  let idx = indexes.get(root);
+  if (!idx) {
+    idx = new Map();
+    try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(indexPath(root), 'utf8')))) idx.set(k, v); } catch { /* none yet */ }
+    indexes.set(root, idx);
+  }
+  return idx;
+}
+const indexTimers = new Map();
+function saveIndexSoon(root) {
+  clearTimeout(indexTimers.get(root));
+  indexTimers.set(root, setTimeout(() => {
+    indexTimers.delete(root);
+    fsp.writeFile(indexPath(root), JSON.stringify(Object.fromEntries(indexOf(root)))).catch(() => {});
+  }, 400));
+  indexTimers.get(root).unref?.();
+}
+
+async function writeChatFile(root, c) {
+  const file = chatFile(root, c.id);
+  const tmp = file + '.' + process.pid + '.tmp';
+  await fsp.writeFile(tmp, JSON.stringify(c));
+  await fsp.rename(tmp, file);
+  const st = await fsp.stat(file);
+  indexOf(root).set(path.basename(file), { mtimeMs: st.mtimeMs, size: st.size, meta: metaOf(c), kept: keptOf(c) });
+  saveIndexSoon(root);
+}
+
+async function readRaw(root, id) {
+  try { return JSON.parse(await fsp.readFile(chatFile(root, id), 'utf8')); } catch { return null; }
+}
+
+async function listChats(root) {
   let files = [];
-  try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')); } catch { return []; }
+  try { files = (await fsp.readdir(chatsDir(root))).filter((f) => f.endsWith('.json')); } catch { return []; }
+  const idx = indexOf(root);
+  let changed = false;
+  for (const k of [...idx.keys()]) if (!files.includes(k)) { idx.delete(k); changed = true; }
   const out = [];
   for (const f of files) {
+    const file = path.join(chatsDir(root), f);
     try {
-      const c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-      const last = [...(c.items || [])].reverse().find((it) => it.kind === 'done' || it.kind === 'user');
-      out.push({ id: c.id, title: c.renamed || c.title, renamed: !!c.renamed, pinned: !!c.pinned, archived: !!c.archived, createdAt: c.createdAt, updatedAt: c.updatedAt, count: c.items?.length || 0, agent: c.agent, branch: c.branch, failed: last?.kind === 'done' && !last.ok && !last.undone });
-    } catch {  }
+      const st = await fsp.stat(file);
+      let row = idx.get(f);
+      if (!row || row.mtimeMs !== st.mtimeMs || row.size !== st.size) {
+        const c = JSON.parse(await fsp.readFile(file, 'utf8'));
+        // A file from before screenshots moved out: shrink it once, here.
+        if (st.size > 64 * 1024 && JSON.stringify(c).includes('"data:')) await inQueue(root, c.id, () => writeChatFile(root, stripBlobs(root, c)));
+        const after = await fsp.stat(file);
+        row = { mtimeMs: after.mtimeMs, size: after.size, meta: metaOf(c), kept: keptOf(c) };
+        idx.set(f, row);
+        changed = true;
+      }
+      out.push(row.meta);
+    } catch { /* unreadable: skipped */ }
   }
+  if (changed) saveIndexSoon(root);
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function loadChat(root, id) {
-  try { return JSON.parse(fs.readFileSync(pp(root, 'chats', `${safeId(id)}.json`), 'utf8')); }
-  catch { return null; }
+async function loadChat(root, id) {
+  const c = await readRaw(root, id);
+  if (!c) return null;
+  const refs = [...blobRefs(c)];
+  const blobs = new Map(await Promise.all(refs.map(async (h) => [h, await fsp.readFile(path.join(blobDir(root), h), 'utf8').catch(() => '')])));
+  return refs.length ? fillBlobs(c, blobs) : c;
 }
 
 function saveChat(root, chat) {
-  ensureDir(root);
-  fs.mkdirSync(pp(root, 'chats'), { recursive: true });
-  const items = (chat.items || []).slice(-400);
-  // The app saves the conversation; names, pins and archiving set from the sidebar live in the same file and are kept.
-  const prev = loadChat(root, chat.id) || {};
-  const kept = { renamed: prev.renamed, pinned: prev.pinned, archived: prev.archived, branch: prev.branch || chat.branch };
-  fs.writeFileSync(pp(root, 'chats', `${safeId(chat.id)}.json`), JSON.stringify({ ...chat, ...kept, items }));
-  return true;
+  return inQueue(root, chat.id, async () => {
+    ensureDir(root);
+    await fsp.mkdir(chatsDir(root), { recursive: true });
+    const items = (chat.items || []).slice(-400);
+    // The app saves the conversation; names, pins and archiving set from the sidebar live in the same file and are kept.
+    const row = indexOf(root).get(path.basename(chatFile(root, chat.id)));
+    const prev = row?.kept || keptOf((await readRaw(root, chat.id)) || {});
+    const kept = { renamed: prev.renamed, pinned: prev.pinned, archived: prev.archived, branch: prev.branch || chat.branch };
+    await writeChatFile(root, stripBlobs(root, { ...chat, ...kept, items }));
+    return true;
+  });
 }
 
 function patchChat(root, id, patch) {
-  const c = loadChat(root, id);
-  if (!c) return false;
-  for (const k of ['renamed', 'pinned', 'archived']) if (k in patch) c[k] = patch[k] || undefined;
-  fs.writeFileSync(pp(root, 'chats', `${safeId(id)}.json`), JSON.stringify(c));
-  return true;
+  return inQueue(root, id, async () => {
+    const c = await readRaw(root, id);
+    if (!c) return false;
+    for (const k of ['renamed', 'pinned', 'archived']) if (k in patch) c[k] = patch[k] || undefined;
+    await writeChatFile(root, c);
+    return true;
+  });
 }
 
 // Chats whose words contain the query, with a snippet around the first hit.
-function searchChats(root, query) {
+async function searchChats(root, query) {
   const q = String(query || '').trim().toLowerCase();
   if (q.length < 2) return [];
-  const dir = pp(root, 'chats');
   let files = [];
-  try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')); } catch { return []; }
+  try { files = (await fsp.readdir(chatsDir(root))).filter((f) => f.endsWith('.json')); } catch { return []; }
   const out = [];
   for (const f of files) {
     let c;
-    try { c = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { continue; }
+    try { c = JSON.parse(await fsp.readFile(path.join(chatsDir(root), f), 'utf8')); } catch { continue; }
     for (const it of c.items || []) {
       const text = it.kind === 'user' || it.kind === 'text' ? String(it.text || '') : '';
       const at = text.toLowerCase().indexOf(q);
@@ -92,8 +214,27 @@ function chatMarkdown(c) {
 }
 
 function deleteChat(root, id) {
-  fs.rmSync(pp(root, 'chats', `${safeId(id)}.json`), { force: true });
-  return true;
+  return inQueue(root, id, async () => {
+    const c = await readRaw(root, id);
+    await fsp.rm(chatFile(root, id), { force: true });
+    indexOf(root).delete(path.basename(chatFile(root, id)));
+    saveIndexSoon(root);
+    // Screenshots no other chat uses go with it.
+    const mine = c ? blobRefs(c) : new Set();
+    if (mine.size) {
+      for (const f of (await fsp.readdir(chatsDir(root))).filter((x) => x.endsWith('.json'))) {
+        const other = await fsp.readFile(path.join(chatsDir(root), f), 'utf8').catch(() => '');
+        for (const h of mine) if (other.includes(BLOB_MARK + h)) mine.delete(h);
+        if (!mine.size) break;
+      }
+      for (const h of mine) {
+        const file = path.join(blobDir(root), h);
+        knownBlobs.delete(file);
+        await fsp.rm(file, { force: true });
+      }
+    }
+    return true;
+  });
 }
 
 const designPath = (root) => path.join(root, 'DESIGN.md');

@@ -28,18 +28,24 @@ async function ghStatus() {
   return ghState;
 }
 
-async function status(cwd) {
+// fast: don't wait for GitHub, which goes over the network. The caller asks again without it.
+async function status(cwd, { fast } = {}) {
   const root = await quiet(git(cwd, ['rev-parse', '--show-toplevel']));
-  if (!root) return { repo: false, gh: await ghStatus() };
-  const branch = (await quiet(git(cwd, ['symbolic-ref', '--short', 'HEAD']))) || (await quiet(git(cwd, ['rev-parse', '--short', 'HEAD']))) || 'HEAD';
-  const porcelain = (await quiet(git(cwd, ['status', '--porcelain']))) || '';
-  const remote = await quiet(git(cwd, ['remote', 'get-url', 'origin']));
-  const originHead = await quiet(git(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']));
+  if (!root) return { repo: false, gh: fast ? (ghState || { installed: true, authed: true, user: null, checking: true }) : await ghStatus() };
+  const [symbolic, porcelain, remote, originHead, counts, head, dirs] = await Promise.all([
+    quiet(git(cwd, ['symbolic-ref', '--short', 'HEAD'])),
+    quiet(git(cwd, ['status', '--porcelain'])),
+    quiet(git(cwd, ['remote', 'get-url', 'origin'])),
+    quiet(git(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])),
+    quiet(git(cwd, ['rev-list', '--left-right', '--count', '@{u}...HEAD'])),
+    quiet(git(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])),
+    quiet(git(cwd, ['rev-parse', '--git-dir', '--git-common-dir'])),
+  ]);
+  const branch = symbolic || (await quiet(git(cwd, ['rev-parse', '--short', 'HEAD']))) || 'HEAD';
   const defaultBranch = originHead ? originHead.replace(/^origin\//, '') : (await quiet(git(cwd, ['rev-parse', '--verify', '--quiet', 'main']))) != null ? 'main' : 'master';
-  const counts = await quiet(git(cwd, ['rev-list', '--left-right', '--count', '@{u}...HEAD']));
   const [behind, ahead] = counts ? counts.split(/\s+/).map(Number) : [0, 0];
-  const hasCommits = !!(await quiet(git(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])));
-  const [gitDir, commonDir] = ((await quiet(git(cwd, ['rev-parse', '--git-dir', '--git-common-dir']))) || '').split('\n');
+  const hasCommits = !!head;
+  const [gitDir, commonDir] = (dirs || '').split('\n');
   const linked = !!gitDir && !samePath(path.resolve(cwd, gitDir), path.resolve(cwd, commonDir || gitDir));
   const upstreamName = counts ? await quiet(git(cwd, ['rev-parse', '--abbrev-ref', '@{u}'])) : null;
   // Tracking was set up but the branch has since been deleted on origin (usually after its PR merged).
@@ -50,7 +56,7 @@ async function status(cwd) {
     repo: true, root, branch, defaultBranch, remote, hasCommits, linked,
     dirty: porcelain ? porcelain.split('\n').length : 0,
     ahead, behind, upstream: !!counts, upstreamName, gone, fetchedAt,
-    gh: await ghStatus(),
+    gh: fast ? (ghState || { installed: true, authed: true, user: null, checking: true }) : await ghStatus(),
   };
 }
 

@@ -186,7 +186,7 @@ export interface GitStatus {
   repo: boolean; root?: string; branch?: string; defaultBranch?: string; remote?: string | null; hasCommits?: boolean;
   dirty?: number; ahead?: number; behind?: number; upstream?: boolean; linked?: boolean;
   upstreamName?: string | null; gone?: boolean; fetchedAt?: number;
-  gh: { installed: boolean; authed: boolean; user: string | null };
+  gh: { installed: boolean; authed: boolean; user: string | null; checking?: boolean };
 }
 
 export interface GitBranchInfo {
@@ -343,6 +343,7 @@ export interface PinpointAPI {
   getSettings(): Promise<Settings>;
   setSettings(patch: Partial<Settings>): Promise<Settings>;
   detectAgents(): Promise<Record<AgentId, { ok: boolean; version?: string }>>;
+  knownAgents(): Promise<Record<AgentId, { ok: boolean; version?: string }> | null>;
   modelCatalog(): Promise<ModelCatalog>;
   listAgents(): Promise<HarnessInfo[]>;
   pathForFile(file: File): string;
@@ -453,7 +454,7 @@ export interface PinpointAPI {
   resolveSourceMap(frame: { url: string; line: number; column: number }): Promise<{ file: string; line?: number; column?: number } | null>;
   onNetworkError(cb: (e: NetworkFailure) => void): () => void;
   onNewTab(cb: (url: string) => void): () => void;
-  gitStatus(): Promise<GitStatus>;
+  gitStatus(opts?: { fast?: boolean }): Promise<GitStatus>;
   gitInit(): Promise<GitStatus>;
   gitBranch(hint?: string): Promise<{ branch: string }>;
   gitCommitRun(runId: string): Promise<GitCommit>;

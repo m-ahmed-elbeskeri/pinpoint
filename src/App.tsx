@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Globe, Loader2, Monitor,
   Plus, RotateCw, Smartphone, Square, Tablet,
@@ -6,42 +6,32 @@ import {
   Trash2, X, Paperclip, ImagePlus, Zap, CornerDownRight, ClipboardCopy,
   AppWindow, Boxes, GitCompareArrows, CircleDot, Columns2, Columns3, ShieldCheck, Snowflake, SquareStack, FileTree, GitPullRequestArrow, LayoutGrid, Maximize, NewWindow, Users,
 } from './components/icons';
-import { FilesPanel } from './components/FilesPanel';
 import { Onboarding } from './components/Onboarding';
-import { LayoutsSheet } from './components/LayoutsSheet';
-import { SweepView } from './components/SweepView';
-import { ReviewPanel } from './components/ReviewPanel';
-import { VariantsLive } from './components/VariantsLive';
 import { sweepInstruction, worstShots } from './lib/sweep';
 import { BrowserView, sleep, type BrowserHandle, type FrameTarget, type PickedElement } from './components/BrowserView';
 import { DrawSurface } from './components/DrawSurface';
 import { DrawToolbar, TOOL_KEYS } from './components/DrawToolbar';
 import { ChatList, invalidateDiff, shortPath, type ChatActions } from './components/Chat';
-import { SettingsModal } from './components/SettingsModal';
 import { Drawer, TOOLS, type DrawerTab } from './components/Drawer';
 import { AgentControls } from './components/AgentControls';
 import { Welcome } from './components/Welcome';
-import { ContextSheet, type ContextTab } from './components/ContextSheet';
+import type { ContextTab } from './components/ContextSheet';
 import { ContextBar } from './components/ContextBar';
-import { DiffViewer } from './components/DiffViewer';
-import { BranchCompare } from './components/BranchCompare';
 import { RoutePicker } from './components/RoutePicker';
 import { ChatHistory } from './components/ChatHistory';
 import { ThreadSidebar } from './components/ThreadSidebar';
 import { SideChat } from './components/SideChat';
 import { ShortcutsSheet, StatusBar } from './components/StatusBar';
 import { ContextMeter, ReadingStrip } from './components/AgentStatus';
-import { Timeline } from './components/Timeline';
 import { PullIcon } from './components/PullIcon';
 import { useComposerAssist, type SlashCommand } from './components/ComposerAssist';
 import { AgentPicker } from './components/AgentPicker';
 import { CommandPalette, type Command } from './components/CommandPalette';
 import { GitPanel } from './components/GitPanel';
-import { CompareView, type CompareTarget } from './components/CompareView';
+import type { CompareTarget } from './components/CompareView';
 import { diffOverlay, looksSame } from './lib/pixeldiff';
 import { ElementTools, type ToolSection } from './components/ElementTools';
 import { ConditionsMenu, HandoffMenu, MAX_VARIANTS, NO_CONDITIONS, PinsChip, VariantsMenu, describeConditions, type Conditions } from './components/PageTools';
-import { MultiView } from './components/MultiView';
 import { BackgroundRuns, ComponentsPanel, EnginesView, ProfileMenu } from './components/Workbench';
 import { MockupOverlay, fitMockup, type Overlay } from './components/MockupOverlay';
 import { DeviceBar, DEVICE_OFF, type Breakpoint, type Device } from './components/DeviceBar';
@@ -205,6 +195,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [chatId, setChatId] = useState<string | null>(null);
+  const openedItems = useRef<ChatItem[] | null>(null);
   const chatIdRef = useRef(chatId);
   chatIdRef.current = chatId;
   // The branch each chat worked on, and the pull requests by branch.
@@ -307,9 +298,12 @@ export default function App() {
       setTabs(list);
       setActiveTab(list[Math.min(s.activeTab || 0, list.length - 1)].id);
     });
-    api.detectAgents().then(setAgents);
+    // What was found last time shows at once; the real check waits until the window has settled.
+    api.knownAgents().then((known) => { if (known) setAgents((now) => now || known); }).catch(() => {});
+    const later = window.setTimeout(() => api.detectAgents().then(setAgents), 1500);
     api.modelCatalog().then(setCatalog);
     api.listAgents().then(setHarnesses);
+    return () => clearTimeout(later);
   }, []);
 
   const saveSettings = useCallback(async (patch: Partial<Settings>) => {
@@ -340,7 +334,11 @@ export default function App() {
   }, [theme]);
   const wantChat = useRef<string | null>(null);
   const refreshRoutes = useCallback(() => { api.listRoutes().then(setRoutes).catch(() => setRoutes([])); }, []);
-  const refreshGit = useCallback(async () => { await api.gitStatus().then(setGitStatus).catch(() => setGitStatus(null)); }, []);
+  // The branch shows as soon as git answers; whether GitHub is signed in follows when the network does.
+  const refreshGit = useCallback(async () => {
+    api.gitStatus({ fast: true }).then((s) => setGitStatus((now) => (now?.gh && !now.gh.checking ? { ...s, gh: now.gh } : s))).catch(() => {});
+    await api.gitStatus().then(setGitStatus).catch(() => setGitStatus(null));
+  }, []);
 
   useEffect(() => {
     if (!projectDir) return;
@@ -357,7 +355,9 @@ export default function App() {
       const last = pick ? await api.loadChat(pick.id) : null;
       if (last?.branch) branchOf.current.set(last.id, last.branch);
       if (last) {
-        setChatId(last.id); setChatCreated(last.createdAt); setChat(healChat(last.items)); setSession(last.session); setDesignAtStart(last.designAtStart ?? null);
+        const healed = healChat(last.items);
+        openedItems.current = healed === last.items || healed.length === last.items.length ? healed : null;
+        setChatId(last.id); setChatCreated(last.createdAt); setChat(healed); setSession(last.session); setDesignAtStart(last.designAtStart ?? null);
       } else {
         setChatId(null); setChat([]); setSession(null); setDesignAtStart(null);
       }
@@ -366,6 +366,8 @@ export default function App() {
 
   useEffect(() => {
     if (!projectDir || !chatId || !chat.length) return;
+    // Opening a chat changes nothing in it: no write, and it keeps its place in the list.
+    if (openedItems.current === chat) return;
     const t = setTimeout(() => {
       const title = chatTitle(chat);
       if (!branchOf.current.has(chatId) && gitStatus?.branch) branchOf.current.set(chatId, gitStatus.branch);
@@ -440,6 +442,7 @@ export default function App() {
   const showChat = (c: { id: string; createdAt: number; items: ChatItem[]; session: ParkedChat['session']; designAtStart?: string | null }, running: string | null) => {
     showChatReset();
     restoreAnnotations(c.id);
+    if (!running) openedItems.current = c.items;
     setChatId(c.id); setChatCreated(c.createdAt); setChat(c.items); setSession(c.session); setDesignAtStart(c.designAtStart ?? null);
     setRunId(running);
     runRef.current = running;
@@ -3032,6 +3035,27 @@ export default function App() {
     </div>
   );
 }
+
+
+// Panels opened now and then load when first opened, so they cost nothing at startup.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deferred<T extends ComponentType<any>>(load: () => Promise<T>) {
+  const Inner = lazy(() => load().then((c) => ({ default: c })));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((p: any) => <Suspense fallback={null}><Inner {...p} /></Suspense>) as unknown as T;
+}
+const FilesPanel = deferred(() => import('./components/FilesPanel').then((m) => m.FilesPanel));
+const LayoutsSheet = deferred(() => import('./components/LayoutsSheet').then((m) => m.LayoutsSheet));
+const SweepView = deferred(() => import('./components/SweepView').then((m) => m.SweepView));
+const ReviewPanel = deferred(() => import('./components/ReviewPanel').then((m) => m.ReviewPanel));
+const VariantsLive = deferred(() => import('./components/VariantsLive').then((m) => m.VariantsLive));
+const SettingsModal = deferred(() => import('./components/SettingsModal').then((m) => m.SettingsModal));
+const DiffViewer = deferred(() => import('./components/DiffViewer').then((m) => m.DiffViewer));
+const BranchCompare = deferred(() => import('./components/BranchCompare').then((m) => m.BranchCompare));
+const Timeline = deferred(() => import('./components/Timeline').then((m) => m.Timeline));
+const MultiView = deferred(() => import('./components/MultiView').then((m) => m.MultiView));
+const ContextSheet = deferred(() => import('./components/ContextSheet').then((m) => m.ContextSheet));
+const CompareView = deferred(() => import('./components/CompareView').then((m) => m.CompareView));
 
 function markerList(anns: Annotation[], activeId: string | null) {
   return anns

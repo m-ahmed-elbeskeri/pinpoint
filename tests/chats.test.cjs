@@ -103,7 +103,7 @@ server.listen(0, '127.0.0.1', () => {
 
       log('the first chat is marked finished when its agent is done', !!(await until(`document.querySelector('.threads .thread.finished') ? 1 : 0`, 15000)), await chips());
       log('its file was written too', fs.existsSync(path.join(proj, 'slow-alpha.txt')));
-      const saved = () => fs.readdirSync(path.join(proj, '.pinpoint', 'chats')).map((f) => JSON.parse(fs.readFileSync(path.join(proj, '.pinpoint', 'chats', f), 'utf8')));
+      const saved = () => fs.readdirSync(path.join(proj, '.pinpoint', 'chats')).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(proj, '.pinpoint', 'chats', f), 'utf8')));
       await sleep(900);
       const alpha = saved().find((c) => /slow-alpha/.test(c.title));
       log('and saved with its result', !!alpha && alpha.items.some((i) => i.kind === 'done') && alpha.items.some((i) => i.kind === 'text' && /Wrote slow-alpha/.test(i.text)), alpha ? alpha.items.map((i) => i.kind).join() : 'not saved');

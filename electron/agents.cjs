@@ -20,7 +20,14 @@ function detectOne(bin) {
 
 async function detectAgents(settings) {
   const list = harnesses(settings);
-  const [claude, codex, ...rest] = await Promise.all([detectOne(settings.claudePath), detectOne(settings.codexPath), ...list.map((h) => detectOne(binOf(settings, h)))]);
+  const bins = [settings.claudePath, settings.codexPath, ...list.map((h) => binOf(settings, h))];
+  // A few at a time: a dozen CLIs starting at once slows the whole machine down.
+  const results = [];
+  let next = 0;
+  await Promise.all(Array.from({ length: 3 }, async () => {
+    while (next < bins.length) { const i = next++; results[i] = await detectOne(bins[i]); }
+  }));
+  const [claude, codex, ...rest] = results;
   return { claude, codex, ...Object.fromEntries(list.map((h, i) => [h.id, rest[i]])) };
 }
 

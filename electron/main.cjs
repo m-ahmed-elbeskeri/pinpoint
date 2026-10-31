@@ -132,6 +132,7 @@ function createWindow() {
       nodeIntegration: false,
       webviewTag: true,
       sandbox: false,
+      spellcheck: false,
     },
   });
 
@@ -162,7 +163,13 @@ app.on('web-contents-created', (_e, contents) => {
 
 ipcMain.handle('settings:get', () => loadSettings());
 ipcMain.handle('settings:set', (_e, patch) => saveSettings(patch));
-ipcMain.handle('agents:detect', () => detectAgents(loadSettings()));
+const agentsFile = () => path.join(app.getPath('userData'), 'agents.json');
+ipcMain.handle('agents:known', () => { try { return JSON.parse(fs.readFileSync(agentsFile(), 'utf8')); } catch { return null; } });
+ipcMain.handle('agents:detect', async () => {
+  const found = await detectAgents(loadSettings());
+  fs.promises.writeFile(agentsFile(), JSON.stringify(found)).catch(() => {});
+  return found;
+});
 ipcMain.handle('agents:models', () => modelCatalog());
 ipcMain.handle('agents:list', () => harnessList(loadSettings()));
 // Desktop notifications carry Pinpoint's own icon (a page-side Notification would show a generic one), and a click brings the window back.
@@ -837,7 +844,7 @@ ipcMain.handle('chats:delete', (_e, id) => project.deleteChat(projectDir(), id))
 ipcMain.handle('chats:patch', (_e, { id, patch }) => project.patchChat(projectDir(), id, patch || {}));
 ipcMain.handle('chats:search', (_e, q) => project.searchChats(projectDir(), q));
 ipcMain.handle('chats:export', async (_e, id) => {
-  const c = project.loadChat(projectDir(), id);
+  const c = await project.loadChat(projectDir(), id);
   if (!c) return null;
   const name = String(c.renamed || c.title || 'chat').replace(/[^\w\- ]+/g, '').trim().slice(0, 60) || 'chat';
   const r = await dialog.showSaveDialog(win, { defaultPath: `${name}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
@@ -846,7 +853,7 @@ ipcMain.handle('chats:export', async (_e, id) => {
   return r.filePath;
 });
 ipcMain.handle('chats:share', async (_e, id) => {
-  const c = project.loadChat(projectDir(), id);
+  const c = await project.loadChat(projectDir(), id);
   if (!c) throw new Error('Send a message in this chat first.');
   const name = String(c.renamed || c.title || 'chat').replace(/[^\w -]+/g, '').trim().slice(0, 60) || 'chat';
   const r = await dialog.showSaveDialog(win, { defaultPath: `${name}.pinpoint-chat.json`, filters: [{ name: 'Pinpoint chat', extensions: ['json'] }] });
@@ -858,7 +865,7 @@ ipcMain.handle('chats:receive', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Pinpoint chat', extensions: ['json'] }] });
   if (r.canceled || !r.filePaths[0]) return null;
   const c = project.unpackThread(JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8')), crypto.randomUUID().replace(/-/g, '').slice(0, 16));
-  project.saveChat(projectDir(), c);
+  await project.saveChat(projectDir(), c);
   return c.id;
 });
 ipcMain.handle('design:read', () => project.readDesign(projectDir()));
@@ -1168,7 +1175,7 @@ ipcMain.handle('build:measure', async (e, pageUrl) => {
 
 let axeSource = null;
 ipcMain.handle('a11y:source', () => (axeSource ??= fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')));
-ipcMain.handle('git:status', () => gitx.status(projectDir()));
+ipcMain.handle('git:status', (_e, opts) => gitx.status(projectDir(), opts));
 ipcMain.handle('git:init', () => gitx.initRepo(projectDir()));
 ipcMain.handle('git:branch', async (_e, hint) => ({ branch: await gitx.createBranch(projectDir(), hint || 'visual-edit') }));
 ipcMain.handle('git:commitRun', async (_e, runId) => {

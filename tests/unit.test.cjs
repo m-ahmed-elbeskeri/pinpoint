@@ -87,14 +87,6 @@ const runsLib = require(path.join(repo, 'electron', 'runs.cjs'));
   check('reverting the last hunk restores the file and marks it reverted', fs.readFileSync(path.join(root, 'a.txt'), 'utf8') === before && r.restored.includes('a.txt') && r.allReverted);
 }
 
-{
-  const pr = require(path.join(repo, 'electron', 'project.cjs'));
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chatbranch-'));
-  pr.saveChat(root, { id: 'c', title: 't', updatedAt: 1, items: [], branch: 'feature' });
-  pr.saveChat(root, { id: 'c', title: 't', updatedAt: 2, items: [], branch: 'main' });
-  check('a chat keeps the branch it started on', pr.listChats(root)[0].branch === 'feature', JSON.stringify(pr.listChats(root)));
-}
-
 const { translate } = require(path.join(repo, 'electron', 'agent-generic.cjs'));
 const { harnesses, splitArgs } = require(path.join(repo, 'electron', 'harnesses.cjs'));
 const tr = (lines) => { const st = { sessionId: null, sawText: false }; return lines.flatMap((l) => translate(l, st) || [{ type: 'unknown' }]); };
@@ -217,6 +209,44 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   check('a path outside the project is refused', /outside/.test((() => { try { project.readProjectFile(proj, `../${path.basename(outside)}`); return ''; } catch (e) { return e.message; } })()));
   fs.rmSync(outside, { force: true });
   fs.rmSync(proj, { recursive: true, force: true });
+
+  // The chat store: screenshots live apart, the list comes from an index.
+  const store = fs.mkdtempSync(path.join(os.tmpdir(), 'store-'));
+  const shot = 'data:image/png;base64,' + 'Q'.repeat(5000);
+  const chat = (id, extra = {}) => ({ id, title: `T${id}`, createdAt: 1, updatedAt: 2, agent: 'claude', session: null, items: [{ kind: 'user', id: 'u', text: 'needle here', annotations: [{ id: 'a', image: shot }] }], ...extra });
+  await project.saveChat(store, chat('one'));
+  await project.saveChat(store, chat('two'));
+  const rawOne = () => fs.readFileSync(path.join(store, '.pinpoint', 'chats', 'one.json'), 'utf8');
+  check('a saved chat keeps its screenshots outside its file', !rawOne().includes('data:image') && rawOne().includes('pp-blob:'));
+  check('and gets them back when loaded', (await project.loadChat(store, 'one')).items[0].annotations[0].image === shot);
+  check('the list has both chats', (await project.listChats(store)).length === 2);
+  await project.patchChat(store, 'one', { renamed: 'Named', pinned: true });
+  await project.saveChat(store, chat('one', { updatedAt: 3 }));
+  let row = (await project.listChats(store)).find((c) => c.id === 'one');
+  check('a save keeps the name and pin set from the sidebar', row.title === 'Named' && row.pinned === true, JSON.stringify(row));
+  const outside1 = JSON.parse(rawOne());
+  outside1.title = 'Changed elsewhere'; outside1.renamed = undefined;
+  fs.writeFileSync(path.join(store, '.pinpoint', 'chats', 'one.json'), JSON.stringify(outside1));
+  row = (await project.listChats(store)).find((c) => c.id === 'one');
+  check('a file changed outside the app is noticed', row.title === 'Changed elsewhere', JSON.stringify(row));
+  const old = chat('old');
+  fs.writeFileSync(path.join(store, '.pinpoint', 'chats', 'old.json'), JSON.stringify({ ...old, items: Array.from({ length: 30 }, () => old.items[0]) }));
+  check('a chat from an older version is listed', (await project.listChats(store)).some((c) => c.id === 'old'));
+  check('and shrunk', !fs.readFileSync(path.join(store, '.pinpoint', 'chats', 'old.json'), 'utf8').includes('data:image'));
+  check('its screenshots survive', (await project.loadChat(store, 'old')).items[29].annotations[0].image === shot);
+  check('search finds the words', (await project.searchChats(store, 'needle')).length === 3);
+  const blobs = () => fs.readdirSync(path.join(store, '.pinpoint', 'chats', 'blobs')).length;
+  await project.deleteChat(store, 'one');
+  check('a screenshot other chats use stays when one is deleted', blobs() === 1 && (await project.loadChat(store, 'two')).items[0].annotations[0].image === shot);
+  await project.deleteChat(store, 'two');
+  await project.deleteChat(store, 'old');
+  check('and goes with the last one', blobs() === 0);
+  await Promise.all(Array.from({ length: 5 }, (_, i) => project.saveChat(store, chat('race', { updatedAt: i }))));
+  check('quick saves land in order', (await project.loadChat(store, 'race')).updatedAt === 4);
+  await project.saveChat(store, { id: 'c', title: 't', updatedAt: 1, items: [], branch: 'feature' });
+  await project.saveChat(store, { id: 'c', title: 't', updatedAt: 2, items: [], branch: 'main' });
+  check('a chat keeps the branch it started on', (await project.loadChat(store, 'c')).branch === 'feature');
+  fs.rmSync(store, { recursive: true, force: true });
 
   const { buildPrompt } = require(path.join(repo, 'electron', 'prompt.cjs'));
   const reqBase = { url: 'http://x/', title: '', viewport: { width: 1000, height: 800 }, instruction: 'Do it', annotations: [], carried: 'User: earlier words' };
