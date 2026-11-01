@@ -1419,22 +1419,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   color: var(--muted);
 }
 .msg-actions button:hover { color: var(--text); background: var(--bg-4); }
-.quick-replies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 2px 0 4px;
-}
-.quick-replies button {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line-2);
-  color: var(--text-2);
-  font-size: 12px;
-  background: var(--bg-2);
-}
-.quick-replies button:hover { color: var(--text); border-color: var(--ring); }
 
 /* ---- timers and the "working" shimmer ---- */
 .tool-ms {

@@ -497,3 +497,6 @@
 .bg-chat-result { display: flex; align-items: center; gap: 6px; flex: none; min-height: 38px; padding: 6px 12px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 12px; }
 .bg-chat-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bg-chat-result.failed { color: var(--muted); }
+
+.ext-groups { display: grid; gap: 14px; }
+.ext-group-title { padding: 0 8px 4px; color: var(--muted); font-size: 11px; font-weight: 500; }

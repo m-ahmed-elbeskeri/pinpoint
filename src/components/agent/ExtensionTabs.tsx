@@ -12,6 +12,12 @@ interface ListProps {
 }
 
 const NOUN = { mcp: 'MCP servers', skills: 'skills' };
+const SCOPES: { id: AgentExtension['scope']; title: string }[] = [
+  { id: 'project', title: 'This project' },
+  { id: 'user', title: 'All your projects' },
+  { id: 'connector', title: 'Connected apps' },
+  { id: 'plugin', title: 'Plugins and built-in' },
+];
 
 export function ExtensionList({ kind, settings, saveSettings, agentName }: ListProps) {
   const [data, setData] = useState<AgentExtensions | null>(null);
@@ -55,13 +61,20 @@ export function ExtensionList({ kind, settings, saveSettings, agentName }: ListP
         <label className="ext-search"><Search size={13} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Find ${kind === 'mcp' ? 'a server' : 'a skill'}`} spellCheck={false} /></label>
       )}
       {data && !all.length && <div className="sheet-empty"><b>No {NOUN[kind]} found</b></div>}
+      <div className="ext-groups">
+      {SCOPES.map(({ id, title }) => {
+        const inScope = items.filter((x) => x.scope === id);
+        if (!inScope.length) return null;
+        return (
+      <section key={id}>
+      <div className="ext-group-title">{title}</div>
       <ul className="ext-list">
-        {items.map((item) => (
+        {inScope.map((item) => (
           <li key={item.id} className={item.enabled ? '' : 'off'}>
             <div className="ext-text">
               <b title={item.name}>{item.name}</b>
               {item.description && <small title={item.description}>{item.description}</small>}
-              {kind === 'mcp' && <small className={item.status === 'connected' ? 'ok' : ''}>{[item.status, item.source].filter(Boolean).join(' · ')}</small>}
+              {kind === 'mcp' && item.status && <small className={item.status === 'connected' ? 'ok' : ''}>{item.status}</small>}
             </div>
             <button className={`toggle ${item.enabled ? 'on' : ''}`} onClick={() => toggle(item, !item.enabled)} role="switch" aria-checked={item.enabled} aria-label={item.name} title={item.enabled ? 'Switch off' : 'Switch on'}>
               <span className="toggle-track"><span className="toggle-thumb" /></span>
@@ -69,6 +82,10 @@ export function ExtensionList({ kind, settings, saveSettings, agentName }: ListP
           </li>
         ))}
       </ul>
+      </section>
+        );
+      })}
+      </div>
     </div>
   );
 }

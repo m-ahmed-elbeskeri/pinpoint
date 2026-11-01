@@ -37,7 +37,7 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "    if (/<earlier-conversation>/.test(text)) fs.writeFileSync(path.join(process.cwd(), 'carried.txt'), text);",
   "    const word = (text.match(/(slow|quick)-(\\w+)/) || [])[0] || 'other';",
     "    if (!process.argv.includes('haiku')) fs.writeFileSync(path.join(__dirname, 'args.txt'), process.argv.join(' '));",
-    "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in', mcp_servers: [{ name: 'docs-server', status: 'connected', source: 'user' }, { name: 'mail', status: 'needs-auth', source: 'claudeai' }], skills: ['my-skill', 'other-skill'] });",
+    "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in', mcp_servers: [{ name: 'docs-server', status: 'connected', source: 'user' }, { name: 'repo-db', status: 'connected', source: 'project' }, { name: 'mail', status: 'needs-auth', source: 'claudeai' }], skills: ['my-skill', 'other-skill'] });",
   "    if (word === 'quick-ask') {",
   "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: { todos: [{ content: 'Change the heading', status: 'completed', activeForm: 'Changing' }, { content: 'Run the tests', status: 'in_progress', activeForm: 'Running the tests' }] } }] } });",
   "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'edit-1', name: 'Edit', input: { file_path: 'index.html', old_string: '<h1>Home</h1>', new_string: '<h1>Welcome home</h1>' } }] } });",
@@ -247,15 +247,14 @@ server.listen(0, '127.0.0.1', () => {
 
       // Batch 1: quick replies, message actions, chat menu, palette search, status bar, shortcuts.
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
-      log('a finished run offers quick replies', (await ui(`document.querySelectorAll('.quick-replies button').length`)) === 3);
+      log('a finished run has no canned replies under it', (await ui(`document.querySelectorAll('.quick-replies').length`)) === 0);
       await ui(`document.querySelector('.msg.user .msg-actions button:nth-child(2)').click(); 0`);
       await sleep(150);
       log('Edit puts a message back in the composer', (await ui(`document.querySelector('.composer-box textarea').value`)) === (await ui(`document.querySelector('.msg.user .msg-text').textContent`)));
       await typeIn('');
       const usersBefore = await ui(`document.querySelectorAll('.chat .msg.user').length`);
-      await ui(`document.querySelector('.quick-replies button').click(); 0`);
+      await send('Continue');
       await until(`document.querySelectorAll('.chat .msg.user').length > ${usersBefore} ? 1 : 0`, 5000);
-      log('a quick reply sends that message', /Continue|Try again/.test(await ui(`[...document.querySelectorAll('.chat .msg.user')].pop().textContent`)));
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
 
       const menu = async (label) => {
@@ -365,8 +364,9 @@ server.listen(0, '127.0.0.1', () => {
       // Fork: everything before the message, the message back in the composer, the original untouched.
       const usersBefore = await ui(`document.querySelectorAll('.chat .msg.user').length`);
       await ui(`[...document.querySelectorAll('.msg.user .msg-actions button[title^="Fork"]')].pop().click(); 0`);
-      await sleep(500);
-      log('a fork keeps only what came before the message', (await ui(`document.querySelectorAll('.chat .msg.user').length`)) === usersBefore - 1, String(await ui(`document.querySelectorAll('.chat .msg.user').length`)));
+      const forkToast = await until(`document.querySelector('.toast')?.textContent || ''`, 4000);
+      await until(`document.querySelectorAll('.chat .msg.user').length === ${usersBefore - 1} ? 1 : 0`, 5000);
+      log('a fork keeps only what came before the message', (await ui(`document.querySelectorAll('.chat .msg.user').length`)) === usersBefore - 1, `${await ui(`document.querySelectorAll('.chat .msg.user').length`)} of ${usersBefore}: ${forkToast}`);
       log('and puts the message back in the composer', /Review comments|\S/.test(await ui(`document.querySelector('.composer-box textarea').value`)));
       await send('quick-forked please');
       await until(`document.querySelector('.chat .working') ? 1 : 0`, 4000);
@@ -401,7 +401,8 @@ server.listen(0, '127.0.0.1', () => {
       log('the terminal button is gone from the top bar', !(await ui(`[...document.querySelectorAll('.top-right .icon-btn')].some((b) => /Terminal/.test(b.title))`)));
       const topButton = (re) => ui(`[...document.querySelectorAll('.top-right .icon-btn')].find((b) => ${re}.test(b.title)).click(); 0`);
       await topButton('/^MCP/');
-      log('the MCP tab lists servers with their status', await until(`/docs-server/.test(document.querySelector('.ext-list')?.textContent || '') && /connected/.test(document.querySelector('.ext-list').textContent) ? 1 : 0`, 8000) === 1);
+      log('the MCP tab lists servers with their status', await until(`/docs-server/.test(document.querySelector('.ext-groups')?.textContent || '') && /connected/.test(document.querySelector('.ext-groups').textContent) ? 1 : 0`, 8000) === 1);
+      log('servers are grouped by where they apply', (await ui(`[...document.querySelectorAll('.ext-group-title')].map((x) => x.textContent).join()`)) === 'This project,All your projects,Connected apps', await ui(`document.querySelector('.ext-groups')?.innerText || ''`));
       try { fs.writeFileSync(path.join(OUT, 'chats-mcp.png'), (await host.capturePage()).toPNG()); } catch { /* the check above is what counts */ }
       await ui(`document.querySelector('.ext-list [aria-label="docs-server"]').click(); 0`);
       await sleep(250);

@@ -32,7 +32,7 @@ Ideas gathered while bringing Pinpoint's shell closer to t3code and Codex. Check
 - [x] ~~Live strip of files the agent is reading~~ removed: it added noise and couldn't be clicked
 - [x] Rate-limit and quota warnings before the limit
 - [x] MCP server status (in the agent menu)
-- [x] Quick-reply chips after a result
+- [x] ~~Quick-reply chips after a result~~ removed: they added noise under every result
 
 ## Composer
 

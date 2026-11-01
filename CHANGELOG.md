@@ -4,6 +4,16 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-01
+
+### Changed
+
+- MCP servers and skills are grouped by where they apply: this project, all your projects, connected apps, plugins and built-in.
+
+### Removed
+
+- The quick-reply chips under a finished result.
+
 ## [0.13.0] - 2026-11-01
 
 ### Added

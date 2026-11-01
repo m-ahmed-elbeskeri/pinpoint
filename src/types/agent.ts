@@ -38,6 +38,6 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 export interface DevCandidate { command: string; label: string; dir: string; script?: string; port: number | null; kind?: 'web' | 'api' | 'worker' | 'stack' | 'other' }
 export interface DevDetection { command: string; candidates: DevCandidate[]; runningUrl: string | null }
 
-export interface AgentExtension { id: string; name: string; description?: string; status?: string; source?: string; enabled: boolean }
+export interface AgentExtension { id: string; name: string; description?: string; status?: string; scope: 'project' | 'user' | 'connector' | 'plugin'; enabled: boolean }
 export interface AgentExtensions { supported: boolean; mcp: AgentExtension[]; skills: AgentExtension[] }
 export interface InstructionFile { key: string; label: string; scope: string; path: string; exists: boolean; content: string }

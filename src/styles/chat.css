@@ -812,7 +812,7 @@
 :root[data-density="compact"] .chat { gap: 6px; padding-top: 10px; }
 :root[data-density="compact"] .msg.agent { line-height: 1.5; }
 :root[data-density="compact"] .done-card { padding: 8px 10px; }
-.chat > .msg, .chat > .done-card, .chat > .work-log, .chat > .plan-card, .chat > .approval, .chat > .quick-replies {
+.chat > .msg, .chat > .done-card, .chat > .work-log, .chat > .plan-card, .chat > .approval {
   animation: enter .18s ease-out both;
 }
 .resume-btn { margin-left: 8px; font-size: 12px; }

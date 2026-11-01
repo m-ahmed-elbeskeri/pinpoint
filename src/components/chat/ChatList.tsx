@@ -18,18 +18,6 @@ function TurnSummary({ done, onReview }: { done: ItemOf<'done'>; onReview(runId:
   );
 }
 
-// After a finished run: one-click follow-ups.
-function QuickReplies({ ok, onSend }: { ok: boolean; onSend(text: string): void }) {
-  const replies = ok
-    ? ['Continue', 'Make it more subtle', 'Explain what you changed']
-    : ['Try again', 'What went wrong?', 'Try a different approach'];
-  return (
-    <div className="quick-replies">
-      {replies.map((r) => <button key={r} onClick={() => onSend(r)}>{r}</button>)}
-    </div>
-  );
-}
-
 export const ChatList = memo(function ChatList({ items, actions, root, busy, gitRepo }: {
   items: ChatItem[]; actions: ChatActions; root: string; busy: boolean; gitRepo: boolean;
 }) {
@@ -76,7 +64,5 @@ export const ChatList = memo(function ChatList({ items, actions, root, busy, git
     }
     i++;
   }
-  const last = items[items.length - 1];
-  if (!busy && last?.kind === 'done' && !last.undone && !last.variant) out.push(<QuickReplies key="quick" ok={last.ok} onSend={actions.onSendText} />);
   return <SubSteps.Provider value={subs}><Approved.Provider value={approved}>{out}</Approved.Provider></SubSteps.Provider>;
 });

@@ -8,6 +8,8 @@ const { spawnCli, killProc, lineReader, isWin } = require('./cli.cjs');
 
 const PROBE_TIMEOUT = 30000;
 const LIST_TIMEOUT = 15000;
+// Claude Code's name for where a server was configured, and where that means it applies.
+const MCP_SCOPE = { project: 'project', local: 'project', user: 'user', claudeai: 'connector' };
 const MAX_PLUGIN_DEPTH = 8;
 const MAX_PLUGIN_SKILLS = 1000;
 
@@ -99,10 +101,10 @@ async function listClaude(settings, cwd) {
   const onDisk = [...skillsIn(path.join(cwd, '.claude', 'skills'), 'project'), ...skillsIn(path.join(os.homedir(), '.claude', 'skills'), 'user'), ...pluginSkills()];
   return {
     supported: true,
-    mcp: (init.mcp_servers || []).map((s) => ({ id: s.name, name: s.name, status: s.status === 'pending' ? 'connecting' : s.status, source: s.source, enabled: c.mcp?.[s.name] !== false })),
+    mcp: (init.mcp_servers || []).map((s) => ({ id: s.name, name: s.name, status: s.status === 'pending' ? 'connecting' : s.status, scope: MCP_SCOPE[s.source] || 'plugin', enabled: c.mcp?.[s.name] !== false })),
     skills: (init.skills || []).map((name) => {
       const known = onDisk.find((s) => s.name === name);
-      return { id: name, name, description: known?.description || '', source: known?.source || 'plugin', enabled: c.skills?.[name] !== false };
+      return { id: name, name, description: known?.description || '', scope: known?.source || 'plugin', enabled: c.skills?.[name] !== false };
     }),
   };
 }
@@ -123,8 +125,8 @@ async function listCodex(settings, cwd) {
   const skills = [...skillsIn(path.join(cwd, '.agents', 'skills'), 'project'), ...skillsIn(path.join(os.homedir(), '.agents', 'skills'), 'user'), ...skillsIn(path.join(os.homedir(), '.codex', 'skills'), 'user')];
   return {
     supported: true,
-    mcp: servers.map((s) => ({ id: s.name, name: s.name, status: s.enabled ? 'configured' : 'off in Codex', source: s.transport?.type, enabled: c.mcp?.[s.name] ?? !!s.enabled })),
-    skills: skills.map((s) => ({ id: s.file, name: s.name, description: s.description, source: s.source, enabled: c.skills?.[s.file] !== false })),
+    mcp: servers.map((s) => ({ id: s.name, name: s.name, status: s.enabled ? 'configured' : 'off in Codex', scope: 'user', enabled: c.mcp?.[s.name] ?? !!s.enabled })),
+    skills: skills.map((s) => ({ id: s.file, name: s.name, description: s.description, scope: s.source, enabled: c.skills?.[s.file] !== false })),
   };
 }
 
