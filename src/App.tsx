@@ -68,6 +68,11 @@ export default function App() {
     <div className={`app ${app.resizing ? 'resizing' : ''} ${app.threadsOn ? 'threads-on' : ''} ${app.zen ? 'zen' : ''}`} style={app.gridStyle}>
       {app.threadsOn && (
         <ThreadSidebar
+          subChats={[
+            ...app.sides.map((x) => ({ id: x.id, kind: 'side' as const, title: x.title, parent: x.parent, running: x.running, on: app.activeSide === x.id, hint: x.running ? 'working' : 'side' })),
+            ...app.bgRuns.map((r) => ({ id: r.id, kind: 'task' as const, title: r.title, parent: r.parent, running: r.status === 'running', failed: r.status === 'failed', on: app.activeSide === `bg:${r.id}`, hint: r.status === 'running' ? 'working' : r.status === 'failed' ? 'stopped' : r.files?.length ? `${r.files.length} file${r.files.length === 1 ? '' : 's'}` : 'done' })),
+          ]}
+          onOpenSub={(s) => { if (s.kind === 'task') app.openBg(s.id); else { app.setActiveSide(s.id); if (settings.panelHidden) app.saveSettings({ panelHidden: false }); } }}
           mod={MOD} projectDir={app.projectDir} recentProjects={settings.recentProjects || []}
           chatId={app.chatId} currentTitle={app.chat.length ? chatTitle(app.chat) : ''} currentRunning={!!app.runId} currentNeedsInput={needsInput(app.chat)}
           others={app.others} pulls={app.pulls} refreshKey={`${app.chatId}:${app.chat.length}:${app.others.map((o) => o.id + o.running).join()}`} disabled={!!app.job}
@@ -89,7 +94,6 @@ export default function App() {
         mode={app.mode} setMode={app.setMode}
         recording={!!app.rec} canRecord={/^(https?|file):/.test(app.nav.url)} onToggleRecording={app.toggleRecording}
         update={app.update} onInstallUpdate={() => api.updateInstall()}
-        drawerOpen={app.drawerOpen} devRunning={app.devRunning} onToggleDrawer={() => app.setDrawerOpen(!app.drawerOpen)}
         sheet={app.sheet} setSheet={app.setSheet}
         design={app.design?.exists ? (settings.useDesign ? 'on' : 'off') : 'none'} designChanged={app.designChanged} memoryOn={app.memoryOn}
         onDevtools={() => app.browser.current?.devtools()}

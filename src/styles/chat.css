@@ -778,15 +778,6 @@
   background: rgba(255, 77, 109, .08);
   color: var(--bad-fg, #ff8aa0);
 }
-.reading-strip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-  padding: 0 2px;
-}
-.reading-file.now { color: var(--text-2); }
 
 /* Result card: a single summary line, plain file rows. */
 .done-head .done-meta { flex: 0 0 auto; margin-left: 2px; }

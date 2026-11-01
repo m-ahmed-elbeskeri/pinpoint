@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AppContext } from './context';
 
 export function useSideChats(app: AppContext) {
-  const [sides, setSides] = useState<{ id: string; title: string; seed: string | null; running: boolean }[]>([]);
+  const [sides, setSides] = useState<{ id: string; title: string; seed: string | null; running: boolean; parent: string | null }[]>([]);
   const [activeSide, setActiveSide] = useState<string | null>(null);
   const [askAside, setAskAside] = useState<{ text: string; x: number; y: number } | null>(null);
   // What the side chat gets to know about the main conversation: the last few requests and replies.
@@ -23,7 +23,7 @@ export function useSideChats(app: AppContext) {
   const newSide = (seed?: string) => {
     if (!app.settings?.projectDir) return;
     const id = `side-${uid()}`;
-    setSides((list) => [...list, { id, title: 'Side chat', seed: seed ?? null, running: false }]);
+    setSides((list) => [...list, { id, title: 'Side chat', seed: seed ?? null, running: false, parent: app.chatId }]);
     setActiveSide(id);
     if (app.settings?.panelHidden) app.saveSettings({ panelHidden: false });
   };
@@ -63,5 +63,8 @@ export function useSideChats(app: AppContext) {
     app.focusComposer(30, true);
   };
 
-  Object.assign(app, { activeSide, askAside, closeSide, fadeTabs, fromSelection, newSide, onChatMouseUp, patchSide, setActiveSide, setAskAside, sideContext, sides, tabsStrip });
+  // Read here, not in the background hook: that one runs first and would see the previous selection.
+  const activeBg = app.bgRuns.find((r) => activeSide === `bg:${r.id}`) || null;
+
+  Object.assign(app, { activeBg, activeSide, askAside, closeSide, fadeTabs, fromSelection, newSide, onChatMouseUp, patchSide, setActiveSide, setAskAside, sideContext, sides, tabsStrip });
 }

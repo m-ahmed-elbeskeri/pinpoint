@@ -1,4 +1,4 @@
-import { Eye, Pencil, ShieldCheck, Zap } from '../ui/icons';
+import { Eye, LockOpen, Pencil, ShieldCheck, ShieldWarning } from '../ui/icons';
 import { Dropdown, type DropdownItem } from '../ui/Dropdown';
 import { ModelPicker } from './ModelPicker';
 import type { HarnessInfo, ModelCatalog, Settings } from '../../types';
@@ -16,12 +16,14 @@ const ACCESS = {
   claude: [
     { value: 'plan', label: 'Plan only', desc: 'Proposes a plan; no files are changed' },
     { value: 'acceptEdits', label: 'Edit files', desc: 'Auto-accepts file edits in the project' },
-    { value: 'bypassPermissions', label: 'Full access', desc: 'Edits files and runs any command' },
+    { value: 'auto', label: 'Full access', desc: 'Edits files and runs commands without asking; a safety check stops risky actions' },
+    { value: 'bypassPermissions', label: 'Bypass permissions', desc: 'No checks at all: anything the agent tries just runs' },
   ],
   codex: [
     { value: 'read-only', label: 'Plan only', desc: 'Read-only sandbox; no files are changed' },
     { value: 'workspace-write', label: 'Edit files', desc: 'Can write inside the project folder' },
-    { value: 'danger-full-access', label: 'Full access', desc: 'No sandbox; runs any command' },
+    { value: 'danger-full-access', label: 'Full access', desc: 'No sandbox; asks before anything risky' },
+    { value: 'bypass', label: 'Bypass permissions', desc: 'No sandbox and no questions: anything the agent tries just runs' },
   ],
 } as const;
 
@@ -36,14 +38,15 @@ interface Props {
 // Each access level has its own icon, so the composer needs no words for it.
 function accessIcon(label = '', size = 13) {
   if (/plan/i.test(label)) return <Eye size={size} />;
-  if (/full/i.test(label)) return <Zap size={size} />;
+  if (/bypass/i.test(label)) return <ShieldWarning size={size} />;
+  if (/full/i.test(label)) return <LockOpen size={size} />;
   if (/edit/i.test(label)) return <Pencil size={size} />;
   return <ShieldCheck size={size} />;
 }
 const withIcons = (items: readonly { value: string; label: string; desc?: string }[]) => items.map((i) => ({ ...i, icon: accessIcon(i.label, 15) }));
 const accessProps = (items: readonly { value: string; label: string }[], value: string) => {
   const label = items.find((i) => i.value === value)?.label || '';
-  return { icon: accessIcon(label), tooltip: `Access: ${label}`, className: `dd-access ${/full/i.test(label) ? 'access-full' : ''}` };
+  return { icon: accessIcon(label), tooltip: `Access: ${label}`, className: `dd-access ${/bypass/i.test(label) ? 'access-bypass' : /full/i.test(label) ? 'access-full' : ''}` };
 };
 
 export function AgentControls({ settings, catalog, onChange, disabled, harness }: Props) {

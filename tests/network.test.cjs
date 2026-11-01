@@ -61,7 +61,7 @@ server.listen(0, '127.0.0.1', () => {
     host.on('console-message', (e) => { if ((e.level === 'error' || e.level === 3) && !/Security Warning/.test(e.message)) errors.push(e.message.slice(0, 200)); });
 
     try {
-      await ui(`[...document.querySelectorAll('.top-right .icon-btn')].find((b) => /Terminal/.test(b.title)).click(); 0`);
+      await ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', ctrlKey: true, bubbles: true })); 0`);
       await until(`document.querySelector('.drawer .tabs') ? 1 : 0`, 8000);
       await clickBtn('.drawer .tabs', 'Network');
       const listed = await until(`document.querySelectorAll('.net-row').length >= 3 ? 1 : 0`, 10000);

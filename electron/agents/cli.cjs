@@ -2,7 +2,7 @@ const { spawn } = require('node:child_process');
 
 const isWin = process.platform === 'win32';
 
-const q = (a) => (isWin && /[\s"&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+const q = (a) => (isWin && /[\s"&|<>^()]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
 
 function spawnCli(bin, args, cwd) {
   return spawn(q(bin), args.map(q), {

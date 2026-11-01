@@ -31,7 +31,7 @@ server.listen(0, '127.0.0.1', () => {
     const ui = (code) => host.executeJavaScript(code);
     const until = poll(ui, 300);
     const screen = `[...document.querySelectorAll('.term-screen')].find((s) => s.style.display !== 'none')?.querySelector('.xterm-rows')?.innerText || ''`;
-    const toggleDrawer = () => ui(`[...document.querySelectorAll('.top-right .icon-btn')].find((b) => /Terminal/.test(b.title)).click(); 0`);
+    const toggleDrawer = () => ui(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', ctrlKey: true, bubbles: true })); 0`);
     const errors = [];
     host.on('console-message', (e) => { if ((e.level === 'error' || e.level === 3) && !/Security Warning/.test(e.message)) errors.push(e.message.slice(0, 200)); });
 
@@ -39,7 +39,7 @@ server.listen(0, '127.0.0.1', () => {
       const found = terminal.shells();
       log('shells installed on this machine are found', found.length >= 1 && found.every((s) => fs.existsSync(s.path)), found.map((s) => s.name).join(', '));
 
-      await until(`[...document.querySelectorAll('.top-right .icon-btn')].some((b) => /Terminal/.test(b.title)) ? 1 : 0`, 20000);
+      await until(`document.querySelector('.topbar') ? 1 : 0`, 20000);
       await toggleDrawer();
       log('opening the drawer starts a terminal', await until(`document.querySelectorAll('.term-tab').length === 1 && document.querySelector('.xterm-rows') ? 1 : 0`, 10000) === 1);
       log('it runs the first shell found', (await ui(`document.querySelector('.term-tab span').textContent`)) === found[0].name);

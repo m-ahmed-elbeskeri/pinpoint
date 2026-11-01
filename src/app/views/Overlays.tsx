@@ -22,6 +22,7 @@ export function Overlays({ app }: { app: AppContext }) {
           canExtract={/^(https?|file):/.test(app.nav.url)}
           extract={() => app.browser.current?.extractDesign() ?? Promise.resolve(null)}
           askAgent={app.askAgentForDesign}
+          agentName={app.agentName}
           root={app.root}
           designChanged={app.designChanged}
           onNewChat={() => { app.newChat(); app.setSheet(null); app.flash('New chat: the next request sends the updated design rules.'); }}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { MOD, api, readHistory } from '../shared';
 import { AgentControls } from '../../components/agent/AgentControls';
 import { AgentPicker } from '../../components/agent/AgentPicker';
-import { ContextMeter, ReadingStrip } from '../../components/agent/AgentStatus';
+import { ContextMeter } from '../../components/agent/AgentStatus';
 import { AnnotationList, ImageChips } from '../../components/agent/AnnotationList';
 import { ContextBar } from '../../components/agent/ContextBar';
 import { GitPanel } from '../../components/git/GitPanel';
@@ -20,7 +20,7 @@ export function Composer({ app }: { app: AppContext }) {
   return (
     <div className={`composer ${composerMore ? 'more' : ''}`}>
       <BackgroundRuns
-        runs={app.bgRuns} onApply={app.applyBg} onDiscard={app.discardBg}
+        runs={app.bgRuns} onApply={app.applyBg} onDiscard={app.discardBg} onOpen={app.openBg}
         onDiff={(r) => api.bgDiff(r.id).then((text) => app.setPatchView({ title: r.title, text }))}
       />
       {app.projectDir && (
@@ -57,7 +57,6 @@ export function Composer({ app }: { app: AppContext }) {
           <button className="icon-btn xs" onClick={() => app.setLimits(null)} title="Dismiss"><X size={12} /></button>
         </div>
       )}
-      {app.runId && <ReadingStrip items={app.chat} root={app.root} />}
       {app.queuedRef.current.length > 0 && (
         <div className="queue-tray">
           <div className="queue-title">Waiting to send when this run ends</div>

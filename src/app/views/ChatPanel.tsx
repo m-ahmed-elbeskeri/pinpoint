@@ -1,9 +1,11 @@
+import { BackgroundChat } from '../../components/agent/BackgroundChat';
+import { api } from '../shared';
 import { useState } from 'react';
 import { MATCH_ROUNDS, combo } from '../shared';
 import { Composer } from './Composer';
 import { ChatList } from '../../components/chat';
 import { EmptyChat } from '../../components/shell/EmptyChat';
-import { ArrowDown, Check, CornerDownRight, GitPullRequestArrow, History, ImagePlus, Loader2, MessageSquare, Plus, SquarePen, X } from '../../components/ui/icons';
+import { ArrowDown, Check, CornerDownRight, GitPullRequestArrow, History, ImagePlus, Loader2, MessageSquare, Plus, SquarePen, X, SquareStack } from '../../components/ui/icons';
 import { PullIcon } from '../../components/git/PullIcon';
 import { SideChat } from '../../components/agent/SideChat';
 import { chatTitle } from '../../lib/chat';
@@ -36,6 +38,12 @@ export function ChatPanel({ app }: { app: AppContext }) {
           {app.chatId && app.gitStatus?.repo && app.gitStatus.remote && app.gitStatus.branch && app.gitStatus.branch !== app.gitStatus.defaultBranch && !app.pulls[app.gitStatus.branch] && app.recentFiles.length > 0 && (
             <button className="ptab-new" onClick={() => app.setBranchCompare({ pr: true })} title="Open a pull request from this chat"><GitPullRequestArrow size={13} /></button>
           )}
+          {app.activeBg && (
+            <div className="ptab side on" title={app.activeBg.title}>
+              {app.activeBg.status === 'running' ? <Loader2 size={12} className="spin" /> : <SquareStack size={12} />}<span>{app.activeBg.title}</span>
+              <button className="ptab-x" onClick={() => app.setActiveSide(null)} title="Back to the chat"><X size={11} /></button>
+            </div>
+          )}
           {app.sides.map((x) => (
             <div key={x.id} className={`ptab side ${app.activeSide === x.id ? 'on' : ''}`} onClick={() => app.setActiveSide(x.id)} title={x.title}>
               {x.running ? <Loader2 size={12} className="spin" /> : <CornerDownRight size={12} />}<span>{x.title}</span>
@@ -48,6 +56,16 @@ export function ChatPanel({ app }: { app: AppContext }) {
         <div className="spacer" />
         <button className="btn ghost xs panel-new quiet" onClick={app.newChat} disabled={!!app.job || !app.chat.length} title={`${app.runId ? 'Start another chat. This one keeps working.' : app.session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
       </div>
+      {app.activeBg && (
+        <BackgroundChat
+          run={app.activeBg} agentName={app.agentName}
+          onSend={(text) => app.askBg(app.activeBg!, text)}
+          onStop={() => { api.bgStop(app.activeBg!.id).catch(() => {}); }}
+          onApply={() => app.applyBg(app.activeBg!)}
+          onDiff={() => api.bgDiff(app.activeBg!.id).then((text) => app.setPatchView({ title: app.activeBg!.title, text }))}
+          onDiscard={() => app.discardBg(app.activeBg!)}
+        />
+      )}
       {app.sides.map((x) => (
         <SideChat
           key={x.id} sideId={x.id} active={app.activeSide === x.id} agentName={app.agentName}

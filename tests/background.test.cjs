@@ -34,7 +34,7 @@ process.stdin.on('data', (d) => {
     const text = m.message.content.filter((c) => c.type === 'text').map((c) => c.text).join('\\n');
     const css = path.join(process.cwd(), 'style.css');
     const had = fs.readFileSync(css, 'utf8');
-    fs.appendFileSync(${JSON.stringify(seenLog)}, JSON.stringify({ cwd: process.cwd(), sawUncommitted: had.includes('p { color: #333; }'), sawUntracked: fs.existsSync(path.join(process.cwd(), 'notes.txt')), background: /separate copy of the project/.test(text), text: text.slice(0, 4000) }) + '\\n');
+    fs.appendFileSync(${JSON.stringify(seenLog)}, JSON.stringify({ cwd: process.cwd(), sawUncommitted: had.includes('p { color: #333; }'), sawUntracked: fs.existsSync(path.join(process.cwd(), 'notes.txt')), background: /separate copy of the project/.test(text), text: text.slice(0, 4000), args: process.argv.join(' ') }) + '\\n');
     emit({ type: 'system', subtype: 'init', session_id: 's', model: 'stand-in' });
     const color = /green/.test(text) ? '#0a0' : '#00c';
     setTimeout(() => {
@@ -89,6 +89,8 @@ server.listen(0, '127.0.0.1', () => {
       const both = await until(`document.querySelectorAll('.bg-run').length === 2 ? 1 : 0`, 15000);
       log('two background runs started', both === 1);
       const done = await until(`document.querySelectorAll('.bg-run.done').length === 2 ? 1 : 0`, 60000);
+      await until(`document.querySelector('.thread.sub-chat.task') ? 1 : 0`, 4000);
+      log('background tasks show in the sidebar', (await ui(`document.querySelectorAll('.thread.sub-chat.task').length`)) === 2);
       log('both finished', done === 1, await ui(`[...document.querySelectorAll('.bg-run .bg-head')].map((h) => h.innerText.replace(/\\s+/g, ' ')).join(' | ')`));
       const s = seen();
       log('each ran in its own copy, not in the project', s.length === 2 && s[0].cwd !== s[1].cwd && s.every((x) => path.resolve(x.cwd) !== path.resolve(proj)), s.map((x) => x.cwd).join(' | '));
@@ -107,6 +109,25 @@ server.listen(0, '127.0.0.1', () => {
       log('apply brings the change into the project', after === START + 'h1 { color: #0a0; }\n', JSON.stringify(after.slice(-60)));
       const card = await ui(`[...document.querySelectorAll('.done-card .done-head > span:first-of-type')].map((x) => x.textContent).join(' | ')`);
       log('applied run appears in the chat, undoable', /Background run applied · 1 file/.test(card), card);
+      // Opening a task from the sidebar and talking to it.
+      const projectBefore = fs.readFileSync(path.join(proj, 'style.css'), 'utf8');
+      const copies = seen().length;
+      await ui(`[...document.querySelectorAll('.thread.sub-chat.task')].find((r) => /blue/.test(r.innerText)).click(); 0`);
+      log('a task opens from the sidebar, with what it said', await until(`/Made the heading/.test(document.querySelector('.bg-chat .side-body')?.textContent || '') ? 1 : 0`, 4000) === 1);
+      log('the chat underneath is out of the way', await ui(`document.querySelector('.panel').classList.contains('side-active')`));
+      await sleep(600);
+      try { fs.writeFileSync(path.join(OUT, 'bg-chat.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
+      await ui(`(() => { const t = document.querySelector('.bg-chat textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'make it blue again please'); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await sleep(150);
+      await ui(`document.querySelector('.bg-chat .side-send').click(); 0`);
+      log('a reply shows and the task works again', await until(`document.querySelector('.bg-chat-result.running') && /blue again/.test(document.querySelector('.bg-chat .side-body').textContent) ? 1 : 0`, 4000) === 1);
+      log('and it finishes', await until(`document.querySelector('.bg-chat-result.done') ? 1 : 0`, 20000) === 1);
+      const reply = seen().slice(copies)[0];
+      log('the reply continues the same session', /--resume s\b/.test(reply?.args || ''), reply?.args);
+      log('in the task\'s copy, not your project', !!reply && path.resolve(reply.cwd) !== path.resolve(proj) && fs.readFileSync(path.join(proj, 'style.css'), 'utf8') === projectBefore);
+      await ui(`document.querySelector('.ptab.side.on .ptab-x').click(); 0`);
+      await sleep(150);
+      log('closing the tab goes back to the chat', !(await ui(`document.querySelector('.bg-chat') ? 1 : 0`)));
       await ui(`[...document.querySelectorAll('.bg-run')].find((r) => /blue/.test(r.innerText)).querySelector('.btn.primary').click(); 0`);
       const conflict = await until(`document.querySelector('.toast')?.textContent || ''`, 6000);
       log('a run that no longer fits is refused, not half-applied', /no longer fit/.test(conflict || '') && fs.readFileSync(path.join(proj, 'style.css'), 'utf8') === after, conflict);

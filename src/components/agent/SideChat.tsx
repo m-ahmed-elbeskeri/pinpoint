@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUp, Eye, Loader2, RotateCcw, Square } from '../ui/icons';
-import { Markdown } from '../chat';
+import { ArrowUp, RotateCcw, Square } from '../ui/icons';
+import { Transcript, applyEvent, type TranscriptItem } from './Transcript';
 import { uid } from '../../lib/draw';
 import type { SideEvent } from '../../types';
 import { errText } from '../../lib/util';
-
-type Item =
-  | { kind: 'user'; id: string; text: string }
-  | { kind: 'agent'; id: string; text: string; live: string; steps: number; last?: string; streaming: boolean }
-  | { kind: 'error'; id: string; text: string };
 
 interface Props {
   sideId: string;
@@ -20,10 +15,9 @@ interface Props {
   onTitle(title: string): void;
   onRunning(running: boolean): void;
 }
-const join = (a: string, b: string) => (a && b ? `${a}\n\n${b}` : a || b);
 
 export function SideChat({ sideId, active, agentName, seed, onSeedUsed, getContext, onTitle, onRunning }: Props) {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<TranscriptItem[]>([]);
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
   const session = useRef<string | null>(null);
@@ -41,21 +35,7 @@ export function SideChat({ sideId, active, agentName, seed, onSeedUsed, getConte
 
   useEffect(() => window.pinpoint.onSideEvent((e: SideEvent) => {
     if (e.sideId !== sideId) return;
-    setItems((list) => {
-      const last = list[list.length - 1];
-      const turn = last?.kind === 'agent' && last.streaming ? last : null;
-      const patch = (p: Partial<Extract<Item, { kind: 'agent' }>>) => [...list.slice(0, -1), { ...turn!, ...p }];
-      const fresh = (p: Partial<Extract<Item, { kind: 'agent' }>>): Item => ({ kind: 'agent', id: uid(), text: '', live: '', steps: 0, streaming: true, ...p });
-      switch (e.type) {
-        // Deltas stream into `live`; a finished block replaces them. CLIs that only stream keep `live` until done.
-        case 'text_delta': return turn ? patch({ live: turn.live + e.text }) : [...list, fresh({ live: e.text })];
-        case 'text': return turn ? patch({ text: join(turn.text, e.text), live: '' }) : [...list, fresh({ text: e.text })];
-        case 'tool': return turn ? patch({ steps: turn.steps + 1, last: `${e.name} ${e.detail}`.trim() }) : [...list, fresh({ steps: 1, last: `${e.name} ${e.detail}`.trim() })];
-        case 'error': return e.text === 'Stopped.' ? list : [...list, { kind: 'error', id: uid(), text: e.text }];
-        case 'done': return turn ? patch({ streaming: false, text: join(turn.text, turn.live.trim()), live: '' }) : list;
-        default: return list;
-      }
-    });
+    if (e.type === 'text_delta' || e.type === 'text' || e.type === 'error' || e.type === 'tool' || e.type === 'done') setItems((list) => applyEvent(list, e));
     if (e.type === 'session') session.current = e.sessionId;
     if (e.type === 'done') { setRunning(false); if (e.sessionId) session.current = e.sessionId; }
   }), [sideId]);
@@ -99,22 +79,7 @@ export function SideChat({ sideId, active, agentName, seed, onSeedUsed, getConte
             </div>
           </div>
         )}
-        {items.map((it) => it.kind === 'user'
-          ? <div key={it.id} className="msg user side-q">{it.text}</div>
-          : it.kind === 'error'
-            ? <div key={it.id} className="msg error"><AlertTriangle size={13} /> <span>{it.text}</span></div>
-            : (
-              <div key={it.id} className="side-a">
-                {it.steps > 0 && (
-                  <div className="side-steps" title={it.last}>
-                    {it.streaming ? <Loader2 size={11} className="spin" /> : <Eye size={11} />}
-                    Looked at {it.steps} thing{it.steps === 1 ? '' : 's'}{it.streaming && it.last ? ` · ${it.last.split(/[\\/]/).pop()}` : ''}
-                  </div>
-                )}
-                {it.text || it.live ? <div className="msg agent"><Markdown text={join(it.text, it.live)} /></div> : it.streaming && !it.steps ? <div className="side-steps"><Loader2 size={11} className="spin" /> Thinking…</div> : null}
-              </div>
-            ))}
-        {running && items[items.length - 1]?.kind === 'user' && <div className="side-steps"><Loader2 size={11} className="spin" /> Thinking…</div>}
+        <Transcript items={items} running={running} />
       </div>
       <div className="side-foot">
         <textarea

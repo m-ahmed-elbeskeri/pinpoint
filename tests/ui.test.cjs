@@ -91,6 +91,18 @@ server.listen(0, '127.0.0.1', () => {
       }
       log('picking opens the note with element tools', pop);
       await shot('picked');
+      const popAt = () => ui(`(() => { const r = document.querySelector('.note-pop').getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y) }; })()`);
+      const before = await popAt();
+      const grip = await ui(`(() => { const r = document.querySelector('.note-pop-title').getBoundingClientRect(); return { x: Math.round(r.x + 10), y: Math.round(r.y + r.height / 2) }; })()`);
+      const drag = host;
+      drag.sendInputEvent({ type: 'mouseMove', x: grip.x, y: grip.y });
+      drag.sendInputEvent({ type: 'mouseDown', x: grip.x, y: grip.y, button: 'left', clickCount: 1 });
+      for (let i = 1; i <= 6; i++) { drag.sendInputEvent({ type: 'mouseMove', x: grip.x - i * 15, y: grip.y + i * 10, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(30); }
+      drag.sendInputEvent({ type: 'mouseUp', x: grip.x - 90, y: grip.y + 60, button: 'left', clickCount: 1 });
+      await sleep(200);
+      const after = await popAt();
+      log('the element panel can be dragged out of the way', after.x !== before.x || after.y !== before.y, JSON.stringify([before, after]));
+      log('and stays open', await ui(`!!document.querySelector('.note-pop .el-tools')`));
       log('host clicks during pick (expect none)', true, JSON.stringify(await ui(`[window.__clicks || [], document.activeElement.className || document.activeElement.tagName]`)));
       let tabs = [];
       for (let i = 0; i < 20 && tabs.length < 4; i++) { tabs = await ui(`[...document.querySelectorAll('.el-tabs button')].map((b) => b.textContent)`); if (tabs.length < 4) await sleep(400); }

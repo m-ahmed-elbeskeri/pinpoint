@@ -198,9 +198,10 @@ interface BgProps {
   onApply(run: BgRun): void;
   onDiscard(run: BgRun): void;
   onDiff(run: BgRun): void;
+  onOpen(id: string): void;
 }
 
-export function BackgroundRuns({ runs, onApply, onDiscard, onDiff }: BgProps) {
+export function BackgroundRuns({ runs, onApply, onDiscard, onDiff, onOpen }: BgProps) {
   const [shots, setShots] = useState<Record<string, string>>({});
   useEffect(() => {
     for (const r of runs) {
@@ -212,7 +213,7 @@ export function BackgroundRuns({ runs, onApply, onDiscard, onDiff }: BgProps) {
     <div className="bg-runs">
       {runs.map((r) => (
         <div key={r.id} className={`bg-run ${r.status}`}>
-          <div className="bg-head">
+          <div className="bg-head" onClick={() => onOpen(r.id)} title="Open this task">
             {r.status === 'running' ? <Loader2 size={13} className="spin" /> : r.status === 'done' ? <Check size={13} /> : <X size={13} />}
             <b title={r.title}>{r.title}</b>
             <span className="hint">{r.status === 'running' ? r.step || 'working in a separate copy…' : r.status === 'done' ? `${r.files?.length || 0} file${r.files?.length === 1 ? '' : 's'}` : 'failed'}</span>

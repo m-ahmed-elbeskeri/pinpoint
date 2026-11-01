@@ -15,6 +15,59 @@ const bgSend = (sender, evt) => { if (!sender.isDestroyed()) sender.send('bg:eve
 
 function register(ctx) {
   const { bgRuns, loadSettings, projectDir, killTree } = ctx;
+
+  // One turn of a task's agent, in the task's own copy of the project.
+  function startTurn(sender, id, entry, { prompt, images, sessionId }) {
+    const settings = loadSettings();
+    const root = projectDir();
+    const { run } = entry;
+    entry.finished = false;
+    entry.text = '';
+    entry.handle = runAgent({
+      settings, cwd: run.cwd, prompt, images, sessionId, requestDir: entry.requestDir,
+      onEvent: async (evt) => {
+        if (evt.type === 'text') entry.text = evt.text;
+        else if (evt.type === 'text_delta') entry.text += evt.text;
+        else if (evt.type === 'session') entry.session = evt.sessionId;
+        else if (evt.type === 'tool') bgSend(sender, { id, type: 'step', text: `${evt.name} ${path.basename(String(evt.detail || ''))}`.trim() });
+        else if (evt.type === 'error') bgSend(sender, { id, type: 'step', text: evt.text });
+        if (['text', 'text_delta', 'tool', 'error'].includes(evt.type)) bgSend(sender, { id, type: 'agent', event: { type: evt.type, text: evt.text, name: evt.name, detail: evt.detail } });
+        if (evt.type !== 'done') return;
+        if (evt.sessionId) entry.session = evt.sessionId;
+        entry.finished = true;
+        try {
+          const res = await background.result(run);
+          entry.files = res.files;
+          entry.patch = res.patch;
+          let shot = false;
+          if (evt.ok && res.files.length && settings.devCommand && /^https?:/.test(entry.url || '')) {
+            bgSend(sender, { id, type: 'step', text: 'Taking a screenshot of the result…' });
+            const { url, proc } = await background.preview(run, settings.devCommand, 5300 + Math.floor(Math.random() * 600));
+            try {
+              if (url) {
+                const u = new URL(entry.url);
+                const s = await routecheck.shoot(url.replace(/\/$/, '') + u.pathname + u.search);
+                if (s) { runs.saveShotBuffer(root, `bg-${id}`, 'after', s.jpg); shot = true; }
+              }
+            } finally { killTree(proc); }
+          }
+          bgSend(sender, { id, type: 'done', ok: evt.ok, files: res.files, summary: entry.text, cost: evt.cost, shot });
+        } catch (err) { bgSend(sender, { id, type: 'done', ok: false, files: [], summary: `Couldn't collect the result: ${err.message}` }); }
+      },
+    });
+  }
+
+  // A follow-up: continues the same session when the agent can, otherwise it's told what was said.
+  ipcMain.handle('bg:ask', (e, { id, text, context }) => {
+    const entry = bgRuns.get(id);
+    if (!entry) throw new Error('That background task is gone.');
+    if (!entry.finished) throw new Error('This task is still working.');
+    const prompt = entry.session ? text : `${context ? `What was said so far:\n<conversation>\n${context}\n</conversation>\n\n` : ''}${text}`;
+    startTurn(e.sender, id, entry, { prompt, images: [], sessionId: entry.session || null });
+    return true;
+  });
+  ipcMain.handle('bg:stop', (_e, id) => { bgRuns.get(id)?.handle?.kill(); return true; });
+
   ipcMain.handle('bg:blocker', () => background.blocker(projectDir()));
 
   ipcMain.handle('bg:start', async (e, { id, request }) => {
@@ -38,35 +91,9 @@ function register(ctx) {
       const memory = settings.useMemory ? project.readMemory(root).filter((m) => m.enabled !== false && m.text?.trim()) : [];
       const designSystem = inspectSafe(root);
       const prompt = buildPrompt({ request: moved, files, projectDir: run.cwd, followUp: false, design: design?.exists ? design.content : '', memory, designSystem });
-      entry.handle = runAgent({
-        settings, cwd: run.cwd, prompt, images: files.images, sessionId: null, requestDir: files.dir,
-        onEvent: async (evt) => {
-          if (evt.type === 'text') entry.text = evt.text;
-          else if (evt.type === 'text_delta') entry.text += evt.text;
-          else if (evt.type === 'tool') bgSend(e.sender, { id, type: 'step', text: `${evt.name} ${path.basename(String(evt.detail || ''))}`.trim() });
-          else if (evt.type === 'error') bgSend(e.sender, { id, type: 'step', text: evt.text });
-          if (evt.type !== 'done') return;
-          entry.finished = true;
-          try {
-            const res = await background.result(run);
-            entry.files = res.files;
-            entry.patch = res.patch;
-            let shot = false;
-            if (evt.ok && res.files.length && settings.devCommand && /^https?:/.test(request.url || '')) {
-              bgSend(e.sender, { id, type: 'step', text: 'Taking a screenshot of the result…' });
-              const { url, proc } = await background.preview(run, settings.devCommand, 5300 + Math.floor(Math.random() * 600));
-              try {
-                if (url) {
-                  const u = new URL(request.url);
-                  const s = await routecheck.shoot(url.replace(/\/$/, '') + u.pathname + u.search);
-                  if (s) { runs.saveShotBuffer(root, `bg-${id}`, 'after', s.jpg); shot = true; }
-                }
-              } finally { killTree(proc); }
-            }
-            bgSend(e.sender, { id, type: 'done', ok: evt.ok, files: res.files, summary: entry.text, cost: evt.cost, shot });
-          } catch (err) { bgSend(e.sender, { id, type: 'done', ok: false, files: [], summary: `Couldn't collect the result: ${err.message}` }); }
-        },
-      });
+      entry.requestDir = files.dir;
+      entry.url = request.url;
+      startTurn(e.sender, id, entry, { prompt, images: files.images, sessionId: null });
     } catch (err) {
       bgRuns.delete(id);
       await background.remove(run);

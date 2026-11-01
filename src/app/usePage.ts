@@ -10,7 +10,14 @@ import type { AppContext } from './context';
 export function usePage(app: AppContext) {
   const settings = app.settings;
   const [mode, setModeState] = useState<Mode>('browse');
-  const [device, setDevice] = useState<Device>(DEVICE_OFF);
+  // Each tab keeps its own preview size.
+  const [deviceByTab, setDeviceByTab] = useState<Record<string, Device>>({});
+  const device = deviceByTab[app.activeTab] ?? DEVICE_OFF;
+  const setDevice = (next: Device | ((d: Device) => Device)) => setDeviceByTab((all) => {
+    const tab = app.activeTab;
+    const now = all[tab] ?? DEVICE_OFF;
+    return { ...all, [tab]: typeof next === 'function' ? next(now) : next };
+  });
   const [avail, setAvail] = useState({ w: 0, h: 0 });
   const dragging = useRef(false);
   const [breakpoints, setBreakpoints] = useState<Breakpoint[]>([]);

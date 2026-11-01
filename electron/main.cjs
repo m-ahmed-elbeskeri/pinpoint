@@ -121,6 +121,7 @@ for (const domain of [
   require('./ipc/variants.cjs'),
   require('./ipc/git.cjs'),
   require('./ipc/devserver.cjs'),
+  require('./ipc/extensions.cjs'),
 ]) domain.register(ctx);
 
 app.setName('Pinpoint');

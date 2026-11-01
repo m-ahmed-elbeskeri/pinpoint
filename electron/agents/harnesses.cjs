@@ -7,7 +7,7 @@ const BUILTIN = [
     access: [
       { value: 'plan', label: 'Plan only', desc: 'Read-only; no files are changed' },
       { value: 'auto_edit', label: 'Edit files', desc: 'Auto-approves file edits' },
-      { value: 'yolo', label: 'Full access', desc: 'Auto-approves every tool, commands included' },
+      { value: 'yolo', label: 'Bypass permissions', desc: 'Auto-approves every tool, commands included' },
     ],
     defaultAccess: 'auto_edit',
     args: ({ prompt, model, access }) => ['-p', prompt, '--output-format', 'stream-json', '--approval-mode', access, ...(model ? ['-m', model] : [])],
@@ -17,7 +17,7 @@ const BUILTIN = [
     access: [
       { value: 'plan', label: 'Plan only', desc: 'Read-only; no files are changed' },
       { value: 'auto-edit', label: 'Edit files', desc: 'Auto-approves file edits' },
-      { value: 'yolo', label: 'Full access', desc: 'Auto-approves every tool' },
+      { value: 'yolo', label: 'Bypass permissions', desc: 'Auto-approves every tool' },
     ],
     defaultAccess: 'auto-edit',
     args: ({ prompt, model, access }) => ['-p', prompt, '--output-format', 'stream-json', '--approval-mode', access, ...(model ? ['-m', model] : [])],
@@ -26,7 +26,7 @@ const BUILTIN = [
     id: 'cursor', name: 'Cursor Agent', bin: 'cursor-agent',
     access: [
       { value: 'ask', label: 'Plan only', desc: 'Proposes changes without writing them' },
-      { value: 'force', label: 'Full access', desc: 'Writes files and runs commands' },
+      { value: 'force', label: 'Bypass permissions', desc: 'Writes files and runs commands' },
     ],
     defaultAccess: 'force',
     args: ({ prompt, model, access, sessionId }) => ['-p', prompt, '--output-format', 'stream-json', ...(access === 'force' ? ['--force'] : []), ...(model ? ['--model', model] : []), ...(sessionId ? ['--resume', sessionId] : [])],
@@ -41,7 +41,7 @@ const BUILTIN = [
     id: 'amp', name: 'Amp', bin: 'amp',
     access: [
       { value: 'ask', label: 'Default', desc: "Uses Amp's own permission rules" },
-      { value: 'all', label: 'Full access', desc: 'Allows every tool without asking' },
+      { value: 'all', label: 'Bypass permissions', desc: 'Allows every tool without asking' },
     ],
     defaultAccess: 'all',
     args: ({ prompt, access }) => ['-x', prompt, '--stream-json', ...(access === 'all' ? ['--dangerously-allow-all'] : [])],
@@ -59,7 +59,7 @@ const BUILTIN = [
   {
     id: 'copilot', name: 'GitHub Copilot CLI', bin: 'copilot',
     access: [
-      { value: 'tools', label: 'Full access', desc: 'Allows every tool without asking' },
+      { value: 'tools', label: 'Bypass permissions', desc: 'Allows every tool without asking' },
     ],
     defaultAccess: 'tools',
     args: ({ prompt, model }) => ['-p', prompt, '--allow-all-tools', ...(model ? ['--model', model] : [])],

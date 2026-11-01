@@ -1591,23 +1591,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   font-variant-numeric: tabular-nums;
 }
 .limit-banner span { flex: 1; min-width: 0; }
-.reading-file {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 40%;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 6px;
-  font: 11px var(--mono);
-  color: var(--muted);
-  background: var(--bg-2);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 .to-latest button {
   height: 26px;
   padding: 0 11px;

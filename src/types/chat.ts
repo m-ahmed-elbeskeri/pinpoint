@@ -1,3 +1,4 @@
+import type { TranscriptItem } from '../components/agent/Transcript';
 import type { AgentId } from './agent';
 import type { GitCommit } from './git';
 import type { BuildSize, ElementInfo, FlowResult, FlowStep, ForcedState, PerfMetrics, Rect, RequestNote } from './page';
@@ -9,7 +10,7 @@ export interface RouteCheckResult {
   asked?: string[];
 }
 
-export interface BgRun { id: string; title: string; status: 'running' | 'done' | 'failed'; step?: string; summary?: string; files?: FileChange[]; shot?: boolean }
+export interface BgRun { id: string; title: string; status: 'running' | 'done' | 'failed'; step?: string; summary?: string; files?: FileChange[]; shot?: boolean; parent: string | null; items: TranscriptItem[] }
 
 export interface Handoff {
   pinpointHandoff: 1; createdAt: number; url: string; title: string; viewport?: { width: number; height: number };

@@ -624,3 +624,7 @@
 .composer-foot .dd-access .dd-label { display: none; }
 .composer-foot .dd-access .dd-btn svg:first-child { color: var(--text-2); }
 .composer-foot .access-full .dd-btn svg:first-child { color: var(--warn); }
+
+.note-pop-head { cursor: grab; touch-action: none; user-select: none; }
+.note-pop.moving .note-pop-head { cursor: grabbing; }
+.composer-foot .access-bypass .dd-btn svg:first-child { color: var(--bad); }

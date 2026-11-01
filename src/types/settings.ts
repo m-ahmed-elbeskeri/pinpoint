@@ -6,6 +6,8 @@ export interface SavedLayout { name: string; threadsHidden: boolean; panelHidden
 export interface DesignDoc { path: string; exists: boolean; content: string }
 
 export interface Settings {
+  // What's switched on or off per agent, by MCP server or skill.
+  extensions?: Record<string, { mcp?: Record<string, boolean>; skills?: Record<string, boolean> }>;
   agent: AgentId;
   claudePath: string;
   codexPath: string;

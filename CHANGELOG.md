@@ -4,6 +4,29 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-01
+
+### Added
+
+- **MCP servers and skills.** New top bar buttons list what Claude Code or Codex has, with each server's live status, and switch any of them on or off for Pinpoint's runs. The CLI's own setup isn't changed.
+- **Instructions.** Read and edit CLAUDE.md, AGENTS.md and CLAUDE.local.md for the project, and your personal ones, on their own page with a rendered view.
+- **Bypass permissions**, for agents that have it, next to Full access.
+- The element panel can be dragged by its header, out of the way of what you're editing. Double-click puts it back.
+- A chat that's working has a band of light moving across its row in the sidebar.
+- Each browser tab keeps its own preview size.
+- **Background tasks and side chats in the sidebar**, nested under the chat that started them. Open a background task to read its whole conversation and reply: it continues the same session in its separate copy of the project.
+
+### Changed
+
+- **Full access for Claude Code now means `auto`**: no prompts, with its safety check on. If you had Full access selected, you stay on what it used to do, now labelled Bypass permissions.
+- **Full access for Codex now asks before risky actions.** Bypass permissions is the option with no questions.
+- New icons for Full access and Bypass permissions.
+
+### Removed
+
+- The terminal button in the top bar (Ctrl/⌘+J, the palette and the tabs' + still open it).
+- The strip of file names above the composer.
+
 ## [0.12.0] - 2026-10-31
 
 ### Added

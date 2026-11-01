@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArrowRight, ChevronDown, ClipboardCopy, ExternalLink, TerminalSquare, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, NewWindow, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, Users, X } from '../ui/icons';
+import { Archive, ArrowRight, CornerDownRight, SquareStack, ChevronDown, ClipboardCopy, ExternalLink, TerminalSquare, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, NewWindow, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, Users, X } from '../ui/icons';
 import { Logo } from './Logo';
 import { PullIcon } from '../git/PullIcon';
 import type { ChatMeta, GitPull, OtherChat } from '../../types';
@@ -7,7 +7,11 @@ import { useDismiss } from '../../lib/hooks';
 import { agoShort } from '../../lib/time';
 
 
+export interface SubChat { id: string; kind: 'side' | 'task'; title: string; parent: string | null; running: boolean; failed?: boolean; on: boolean; hint: string }
+
 interface Props {
+  subChats: SubChat[];
+  onOpenSub(s: SubChat): void;
   mod: string;
   projectDir: string;
   recentProjects: string[];
@@ -118,6 +122,17 @@ export function ThreadSidebar(p: Props) {
 
   const otherProjects = p.recentProjects.filter((d) => d !== p.projectDir);
 
+  // Side chats and background tasks sit under the chat that started them.
+  const listed = new Set(groups.flatMap((g) => g.items.map((c) => c.id)));
+  const loose = p.subChats.filter((s) => !s.parent || !listed.has(s.parent));
+  const subRow = (s: SubChat) => (
+    <div key={s.id} className={`thread sub-chat ${s.kind} ${s.on ? 'on' : ''} ${s.running ? 'running' : ''}`} onClick={() => p.onOpenSub(s)} title={s.title}>
+      <i className="thread-state">{s.running ? <Loader2 size={11} className="spin" /> : s.kind === 'task' ? <SquareStack size={11} /> : <CornerDownRight size={11} />}</i>
+      <span className="thread-title">{s.title}</span>
+      <span className={`thread-time ${s.failed ? 'failed' : ''}`}>{s.hint}</span>
+    </div>
+  );
+
   const fileManager = window.pinpoint.platform === 'darwin' ? 'Finder' : window.pinpoint.platform === 'win32' ? 'File Explorer' : 'file manager';
   const projectMenu = (dir: string, current: boolean) => menuFor === `proj:${dir}` && (
     <div className="thread-menu proj-menu">
@@ -167,16 +182,22 @@ export function ThreadSidebar(p: Props) {
         {p.projectDir && list.length === 0 && (
           <div className="threads-empty">{query ? 'No chats match' : 'No chats yet'}</div>
         )}
+        {loose.length > 0 && (
+          <div className="thread-group">
+            <div className="threads-label">Background</div>
+            {loose.map(subRow)}
+          </div>
+        )}
         {groups.map((g) => (
           <div key={g.label} className="thread-group">
             <div className="threads-label">{g.label}</div>
-            {g.items.map((c) => {
+            {g.items.flatMap((c) => {
               const other = p.others.find((o) => o.id === c.id);
               const on = c.id === p.chatId;
               const running = on ? p.currentRunning : !!other?.running;
               const finished = !on && other && !other.running;
               const waiting = on ? p.currentNeedsInput : !!other?.needsInput;
-              return (
+              return [
                 <div
                   key={c.id}
                   className={`thread history-item ${on ? 'on' : ''} ${running ? 'running' : ''} ${finished ? 'finished' : ''} ${waiting ? 'waiting' : ''}`}
@@ -212,8 +233,9 @@ export function ThreadSidebar(p: Props) {
                       </button>
                     </div>
                   )}
-                </div>
-              );
+                </div>,
+                ...p.subChats.filter((s) => s.parent === c.id).map(subRow),
+              ];
             })}
           </div>
         ))}

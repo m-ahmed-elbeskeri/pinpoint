@@ -248,6 +248,22 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   check('a chat keeps the branch it started on', (await project.loadChat(store, 'c')).branch === 'feature');
   fs.rmSync(store, { recursive: true, force: true });
 
+  // What a run leaves out.
+  const ext = require(path.join(repo, 'electron', 'agents', 'extensions.cjs'));
+  const claudeFlags = ext.claudeArgs({ extensions: { claude: { mcp: { 'claude.ai Claude Docs': false, keep: true }, skills: { dataviz: false, keep: true } } } });
+  check('Claude: switched-off servers and skills are denied, by the names it uses', claudeFlags.join(' ') === '--disallowedTools mcp__claude_ai_Claude_Docs Skill(dataviz)', claudeFlags.join(' '));
+  check('Claude: nothing switched off adds nothing', ext.claudeArgs({}).length === 0);
+  const skillDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-'));
+  fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: long-one\ndescription: >\n  First line\n  second line\nother: x\n---\nBody');
+  const longSkill = ext.skillInfo(path.join(skillDir, 'SKILL.md'));
+  check('a skill description written as a YAML block is read whole', longSkill.name === 'long-one' && longSkill.description === 'First line second line', JSON.stringify(longSkill));
+  fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: short\ndescription: "One line"\n---\n');
+  check('and a one-line description too', ext.skillInfo(path.join(skillDir, 'SKILL.md')).description === 'One line');
+  fs.rmSync(skillDir, { recursive: true, force: true });
+  const codexFlags = ext.codexArgs({ extensions: { codex: { mcp: { on: true, off: false, 'odd name': false }, skills: { 'C:\\s\\SKILL.md': false } } } }).join(' ');
+  check('Codex: each server is overridden, on or off', codexFlags.includes('mcp_servers.on.enabled=true') && codexFlags.includes('mcp_servers.off.enabled=false') && codexFlags.includes('mcp_servers."odd name".enabled=false'), codexFlags);
+  check('Codex: a skill is switched off by its path', codexFlags.includes('skills.config=[{path="C:/s/SKILL.md",enabled=false}]'), codexFlags);
+
   // Working out how to run a project.
   const devserver = require(path.join(repo, 'electron', 'project', 'devserver.cjs'));
   const proj2 = () => fs.mkdtempSync(path.join(os.tmpdir(), 'stack-'));

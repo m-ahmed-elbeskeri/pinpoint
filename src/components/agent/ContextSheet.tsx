@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Brain, Check, Eye, Loader2, Palette, PenLine, Plus, Sparkles, Trash2, Users, Wand2, X } from '../ui/icons';
+import { Brain, Check, Eye, FileText, Loader2, Palette, PenLine, Plugs, Plus, Sparkles, Trash2, Users, Wand2, X } from '../ui/icons';
+import { ExtensionList, InstructionsTab } from './ExtensionTabs';
 import { Markdown } from '../chat';
 import type { DesignDoc, MemoryItem, Settings } from '../../types';
 import { uid } from '../../lib/draw';
 import { useEscape } from '../../lib/hooks';
 
-export type ContextTab = 'design' | 'memory';
+export type ContextTab = 'design' | 'memory' | 'mcp' | 'skills' | 'instructions';
 
 interface Props {
   tab: ContextTab;
@@ -24,6 +25,7 @@ interface Props {
   designChanged: boolean;
   onNewChat(): void;
   chatBusy: boolean;
+  agentName: string;
 }
 
 function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): void; label: string }) {
@@ -47,10 +49,16 @@ export function ContextSheet(p: Props) {
             <button className={p.tab === 'memory' ? 'on' : ''} onClick={() => p.setTab('memory')}>
               <Brain size={14} /> Memory {p.memory.length > 0 && <span className="count">{p.memory.length}</span>}
             </button>
+            <button className={p.tab === 'mcp' ? 'on' : ''} onClick={() => p.setTab('mcp')}><Plugs size={14} /> MCP</button>
+            <button className={p.tab === 'skills' ? 'on' : ''} onClick={() => p.setTab('skills')}><Sparkles size={14} /> Skills</button>
+            <button className={p.tab === 'instructions' ? 'on' : ''} onClick={() => p.setTab('instructions')}><FileText size={14} /> Instructions</button>
           </div>
           <button className="icon-btn" onClick={p.onClose} title="Close (Esc)"><X size={16} /></button>
         </div>
-        {p.tab === 'design' ? <DesignTab {...p} /> : <MemoryTab {...p} />}
+        {p.tab === 'design' && <DesignTab {...p} />}
+        {p.tab === 'memory' && <MemoryTab {...p} />}
+        {(p.tab === 'mcp' || p.tab === 'skills') && <ExtensionList key={p.tab} kind={p.tab} settings={p.settings} saveSettings={p.saveSettings} agentName={p.agentName} />}
+        {p.tab === 'instructions' && <InstructionsTab />}
       </aside>
     </div>
   );

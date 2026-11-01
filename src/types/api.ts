@@ -1,8 +1,10 @@
+import type { TranscriptEvent } from '../components/agent/Transcript';
 import type { AgentEvent, AgentId, DevDetection, HarnessInfo, ModelCatalog, SideEvent } from './agent';
 import type { ApprovalDecision, Chat, ChatMeta, DiffFile, FileChange, Handoff, MemoryItem, RevertResult } from './chat';
 import type { BranchCompare, GitBranchInfo, GitCommit, GitPull, GitStatus } from './git';
 import type { ApiHandler, BuildSize, ComponentEntry, CssRuleInfo, DesignSystem, FlowStep, NetworkFailure, NetworkMode, PageEnv, Pin, Profile, Rect, ReviewComment, ReviewState, RouteInfo, SweepEvent } from './page';
 import type { DesignDoc, Settings, UpdateState } from './settings';
+import type { AgentExtensions, InstructionFile } from './agent';
 
 interface GitWorktree { path: string; open: string; branch: string | null; main: boolean; current: boolean }
 interface GitSwitchResult { branch?: string; worktree?: string; parked?: number; restored?: boolean; conflict?: string | null }
@@ -77,7 +79,9 @@ export interface PinpointAPI {
   bgShot(id: string): Promise<string | null>;
   bgApply(args: { id: string; runId: string; instruction: string }): Promise<{ changes: FileChange[] }>;
   bgDiscard(id: string): Promise<boolean>;
-  onBgEvent(cb: (e: { id: string; type: 'step' | 'done'; text?: string; ok?: boolean; files?: FileChange[]; summary?: string; shot?: boolean }) => void): () => void;
+  onBgEvent(cb: (e: { id: string; type: 'step' | 'done' | 'agent'; text?: string; ok?: boolean; files?: FileChange[]; summary?: string; shot?: boolean; event?: TranscriptEvent }) => void): () => void;
+  bgAsk(args: { id: string; text: string; context: string }): Promise<boolean>;
+  bgStop(id: string): Promise<boolean>;
   reviewStart(url: string): Promise<ReviewState>;
   reviewStop(): Promise<ReviewState>;
   reviewState(): Promise<ReviewState>;
@@ -162,6 +166,10 @@ export interface PinpointAPI {
   startDev(command: string): Promise<boolean>;
   detectDev(): Promise<DevDetection>;
   stopDev(): Promise<boolean>;
+  cachedExtensions(): Promise<AgentExtensions | null>;
+  listExtensions(): Promise<AgentExtensions>;
+  readInstructions(): Promise<InstructionFile[]>;
+  writeInstructions(key: string, content: string): Promise<boolean>;
   startService(command: string, label: string): Promise<boolean>;
   stopService(command: string): Promise<boolean>;
   onDevEvent(cb: (e: DevEvent) => void): () => void;

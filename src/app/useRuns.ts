@@ -189,7 +189,7 @@ export function useRuns(app: AppContext) {
       if (mode === 'bg') {
         const id = uid();
         const title = (request.instruction || anns.map((a) => a.note).find(Boolean) || 'Background request').split('\n')[0].slice(0, 80);
-        app.setBgRuns((list) => [...list, { id, title, status: 'running' }]);
+        app.setBgRuns((list) => [...list, { id, title, status: 'running', parent: app.chatId, items: [{ kind: 'user', id: uid(), text: request.instruction || title }] }]);
         try { await api.bgStart({ id, request }); }
         catch (e) { app.setBgRuns((list) => list.filter((r) => r.id !== id)); app.flash(errText(e)); }
         return;

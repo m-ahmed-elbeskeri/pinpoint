@@ -1,6 +1,6 @@
 import {
-  Brain, CircleDot, Download, FolderOpen, Search, MousePointer2, MousePointerClick, Palette, PanelLeft, PanelRight,
-  PenTool, Settings as SettingsIcon, SquarePen, TerminalSquare,
+  Brain, CircleDot, Download, FileText, FolderOpen, Plugs, Search, MousePointer2, MousePointerClick, Palette, PanelLeft, PanelRight,
+  PenTool, Settings as SettingsIcon, Sparkles, SquarePen,
 } from '../ui/icons';
 import type { ContextTab } from '../agent/ContextSheet';
 import type { Mode, UpdateState } from '../../types';
@@ -27,9 +27,6 @@ interface Props {
   onToggleRecording(): void;
   update: UpdateState | null;
   onInstallUpdate(): void;
-  drawerOpen: boolean;
-  devRunning: boolean;
-  onToggleDrawer(): void;
   sheet: ContextTab | null;
   setSheet(s: ContextTab | null): void;
   design: 'on' | 'off' | 'none';
@@ -84,9 +81,6 @@ export function TopBar(p: Props) {
             <Download size={13} /> {u.status === 'ready' ? 'Restart to update' : u.status === 'available' ? `Get ${u.version}` : `Updating${u.percent ? ` ${u.percent}%` : '…'}`}
           </button>
         )}
-        <button className={`icon-btn ${p.drawerOpen ? 'on' : ''}`} onClick={p.onToggleDrawer} title={`Terminal, dev server and logs (${p.mod}+J)`}>
-          <TerminalSquare size={16} />{p.devRunning && <span className="live-dot abs" />}
-        </button>
         <button
           className={`icon-btn ${p.sheet === 'design' ? 'on' : ''} ${p.designChanged ? 'warn' : ''}`}
           onClick={() => p.setSheet(p.sheet === 'design' ? null : 'design')} disabled={!p.projectDir}
@@ -102,6 +96,9 @@ export function TopBar(p: Props) {
         >
           <Brain size={16} />{p.memoryOn > 0 && <b className="icon-count">{p.memoryOn}</b>}
         </button>
+        <button className={`icon-btn ${p.sheet === 'mcp' ? 'on' : ''}`} onClick={() => p.setSheet(p.sheet === 'mcp' ? null : 'mcp')} disabled={!p.projectDir} title="MCP servers: see which are active, switch them on or off"><Plugs size={16} /></button>
+        <button className={`icon-btn ${p.sheet === 'skills' ? 'on' : ''}`} onClick={() => p.setSheet(p.sheet === 'skills' ? null : 'skills')} disabled={!p.projectDir} title="Skills: see which are active, switch them on or off"><Sparkles size={16} /></button>
+        <button className={`icon-btn ${p.sheet === 'instructions' ? 'on' : ''}`} onClick={() => p.setSheet(p.sheet === 'instructions' ? null : 'instructions')} disabled={!p.projectDir} title="Instructions: read and edit CLAUDE.md and AGENTS.md"><FileText size={16} /></button>
         <button className={`icon-btn ${p.panelHidden ? '' : 'on'}`} onClick={p.onTogglePanel} title={`Toggle sidebar (${p.mod}+B)`}><PanelIcon size={16} /></button>
         {p.threadsHidden && <button className="icon-btn" onClick={p.onSettings} title="Settings (Ctrl/⌘ ,)"><SettingsIcon size={16} /></button>}
       </div>

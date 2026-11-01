@@ -36,7 +36,8 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "    const text = m.message.content.filter((c) => c.type === 'text').map((c) => c.text).join(' ');",
   "    if (/<earlier-conversation>/.test(text)) fs.writeFileSync(path.join(process.cwd(), 'carried.txt'), text);",
   "    const word = (text.match(/(slow|quick)-(\\w+)/) || [])[0] || 'other';",
-    "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in' });",
+    "    if (!process.argv.includes('haiku')) fs.writeFileSync(path.join(__dirname, 'args.txt'), process.argv.join(' '));",
+    "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in', mcp_servers: [{ name: 'docs-server', status: 'connected', source: 'user' }, { name: 'mail', status: 'needs-auth', source: 'claudeai' }], skills: ['my-skill', 'other-skill'] });",
   "    if (word === 'quick-ask') {",
   "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: { todos: [{ content: 'Change the heading', status: 'completed', activeForm: 'Changing' }, { content: 'Run the tests', status: 'in_progress', activeForm: 'Running the tests' }] } }] } });",
   "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'edit-1', name: 'Edit', input: { file_path: 'index.html', old_string: '<h1>Home</h1>', new_string: '<h1>Welcome home</h1>' } }] } });",
@@ -62,6 +63,7 @@ server.listen(0, '127.0.0.1', () => {
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-ud-'));
   fs.writeFileSync(path.join(ud, 'settings.json'), JSON.stringify({ projectDir: proj, url: base + '/', claudePath: fakeBin, agent: 'claude', autoVerify: false, variants: 0, a11yCheck: false, routeCheck: false, perfCheck: false, statusBar: true }));
   process.env.PINPOINT_USER_DATA = ud;
+  process.env.PINPOINT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-home-'));
   const { app, BrowserWindow, webContents } = require('electron');
   require(path.join(repo, 'electron', 'main.cjs'));
 
@@ -394,6 +396,43 @@ server.listen(0, '127.0.0.1', () => {
       try { fs.writeFileSync(path.join(OUT, 'chats-zen.png'), (await host.capturePage()).toPNG()); } catch {  }
       await press('.');
       log('and comes back', await until(`!document.querySelector('.app.zen') && document.querySelector('.threads') ? 1 : 0`, 2000) === 1);
+
+      // MCP servers, skills, instructions
+      log('the terminal button is gone from the top bar', !(await ui(`[...document.querySelectorAll('.top-right .icon-btn')].some((b) => /Terminal/.test(b.title))`)));
+      const topButton = (re) => ui(`[...document.querySelectorAll('.top-right .icon-btn')].find((b) => ${re}.test(b.title)).click(); 0`);
+      await topButton('/^MCP/');
+      log('the MCP tab lists servers with their status', await until(`/docs-server/.test(document.querySelector('.ext-list')?.textContent || '') && /connected/.test(document.querySelector('.ext-list').textContent) ? 1 : 0`, 8000) === 1);
+      try { fs.writeFileSync(path.join(OUT, 'chats-mcp.png'), (await host.capturePage()).toPNG()); } catch { /* the check above is what counts */ }
+      await ui(`document.querySelector('.ext-list [aria-label="docs-server"]').click(); 0`);
+      await sleep(250);
+      await ui(`[...document.querySelectorAll('.sheet-head .tabs button')].find((b) => /Skills/.test(b.textContent)).click(); 0`);
+      log('the Skills tab lists skills', await until(`/my-skill/.test(document.querySelector('.ext-list')?.textContent || '') ? 1 : 0`, 8000) === 1);
+      await ui(`document.querySelector('.ext-list [aria-label="my-skill"]').click(); 0`);
+      await sleep(250);
+      const switched = JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8')).extensions?.claude;
+      log('switching them off is remembered', switched?.mcp?.['docs-server'] === false && switched?.skills?.['my-skill'] === false, JSON.stringify(switched));
+      await ui(`[...document.querySelectorAll('.sheet-head .tabs button')].find((b) => /Instructions/.test(b.textContent)).click(); 0`);
+      await until(`document.querySelector('.instr-create') ? 1 : 0`, 4000);
+      log('a file that does not exist offers to create it', /doesn't exist yet/.test(await ui(`document.querySelector('.instr-empty').textContent`)));
+      await ui(`document.querySelector('.instr-create').click(); 0`);
+      await until(`document.querySelector('.instr-editor') ? 1 : 0`, 4000);
+      await ui(`(() => { const t = document.querySelector('.instr-editor'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, 'Always use tabs'); t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await sleep(900);
+      log('CLAUDE.md can be written from the app', fs.readFileSync(path.join(proj, 'CLAUDE.md'), 'utf8') === 'Always use tabs');
+      try { fs.writeFileSync(path.join(OUT, 'chats-instructions.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
+      await ui(`[...document.querySelectorAll('.seg.instr-mode button')].find((b) => /Read/.test(b.textContent)).click(); 0`);
+      log('and read back rendered', await until(`/Always use tabs/.test(document.querySelector('.instr-read')?.textContent || '') ? 1 : 0`, 3000) === 1);
+      await ui(`document.querySelector('.sheet-head > .icon-btn').click(); 0`);
+      await sleep(200);
+      fs.rmSync(path.join(agentDir, 'args.txt'), { force: true });
+      await newChat();
+      await sleep(300);
+      await send('quick-denied please');
+      await until(`document.querySelector('.chat .working') ? 1 : 0`, 4000);
+      log('a chat that is working has the moving band in the sidebar', /thread-working/.test(await ui(`getComputedStyle(document.querySelector('.thread.running') || document.body).animationName`)));
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      const argv = fs.readFileSync(path.join(agentDir, 'args.txt'), 'utf8');
+      log('a run leaves out what is switched off', argv.includes('mcp__docs-server') && argv.includes('Skill(my-skill)'), argv);
 
       // Layouts
       await press('k');

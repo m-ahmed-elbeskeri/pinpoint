@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnCli, lineReader, killProc, toolDetail } = require('./cli.cjs');
+const { claudeArgs } = require('./extensions.cjs');
 
 const GRACE_MS = 1200;
 const MAX_IMAGES = 12;
@@ -46,6 +47,7 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askAppro
   if (sessionId) args.push('--resume', sessionId);
   if (settings.claudeModel) args.push('--model', settings.claudeModel);
   if (settings.claudeEffort) args.push('--effort', settings.claudeEffort);
+  args.push(...claudeArgs(settings));
 
   const proc = spawnCli(settings.claudePath || 'claude', args, cwd);
   let finished = false;

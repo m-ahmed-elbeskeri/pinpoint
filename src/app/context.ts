@@ -413,6 +413,9 @@ export interface HandoffSlice {
 }
 
 export interface BackgroundSlice {
+  activeBg: BgRun | null;
+  askBg: (r: BgRun, text: string) => void;
+  openBg: (id: string) => void;
   applyBg: (r: BgRun) => Promise<void>;
   bgBlocked: string | null;
   bgRuns: BgRun[];
@@ -428,11 +431,11 @@ export interface SideSlice {
   fromSelection: (how: "side" | "reply") => void;
   newSide: (seed?: string) => void;
   onChatMouseUp: () => void;
-  patchSide: (id: string, p: Partial<{ id: string; title: string; seed: string | null; running: boolean; }>) => void;
+  patchSide: (id: string, p: Partial<{ id: string; title: string; seed: string | null; running: boolean; parent: string | null; }>) => void;
   setActiveSide: Dispatch<SetStateAction<string | null>>;
   setAskAside: Dispatch<SetStateAction<{ text: string; x: number; y: number; } | null>>;
   sideContext: () => string;
-  sides: { id: string; title: string; seed: string | null; running: boolean; }[];
+  sides: { id: string; title: string; seed: string | null; running: boolean; parent: string | null; }[];
   tabsStrip: RefObject<HTMLDivElement>;
 }
 

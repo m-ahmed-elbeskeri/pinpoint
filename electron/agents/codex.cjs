@@ -1,4 +1,8 @@
 const { spawnCli, lineReader, killProc } = require('./cli.cjs');
+const { codexArgs } = require('./extensions.cjs');
+
+// No sandbox and no questions: Codex's own --dangerously-bypass-approvals-and-sandbox.
+const BYPASS = 'bypass';
 
 const INIT_TIMEOUT_MS = 60000;
 
@@ -11,7 +15,7 @@ function toInput(text, images = []) {
 
 function runCodex(opts) {
   const { settings, cwd, prompt, images, sessionId, onEvent } = opts;
-  const extra = settings.codexModel ? ['-c', `model="${settings.codexModel}"`] : [];
+  const extra = [...(settings.codexModel ? ['-c', `model="${settings.codexModel}"`] : []), ...codexArgs(settings)];
   const proc = spawnCli(settings.codexPath || 'codex', ['app-server', ...extra], cwd);
 
   let finished = false;
@@ -189,7 +193,7 @@ function runCodex(opts) {
       initialized = true;
       clearTimeout(timer);
       send({ method: 'initialized' });
-      const common = { cwd, sandbox: settings.codexSandbox || 'workspace-write', approvalPolicy: opts.askApproval && settings.codexSandbox === 'workspace-write' ? 'on-request' : 'never', ...(settings.codexModel ? { model: settings.codexModel } : {}) };
+      const common = { cwd, sandbox: settings.codexSandbox === BYPASS ? 'danger-full-access' : settings.codexSandbox || 'workspace-write', approvalPolicy: opts.askApproval && (settings.codexSandbox === 'workspace-write' || settings.codexSandbox === 'danger-full-access') ? 'on-request' : 'never', ...(settings.codexModel ? { model: settings.codexModel } : {}) };
       const th = sessionId
         ? await request('thread/resume', { threadId: sessionId, ...common })
         : await request('thread/start', common);
@@ -238,7 +242,7 @@ function runCodex(opts) {
 
 function runCodexExec({ settings, cwd, prompt, images, sessionId, onEvent }) {
   const sandbox = settings.codexSandbox || 'workspace-write';
-  const common = ['--json', '--skip-git-repo-check', '-c', `sandbox_mode="${sandbox}"`];
+  const common = ['--json', '--skip-git-repo-check', ...(sandbox === BYPASS ? ['--dangerously-bypass-approvals-and-sandbox'] : ['-c', `sandbox_mode="${sandbox}"`]), ...codexArgs(settings)];
   if (settings.codexModel) common.push('-m', settings.codexModel);
   if (settings.codexEffort) common.push('-c', `model_reasoning_effort="${settings.codexEffort}"`);
   for (const img of images || []) common.push('-i', img);
