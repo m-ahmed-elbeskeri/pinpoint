@@ -1117,21 +1117,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .mode-seg button.on { background: var(--bg-4); color: var(--text); box-shadow: 0 0 0 1px var(--line-2) inset; }
 
 /* onboarding */
-.start {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  padding: 24px;
-}
-.start-project {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  font-weight: 600;
-  color: var(--text);
-}
 .start-btn {
   display: inline-flex;
   align-items: center;
@@ -1840,14 +1825,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .plus-menu span { flex: 1; }
 
 /* onboarding */
-.start-actions {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 150px));
-  gap: 8px;
-  max-width: 640px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-}
 
 /* git */
 

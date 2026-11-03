@@ -1,3 +1,4 @@
+const { execFile } = require('node:child_process');
 const { ipcMain, shell } = require('electron');
 const fs = require('node:fs');
 const { sleep } = require('../fsutil.cjs');
@@ -8,6 +9,15 @@ function register(ctx) {
   const { active, loadSettings, saveSettings, projectDir, killTree, procs } = ctx;
   ipcMain.handle('git:status', (_e, opts) => gitx.status(projectDir(), opts));
   ipcMain.handle('git:init', () => gitx.initRepo(projectDir()));
+  // Opens Apple's installer for the Command Line Tools, which brings a working git.
+  ipcMain.handle('git:installTools', () => new Promise((resolve, reject) => {
+    if (process.platform !== 'darwin') { reject(new Error('Only needed on a Mac.')); return; }
+    execFile('xcode-select', ['--install'], (err, _out, stderr) => {
+      // It also exits non-zero when the tools are already there or the installer is already open.
+      if (err && !/already installed|already in progress/i.test(String(stderr))) reject(new Error(String(stderr || err.message).trim()));
+      else resolve(true);
+    });
+  }));
   ipcMain.handle('git:branch', async (_e, hint) => ({ branch: await gitx.createBranch(projectDir(), hint || 'visual-edit') }));
   ipcMain.handle('git:commitRun', async (_e, runId) => {
     const cwd = projectDir();

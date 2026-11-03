@@ -151,6 +151,8 @@ contextBridge.exposeInMainWorld('pinpoint', {
   startDev: (command) => ipcRenderer.invoke('dev:start', { command }),
   detectDev: () => ipcRenderer.invoke('dev:detect'),
   stopDev: () => ipcRenderer.invoke('dev:stop'),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  installDevTools: () => ipcRenderer.invoke('git:installTools'),
   bgAsk: (args) => ipcRenderer.invoke('bg:ask', args),
   bgStop: (id) => ipcRenderer.invoke('bg:stop', id),
   cachedExtensions: () => ipcRenderer.invoke('extensions:cached'),

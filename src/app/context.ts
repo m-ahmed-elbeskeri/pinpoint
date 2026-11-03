@@ -116,7 +116,7 @@ export interface DevserverSlice {
   devInfo: DevDetection | null;
   devLog: string;
   devRunning: boolean;
-  quickStartDev: () => void;
+  quickStartDev: (command?: string) => void;
   setAgentLog: Dispatch<SetStateAction<string>>;
   setDevLog: Dispatch<SetStateAction<string>>;
   startDev: (cmd: string) => Promise<void>;

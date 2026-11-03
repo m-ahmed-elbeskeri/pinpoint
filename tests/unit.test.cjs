@@ -295,6 +295,15 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   check('Docker Compose with its published port', d2.command === 'docker compose up' && d2.candidates[0].port === 8088, JSON.stringify(d2));
   check('a plain Vite project is unchanged', cands({ 'package.json': { scripts: { dev: 'vite', build: 'vite build' } }, 'node_modules/.x': '', 'package-lock.json': '{}' }).command === 'npm run dev');
   check('an empty folder finds nothing', cands({ 'notes.txt': '' }).command === '');
+  {
+    const repoTop = put(proj2(), { 'pnpm-lock.yaml': '', 'pnpm-workspace.yaml': 'packages:\n  - apps/*\n', 'node_modules/.x': '', '.git/HEAD': '', 'apps/web/package.json': { name: 'web', scripts: { dev: 'vite' } } });
+    const d3 = devserver.detect(path.join(repoTop, 'apps', 'web'));
+    check('one app opened inside a bigger repo uses its package manager and its installed packages', d3.command === 'pnpm run dev', JSON.stringify(d3));
+    fs.rmSync(repoTop, { recursive: true, force: true });
+  }
+  d2 = cands({ 'README.md': '', 'code/frontend/app/package.json': { scripts: { dev: 'vite' } }, 'code/frontend/app/node_modules/.x': '' });
+  check('an app a few folders down is found', /^cd code.frontend.app && npm run dev$/.test(d2.command), JSON.stringify(d2));
+  check('folders with installed packages are not searched', !cands({ 'x/node_modules/pkg/package.json': { scripts: { dev: 'vite' } } }).command);
 
   const { buildPrompt } = require(path.join(repo, 'electron', 'prompt', 'index.cjs'));
   const reqBase = { url: 'http://x/', title: '', viewport: { width: 1000, height: 800 }, instruction: 'Do it', annotations: [], carried: 'User: earlier words' };

@@ -45,6 +45,7 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "      emit({ type: 'control_request', request_id: 'perm-1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'npm test' } } });",
   "      continue;",
   "    }",
+  "    if (word === 'quick-link') { emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'See [the docs](https://example.com/docs), or open http://localhost:9/x to check.' }] } }); emit({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 100, num_turns: 1 }); continue; }",
   "    emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'Starting on ' + word + '.' }] } });",
   "    setTimeout(() => {",
   "      fs.writeFileSync(path.join(process.cwd(), word + '.txt'), 'done');",
@@ -396,6 +397,16 @@ server.listen(0, '127.0.0.1', () => {
       try { fs.writeFileSync(path.join(OUT, 'chats-zen.png'), (await host.capturePage()).toPNG()); } catch {  }
       await press('.');
       log('and comes back', await until(`!document.querySelector('.app.zen') && document.querySelector('.threads') ? 1 : 0`, 2000) === 1);
+
+      // Links in replies.
+      await send('quick-link please');
+      await until(`document.querySelector('.chat .msg.agent a[href^="http://localhost"]') ? 1 : 0`, 15000);
+      log('a web address in a reply is a link', await ui(`[...document.querySelectorAll('.chat .msg.agent a')].some((a) => a.getAttribute('href') === 'https://example.com/docs' && a.textContent === 'the docs')`));
+      await ui(`document.querySelector('.chat .msg.agent a[href^="http://localhost"]').click(); 0`);
+      log('a link to this computer opens as a Pinpoint tab', await until(`[...document.querySelectorAll('.tabbar .tab')].some((t) => (t.title || '').includes('localhost:9/x')) ? 1 : 0`, 4000) === 1);
+      await ui(`[...document.querySelectorAll('.tabbar .tab')].find((t) => (t.title || '').includes('localhost:9'))?.querySelector('.tab-x')?.click(); 0`);
+      await ui(`document.querySelector('.tabbar .tab:not(.tool-tab)')?.click(); 0`);
+      await sleep(200);
 
       // MCP servers, skills, instructions
       log('the terminal button is gone from the top bar', !(await ui(`[...document.querySelectorAll('.top-right .icon-btn')].some((b) => /Terminal/.test(b.title))`)));

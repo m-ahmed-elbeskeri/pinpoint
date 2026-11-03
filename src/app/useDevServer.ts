@@ -39,9 +39,10 @@ export function useDevServer(app: AppContext) {
     try { await api.startDev(cmd); app.saveSettings({ devCommand: cmd }); }
     catch (e) { app.flash(errText(e)); }
   };
-  const quickStartDev = () => {
+  const quickStartDev = (command?: string) => {
     app.setDrawerOpen(true); app.setDrawerTab('dev');
-    if (devCommand && !devRunning) startDev(devCommand);
+    const cmd = command || devCommand;
+    if (cmd && !devRunning) startDev(cmd);
   };
 
   Object.assign(app, { servicesRunning, addLog, agentLog, devCommand, devInfo, devLog, devRunning, quickStartDev, setAgentLog, setDevLog, startDev });

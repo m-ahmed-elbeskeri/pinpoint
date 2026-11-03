@@ -4,6 +4,24 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-11-03
+
+### Added
+
+- **Links in chat are clickable.** Pages on this computer open in a Pinpoint tab, anything else in your browser.
+- Hovering the context ring shows the exact numbers: tokens used, left and the window size.
+
+### Fixed
+
+- **Git on a Mac without Apple's Command Line Tools.** Initializing git used to fail with "xcrun: error: invalid active developer path". The git panel now says what's missing and opens Apple's installer.
+- The app window can no longer be navigated away from Pinpoint by a link.
+
+### Changed
+
+- The sidebar's header is just the button that hides it.
+- **A cleaner new tab.** The project's name, one button to start its dev server or open it, the command it runs, and the project's other apps a click away.
+- **Dev server for a project inside a bigger repo** uses the repo's package manager and installed packages, so it no longer asks to install again or picks npm in a pnpm workspace. Apps kept a few folders down are found too.
+
 ## [0.13.1] - 2026-11-01
 
 ### Changed

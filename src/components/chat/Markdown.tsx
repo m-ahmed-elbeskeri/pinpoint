@@ -6,14 +6,38 @@ function WithSwatches({ text }: { text: string }) {
   return <>{parts.map((p, i) => (i % 2 ? <span key={i} className="hex"><i style={{ background: p }} />{p}</span> : p))}</>;
 }
 
+// [text](url) and bare web addresses. Pages on this computer open in Pinpoint's browser, the rest in your browser.
+const LINK = /(\[[^\]\n]+\]\((?:https?:\/\/|mailto:)[^)\s]+\)|(?:https?:\/\/|www\.)[^\s<>()\]]*[^\s<>()\].,;:!?'"])/;
+const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/;
+
+export function openLink(url: string) {
+  if (LOCAL.test(url)) window.dispatchEvent(new CustomEvent('pinpoint:open-url', { detail: url.replace('0.0.0.0', 'localhost') }));
+  else window.pinpoint.openExternal(url).catch(() => { /* not an address the app will open */ });
+}
+
+function Linked({ text }: { text: string }) {
+  const parts = text.split(LINK);
+  if (parts.length === 1) return <WithSwatches text={text} />;
+  return (
+    <>
+      {parts.map((p, i) => {
+        if (i % 2 === 0) return p ? <WithSwatches key={i} text={p} /> : null;
+        const named = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(p);
+        const href = named ? named[2] : /^www\./.test(p) ? `https://${p}` : p;
+        return <a key={i} href={href} title={href} onClick={(e) => { e.preventDefault(); openLink(href); }}>{named ? named[1] : p}</a>;
+      })}
+    </>
+  );
+}
+
 function Inline({ text }: { text: string }) {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
   return (
     <>
       {parts.map((p, i) =>
-        p.startsWith('`') && p.endsWith('`') ? <code key={i}><WithSwatches text={p.slice(1, -1)} /></code>
-          : p.startsWith('**') && p.endsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong>
-            : <span key={i}><WithSwatches text={p} /></span>,
+        p.startsWith('`') && p.endsWith('`') ? <code key={i}>{LINK.test(p.slice(1, -1)) && /^(https?:\/\/|www\.)\S+$/.test(p.slice(1, -1)) ? <Linked text={p.slice(1, -1)} /> : <WithSwatches text={p.slice(1, -1)} />}</code>
+          : p.startsWith('**') && p.endsWith('**') ? <strong key={i}><Linked text={p.slice(2, -2)} /></strong>
+            : <span key={i}><Linked text={p} /></span>,
       )}
     </>
   );

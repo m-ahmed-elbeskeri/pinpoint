@@ -89,7 +89,7 @@ export function PageBar({ app }: { app: AppContext }) {
             <SiteChip
               kind={app.kind} host={app.siteOrigin.replace(/^https?:\/\//, '')}
               localUrl={app.localTwin} liveUrl={app.kind === 'dev' || app.kind === 'built' ? twinUrl(app.nav.url, app.liveOrigin) : ''}
-              canStartDev={!!app.devCommand && !app.devRunning} onGo={app.go} onStartDev={app.quickStartDev}
+              canStartDev={!!app.devCommand && !app.devRunning} onGo={app.go} onStartDev={() => app.quickStartDev()}
             />
           )}
         </form>

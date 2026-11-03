@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowRight, CornerDownRight, SquareStack, ChevronDown, ClipboardCopy, ExternalLink, TerminalSquare, Keyboard, Moon, Sun, ChevronRight, Command, DotsThree, Download, FolderOpen, Pencil, Pin, Loader2, NewWindow, PanelLeft, Plus, Search, Settings as SettingsIcon, SquarePen, Trash2, Users, X } from '../ui/icons';
-import { Logo } from './Logo';
 import { PullIcon } from '../git/PullIcon';
 import type { ChatMeta, GitPull, OtherChat } from '../../types';
 import { useDismiss } from '../../lib/hooks';
@@ -151,7 +150,6 @@ export function ThreadSidebar(p: Props) {
   return (
     <aside className="threads">
       <div className="threads-head">
-        <span className="threads-brand"><Logo size={18} /> Pinpoint</span>
         <div className="spacer" />
         <button className="icon-btn xs" onClick={p.onHide} title={`Hide chats (${p.mod}+Shift+B)`}><PanelLeft size={15} /></button>
       </div>

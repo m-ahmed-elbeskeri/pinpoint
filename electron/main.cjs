@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { loadSettings, saveSettings, projectDir } = require('./settings.cjs');
@@ -80,7 +80,13 @@ function createWindow() {
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
 }
 
+// Only web and mail addresses leave the app, and the window itself never navigates away from Pinpoint.
+const EXTERNAL = /^(https?:|mailto:)/i;
 app.on('web-contents-created', (_e, contents) => {
+  if (contents.getType() === 'window') {
+    contents.setWindowOpenHandler(({ url }) => { if (EXTERNAL.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+    contents.on('will-navigate', (e, url) => { if (url !== contents.getURL()) { e.preventDefault(); if (EXTERNAL.test(url)) shell.openExternal(url); } });
+  }
   if (contents.getType() === 'webview') {
     contents.setWindowOpenHandler(({ url }) => {
       if (win && !win.isDestroyed() && /^(https?|file):/.test(url)) win.webContents.send('browser:new-tab', url);

@@ -927,3 +927,6 @@
 .done-card.ok .done-actions { margin-left: -2px; }
 .file-row:hover { background: var(--bg-3); color: var(--text); }
 .file-row.on { background: var(--bg-4); color: var(--text); }
+
+.md a { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; cursor: pointer; overflow-wrap: anywhere; }
+.md a:hover { text-decoration-color: var(--text-2); }

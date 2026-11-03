@@ -166,6 +166,8 @@ export interface PinpointAPI {
   startDev(command: string): Promise<boolean>;
   detectDev(): Promise<DevDetection>;
   stopDev(): Promise<boolean>;
+  openExternal(url: string): Promise<void>;
+  installDevTools(): Promise<boolean>;
   cachedExtensions(): Promise<AgentExtensions | null>;
   listExtensions(): Promise<AgentExtensions>;
   readInstructions(): Promise<InstructionFile[]>;

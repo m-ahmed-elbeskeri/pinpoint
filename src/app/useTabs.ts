@@ -99,6 +99,12 @@ export function useTabs(app: AppContext) {
     }
   }, [activeTab]);
   useEffect(() => api.onNewTab((url) => newTab(url)), []);
+  // A link in the chat to a page on this computer opens in a new tab here.
+  useEffect(() => {
+    const open = (e: Event) => newTab((e as CustomEvent<string>).detail);
+    window.addEventListener('pinpoint:open-url', open);
+    return () => window.removeEventListener('pinpoint:open-url', open);
+  }, []);
   const tabUrls = tabs.map((t) => (t.url && t.url !== 'about:blank' ? t.url : t.initialUrl)).join('\n');
   useEffect(() => {
     if (!app.projectDir || !tabs.length) return;

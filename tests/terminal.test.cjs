@@ -80,7 +80,9 @@ server.listen(0, '127.0.0.1', () => {
       log('a tool keeps its tab beside the page tabs', /Terminal/.test(await ui(`[...document.querySelectorAll('.tool-tab')].map((t) => t.textContent).join()`)));
       await ui(`document.querySelector('.tab-new').click(); 0`);
       await sleep(500);
-      log('+ opens a blank tab that offers what to open', (await ui(`document.querySelectorAll('.welcome .start-btn').length`)) >= 4 && /Terminal/.test(await ui(`document.querySelector('.welcome').textContent`)));
+      await sleep(300);
+      try { fs.writeFileSync(path.join(OUT, 'new-tab.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
+      log('+ opens a blank tab that offers what to open', (await ui(`document.querySelectorAll('.welcome .start-btn').length`)) >= 3 && /Terminal/.test(await ui(`document.querySelector('.welcome').textContent`)));
       await ui(`[...document.querySelectorAll('.tab:not(.tool-tab)')].pop().querySelector('.tab-x').click(); 0`);
       await sleep(300);
       log('the drawer closes', (await ui(`!!document.querySelector('.drawer')`)) === false);

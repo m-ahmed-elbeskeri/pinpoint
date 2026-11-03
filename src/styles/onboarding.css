@@ -24,8 +24,6 @@
 
 /* ---- start screen: just the logo and what you can do next ---- */
 .welcome.clean { display: grid; place-items: center; background: var(--bg); }
-.start .logo-mark { opacity: .9; }
-.start-project span { font: 400 11.5px var(--mono); color: var(--muted); }
 .start-btn:hover { background: var(--bg-4); color: var(--text); }
 .start-btn.primary { background: var(--text); border-color: transparent; color: #0b0b0d; }
 .start-btn.primary:hover { background: #fff; }
@@ -74,3 +72,26 @@
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+
+/* The new tab: the project, how to run it, and a few quiet ways in. */
+.start-head { display: grid; gap: 4px; text-align: center; }
+.start-head h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.start-head small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; color: var(--muted); font: 11px var(--mono, ui-monospace, monospace); }
+.start-card { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg-2); }
+.start-main { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 13px; font-weight: 600; }
+.start-main:hover:not(:disabled) { opacity: .9; }
+.start-main:disabled { opacity: .6; }
+.start-cmd { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: 11.5px; }
+.start-cmd code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; background: none; border: 0; color: var(--text-2); font: 11.5px var(--mono, ui-monospace, monospace); }
+.start-dir { flex: none; }
+.start-switch { display: inline-flex; align-items: center; gap: 3px; flex: none; height: 22px; padding: 0 7px; border-radius: 6px; color: var(--text-2); font-size: 11.5px; }
+.start-switch:hover, .start-switch.on { background: var(--bg-4); color: var(--text); }
+.start-choices { display: grid; gap: 2px; max-height: 220px; overflow-y: auto; margin: 0 -4px; }
+.start-choices button { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; text-align: left; color: var(--text); font-size: 12.5px; }
+.start-choices button:hover { background: var(--bg-3); }
+.start-choices small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 11px var(--mono, ui-monospace, monospace); }
+.start-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.start-links .start-main { flex-basis: 100%; }
+.welcome .start-btn { flex-direction: row; gap: 6px; height: 30px; width: auto; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font-size: 12.5px; }
+.welcome .start-btn:hover { background: var(--bg-3); color: var(--text); }
+.welcome .start { display: flex; flex-direction: column; width: min(440px, calc(100% - 48px)); align-items: stretch; gap: 20px; padding: 24px 0; }

@@ -17,8 +17,16 @@ async function ghStatus() {
 }
 
 // fast: don't wait for GitHub, which goes over the network. The caller asks again without it.
+// macOS ships a git that only asks for the Command Line Tools ("xcrun: error: invalid active developer path").
+const NO_TOOLS = /xcrun: error|invalid active developer path|xcode-select/i;
+async function toolsMissing(cwd) {
+  if (process.platform !== 'darwin') return false;
+  try { await git(cwd, ['--version']); return false; } catch (e) { return NO_TOOLS.test(e.message); }
+}
+
 async function status(cwd, { fast } = {}) {
   const root = await quiet(git(cwd, ['rev-parse', '--show-toplevel']));
+  if (!root && await toolsMissing(cwd)) return { repo: false, toolsMissing: true, gh: { installed: false, authed: false, user: null } };
   if (!root) return { repo: false, gh: fast ? (ghState || { installed: true, authed: true, user: null, checking: true }) : await ghStatus() };
   const [symbolic, porcelain, remote, originHead, counts, head, dirs] = await Promise.all([
     quiet(git(cwd, ['symbolic-ref', '--short', 'HEAD'])),
@@ -49,8 +57,9 @@ async function status(cwd, { fast } = {}) {
 }
 
 async function initRepo(cwd) {
+  if (await toolsMissing(cwd)) throw new Error("Git needs Apple's Command Line Tools on this Mac. Install them, then try again.");
   await git(cwd, ['init', '-b', 'main']).catch(() => git(cwd, ['init']));
   return status(cwd);
 }
 
-module.exports = { ghStatus, status, initRepo };
+module.exports = { ghStatus, status, initRepo, toolsMissing };

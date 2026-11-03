@@ -83,11 +83,11 @@ export function PageFrame({ app }: { app: AppContext }) {
                 projectDir={settings.projectDir}
                 onOpenProject={app.pickProject}
                 devCommand={app.devCommand}
-                devLabel={app.devInfo?.candidates.find((c) => c.command === app.devCommand)?.label}
+                candidates={app.devInfo?.candidates || []}
                 devRunning={app.devRunning}
                 runningUrl={app.devRunning ? null : app.devInfo?.runningUrl}
                 onOpenUrl={app.go}
-                onStartDev={app.quickStartDev}
+                onStartDev={(c) => app.quickStartDev(c)}
                 onSketch={() => app.setMode('sketch')}
                 onTool={app.openTool}
                 setup={!settings.onboarded && app.agents && (!app.projectDir || !app.agentReady) ? (
@@ -105,7 +105,7 @@ export function PageFrame({ app }: { app: AppContext }) {
                 <b>Couldn't load the page</b><span>{app.loadError}</span>
                 <div>
                   <button className="btn xs" onClick={() => app.browser.current?.reload()}>Retry</button>
-                  <button className="btn xs ghost" onClick={app.quickStartDev} title={app.devCommand || undefined}>Start dev server</button>
+                  <button className="btn xs ghost" onClick={() => app.quickStartDev()} title={app.devCommand || undefined}>Start dev server</button>
                 </div>
               </div>
             )}

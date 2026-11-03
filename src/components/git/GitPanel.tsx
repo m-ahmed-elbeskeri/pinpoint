@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArrowDown, ArrowUp, GitBranch, GitCommitHorizontal, GitCompareArrows, GitPullRequestArrow, Loader2, Plus, RotateCw, Search, Trash2, Worktree, X } from '../ui/icons';
+import { Archive, ArrowDown, ArrowUp, GitBranch, GitCommitHorizontal, GitCompareArrows, GitPullRequestArrow, Loader2, Plus, RotateCw, Search, Trash2, Worktree, X, Download } from '../ui/icons';
 import { agoShort } from '../../lib/time';
 import type { GitBranchInfo, GitPull, GitStatus, Settings } from '../../types';
 import { errText } from '../../lib/util';
@@ -174,7 +174,17 @@ export function GitPanel({ status, refresh, settings, saveSettings, busy, prDefa
             onCompareRemote={() => { setOpen(false); onCompare(undefined, true); }}
             onFetch={() => { setFetching(true); window.pinpoint.gitFetch().then(() => { refresh(); load(); }).catch((e) => flash(errText(e))).finally(() => setFetching(false)); }} />}
 
-          {!status.repo ? (
+          {!status.repo && status.toolsMissing ? (
+            <div className="git-body">
+              <p className="git-note">Git on this Mac needs Apple's Command Line Tools, which aren't installed. Install them, then check again.</p>
+              <div className="git-actions">
+                <button className="btn sm primary" disabled={!!working} onClick={() => act('tools', async () => { await window.pinpoint.installDevTools(); return "Apple's installer is open. When it's done, click Check again."; })}>
+                  {working === 'tools' ? <Loader2 size={13} className="spin" /> : <Download size={13} />} Install developer tools
+                </button>
+                <button className="btn sm ghost" onClick={() => refresh()}>Check again</button>
+              </div>
+            </div>
+          ) : !status.repo ? (
             <div className="git-body">
               <p className="git-note">This project isn't a git repository yet. Initialize one to get a branch per chat, a commit per run and pull requests.</p>
               <button className="btn sm primary" disabled={!!working} onClick={() => act('init', async () => { await window.pinpoint.gitInit(); return 'Initialized a git repository.'; })}>

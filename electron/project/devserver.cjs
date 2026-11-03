@@ -37,6 +37,43 @@ const SERVICE_DIRS = ['api', 'server', 'backend', 'service', 'worker'];
 const SERVICE_GROUPS = ['services', 'apps', 'packages'];
 const API_DEPS = /^(express|fastify|koa|hapi|@hapi\/hapi|@nestjs\/core|hono|elysia)$/;
 const MAX_CANDIDATES = 14;
+const MAX_SCAN_DEPTH = 3;
+const MAX_SCANNED = 60;
+const SCAN_SKIP = new Set(['node_modules', 'dist', 'build', 'out', 'coverage', 'vendor', 'target', '.next', '.nuxt', '.svelte-kit', '.turbo']);
+const WORKSPACE_MARKERS = ['pnpm-workspace.yaml', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'bun.lock', 'bun.lockb', 'nx.json', 'turbo.json', 'lerna.json'];
+
+// The folder opened can be one app inside a bigger repo. Its package manager, lock file and installed packages
+// can live further up, up to the repository's root.
+function workspaceTop(root) {
+  let dir = path.resolve(root);
+  for (let i = 0; i < 6; i++) {
+    const pkg = readJson(path.join(dir, 'package.json'));
+    if (WORKSPACE_MARKERS.some((f) => exists(dir, f)) || pkg?.workspaces) return dir;
+    if (exists(dir, '.git')) return path.resolve(root);
+    const up = path.dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return path.resolve(root);
+}
+
+// Folders a few levels down that have their own package.json, for apps kept somewhere unusual.
+function nestedPackages(root) {
+  const found = [];
+  const walk = (dir, depth) => {
+    if (depth > MAX_SCAN_DEPTH || found.length >= MAX_SCANNED) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; } // not readable: skip it
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || SCAN_SKIP.has(e.name)) continue;
+      const sub = path.join(dir, e.name);
+      if (exists(sub, 'package.json')) found.push(sub);
+      walk(sub, depth + 1);
+    }
+  };
+  walk(root, 1);
+  return found;
+}
 
 function packageManager(dir, root, pkg) {
   const pinned = /^(pnpm|yarn|bun|npm)@/.exec(pkg?.packageManager || readJson(path.join(root, 'package.json'))?.packageManager || '');
@@ -59,14 +96,14 @@ function portFrom(body, fallback) {
   return m ? Number(m[1]) : fallback;
 }
 
-function scriptCandidates(dir, root, turboExec) {
+function scriptCandidates(dir, root, turboExec, top = root) {
   const pkg = readJson(path.join(dir, 'package.json'));
   const scripts = pkg?.scripts || {};
-  const pm = packageManager(dir, root, pkg);
+  const pm = packageManager(dir, top, pkg);
   const rel = path.relative(root, dir).split(path.sep).join('/');
-  const needsInstall = !exists(dir, 'node_modules') && !exists(root, 'node_modules');
+  const needsInstall = !exists(dir, 'node_modules') && !exists(root, 'node_modules') && !exists(top, 'node_modules');
   const rootPkg = readJson(path.join(root, 'package.json'));
-  const installAtRoot = !!rootPkg && (!!rootPkg.workspaces || ['pnpm-workspace.yaml', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'bun.lock', 'bun.lockb'].some((f) => exists(root, f)));
+  const installAtRoot = top !== path.resolve(root) || (!!rootPkg && (!!rootPkg.workspaces || ['pnpm-workspace.yaml', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'bun.lock', 'bun.lockb'].some((f) => exists(root, f))));
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
   const depPort = DEP_PORTS.find(([d]) => deps[d])?.[1] ?? null;
   const out = [];
@@ -120,7 +157,10 @@ function serviceCandidates(root) {
 
 function detect(root) {
   if (!root || !isDir(root)) return { command: '', candidates: [] };
-  const mono = monorepo(root);
+  const top = workspaceTop(root);
+  const below = (d) => { const r = path.relative(path.resolve(root), path.resolve(top, d)); return !r.startsWith('..') && !path.isAbsolute(r); };
+  const mono = top === path.resolve(root) ? monorepo(root) : { ...monorepo(top), packageDirs: [] };
+  if (top !== path.resolve(root)) mono.nx = mono.nx.filter((p) => below(p.dir)).map((p) => ({ ...p, dir: path.relative(path.resolve(root), path.resolve(top, p.dir)).split(path.sep).join('/') || '.' }));
   const nx = mono.nx.map((p) => ({ command: p.command, label: `Nx: ${p.project}`, dir: p.dir, port: p.port, kind: p.kind, score: p.kind === 'web' ? 72 : p.kind === 'api' ? 50 : 20 }));
   const dirs = [root, ...mono.packageDirs];
   for (const s of SUBDIRS) if (exists(root, s, 'package.json')) dirs.push(path.join(root, s));
@@ -129,7 +169,9 @@ function detect(root) {
     try { entries = fs.readdirSync(path.join(root, w), { withFileTypes: true }); } catch { continue; }
     for (const e of entries) if (e.isDirectory() && exists(root, w, e.name, 'package.json')) dirs.push(path.join(root, w, e.name));
   }
-  const candidates = [...nx, ...[...new Set(dirs)].flatMap((d) => scriptCandidates(d, root, mono.turbo)), ...serviceCandidates(root), ...otherStacks(root)]
+  let scripts = [...new Set(dirs)].flatMap((d) => scriptCandidates(d, root, mono.turbo, top));
+  if (!nx.length && !scripts.some((c) => c.kind === 'web')) scripts = [...scripts, ...nestedPackages(root).filter((d) => !dirs.includes(d)).flatMap((d) => scriptCandidates(d, root, mono.turbo, top))];
+  const candidates = [...nx, ...scripts, ...serviceCandidates(root), ...otherStacks(root)]
     .sort((a, b) => b.score - a.score)
     .filter((c, i, all) => all.findIndex((x) => x.command === c.command) === i)
     .slice(0, MAX_CANDIDATES)

@@ -2,6 +2,7 @@ import type { DiffFile } from './chat';
 
 export interface GitCommit { hash: string; subject: string }
 export interface GitStatus {
+  toolsMissing?: boolean;
   repo: boolean; root?: string; branch?: string; defaultBranch?: string; remote?: string | null; hasCommits?: boolean;
   dirty?: number; ahead?: number; behind?: number; upstream?: boolean; linked?: boolean;
   upstreamName?: string | null; gone?: boolean; fetchedAt?: number;

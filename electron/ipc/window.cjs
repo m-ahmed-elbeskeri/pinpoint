@@ -1,11 +1,14 @@
-const { app, ipcMain, nativeImage, Menu, Notification, Tray } = require('electron');
+const { app, ipcMain, nativeImage, Menu, Notification, Tray, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const updater = require('../updater.cjs');
 
+const EXTERNAL = /^(https?:|mailto:)/i;
+
 function register(ctx) {
+  ipcMain.handle('shell:openExternal', (_e, url) => { if (!EXTERNAL.test(String(url))) throw new Error('Only web and mail links open from here.'); return shell.openExternal(url); });
   const { getWin, showWindow, projectWindow, loadSettings, saveSettings } = ctx;
   ipcMain.handle('settings:get', () => loadSettings());
   ipcMain.handle('settings:set', (_e, patch) => saveSettings(patch));
