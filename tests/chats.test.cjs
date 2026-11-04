@@ -506,7 +506,7 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(300);
       await send('quick-denied please');
       await until(`document.querySelector('.chat .working') ? 1 : 0`, 4000);
-      log('a chat that is working has the moving band in the sidebar', /thread-working/.test(await ui(`getComputedStyle(document.querySelector('.thread.running') || document.body).animationName`)));
+      log('a chat that is working has the moving band in the sidebar', /thread-working/.test(await ui(`getComputedStyle(document.querySelector('.thread.running .thread-shine') || document.body, '::before').animationName`)));
       await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
       const argv = fs.readFileSync(path.join(agentDir, 'args.txt'), 'utf8');
       log('a run leaves out what is switched off', argv.includes('mcp__docs-server') && argv.includes('Skill(my-skill)'), argv);
