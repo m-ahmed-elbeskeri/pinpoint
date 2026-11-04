@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   Brain, Comment, Download, FileText, FolderOpen, Plug, Search, MousePointer2, Palette, PanelLeft, PanelRight,
   Scribble, Settings as SettingsIcon, Shapes, Sparkles, Stop,
@@ -32,14 +33,14 @@ interface Props {
   design: 'on' | 'off' | 'none';
   designChanged: boolean;
   memoryOn: number;
-  onDevtools(): void;
   panelSide: 'left' | 'right';
   panelHidden: boolean;
   onTogglePanel(): void;
   onSettings(): void;
 }
 
-export function TopBar(p: Props) {
+// Memoised because App isn't compiled and re-renders on every streamed token; React Compiler handles everything inside.
+export const TopBar = memo(function TopBar(p: Props) {
   const PanelIcon = p.panelSide === 'left' ? PanelLeft : PanelRight;
   const u = p.update;
   return (
@@ -47,7 +48,7 @@ export function TopBar(p: Props) {
       <div className="tb-left">
         {p.threadsHidden && (
           <>
-            <button className="icon-btn threads-toggle" onClick={p.onToggleThreads} title={`Show chats (${p.mod}+Shift+B)`}><PanelLeft size={16} /></button>
+            <button className="icon-btn threads-toggle" onClick={p.onToggleThreads} title={`Show chats (${p.mod}+Shift+B)`} aria-label="Show chats"><PanelLeft size={16} /></button>
             {p.chatTools}
             <button className="project-btn" onClick={p.onPickProject} title={p.projectDir || 'Choose the project folder the agent edits'}>
               <FolderOpen size={14} />
@@ -105,4 +106,4 @@ export function TopBar(p: Props) {
       </div>
     </header>
   );
-}
+});

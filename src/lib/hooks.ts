@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useEffect, useInsertionEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MutableRefObject, type RefObject } from 'react';
 import type { IpcMessageEvent, WebviewTag } from 'electron';
 import type { ChatItem, ConsoleEntry, NetRequest, NetworkFailure } from '../types';
 
@@ -103,13 +103,34 @@ export function useChatScroll(chat: ChatItem[], runId: string | null, job: strin
   return { chatEnd, away, onChatScroll, onChatWheel, toLatest, follow };
 }
 
-export function useStableActions<T extends Record<string, (...args: any[]) => any>>(handlers: T): T {
+// One object whose functions never change identity but always call the latest handlers, for memoised children.
+// For event handlers only: they see the handlers from the last commit, not from a render in progress.
+// The set of keys is fixed by the first render; a key that first appears later is never wired up.
+export function useStableActions<T extends Record<string, (...args: never[]) => unknown>>(handlers: T): T {
   const latest = useRef(handlers);
-  latest.current = handlers;
-  const stable = useRef<T | null>(null);
-  stable.current ??= Object.fromEntries(Object.keys(handlers).map((k) => [k, (...a: unknown[]) => latest.current[k](...a)])) as T;
-  return stable.current;
+  useInsertionEffect(() => { latest.current = handlers; });
+  const [stable] = useState(() => Object.fromEntries(Object.keys(handlers).map((k) => [k, (...a: never[]) => latest.current[k](...a)])) as T);
+  return stable;
 }
+
+// The current time, refreshed every `ms` while active. Pass it to time helpers in compiled components so their
+// labels move on: React Compiler caches a call like agoShort(t) by its arguments.
+export function useNow(ms = 60_000, active = true) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!active) return;
+    // Catch up after a pause; on mount the first value is still fresh, so this is a no-op and doesn't re-render.
+    setNow((n) => (Date.now() - n < 1000 ? n : Date.now()));
+    const t = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(t);
+  }, [ms, active]);
+  return now;
+}
+
+// Whether the OS asks for a light theme, kept live.
+const lightQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
+const onSchemeChange = (cb: () => void) => { lightQuery?.addEventListener('change', cb); return () => lightQuery?.removeEventListener('change', cb); };
+export const usePrefersLight = () => useSyncExternalStore(onSchemeChange, () => !!lightQuery?.matches);
 
 // Calls fn when Esc is pressed anywhere in the window, while active.
 export function useEscape(fn: (e: KeyboardEvent) => void, active = true) {

@@ -23,7 +23,7 @@ export function useAnnotations(app: AppContext) {
   const [toolSection, setToolSection] = useState<ToolSection | null>(null);
   const [classNames, setClassNames] = useState<string[]>([]);
   const [generated, setGenerated] = useState<string[]>([]);
-  const twTimer = useRef<ReturnType<typeof setTimeout>>();
+  const twTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [isolated, setIsolated] = useState<string | null>(null);
   const [plan, setPlan] = useState<{ ok: boolean; summary?: string[]; reason?: string } | null>(null);
   const enrichSource = async (src: SourceInfo | null | undefined): Promise<SourceInfo | null> => {

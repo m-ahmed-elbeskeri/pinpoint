@@ -71,7 +71,6 @@ export function CommandPalette({ commands, onClose, onQuery, placeholder }: Prop
     c.run();
   };
 
-  let lastGroup = '';
   return (
     <div className="modal-backdrop cmd-backdrop" onMouseDown={onClose}>
       <div className="cmd" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label="Commands">
@@ -92,8 +91,7 @@ export function CommandPalette({ commands, onClose, onQuery, placeholder }: Prop
         <div className="cmd-list" ref={listRef}>
           {results.length === 0 && <div className="cmd-empty">Nothing matches “{query}”</div>}
           {results.map((c, i) => {
-            const head = !query.trim() && c.group !== lastGroup ? c.group : null;
-            lastGroup = c.group;
+            const head = !query.trim() && c.group !== (results[i - 1]?.group ?? '') ? c.group : null;
             return (
               <div key={`${c.group}:${c.id}`}>
                 {head && <div className="cmd-group">{head}</div>}
