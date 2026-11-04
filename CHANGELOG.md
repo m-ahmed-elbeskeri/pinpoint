@@ -4,8 +4,21 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-04
+
+### Added
+
+- **A resizable chats sidebar.** Drag its edge wider or narrower; double-click it to reset. Projects can be pinned so they stay in the recent list, and pinned chats move to the top of their project.
+- **Answer a question from the keyboard.** When the agent asks you to pick an option, press 1–9 or type your answer in the composer.
+- **A friendlier empty chat,** with starter prompts and key tips.
+
 ### Changed
 
+- **Settings, redesigned.** A two-pane window (General, Agents, Checks, Editor & files) with grouped cards and switches, a table of agents and whether they're installed, and a Save button that only lights up when something changed.
+- **Test conditions, regrouped** by what you're testing: how it's seen, awkward content, network, animation and inspect. What's switched on is listed at the top and counted per section, and keyboard-order results sit beside their switch with Ask to fix.
+- **A calmer chat panel.** One type scale throughout, hover actions that no longer cover text, one spinner while working with the elapsed time, and Steer and Now only appear once you start typing. The annotation tray is now part of the composer.
+- A chat paused on an approval or question shows "needs you" in the sidebar, not "working".
+- Memory rules have real switches, and the header and light theme are quieter.
 - Electron 45, with the latest electron-builder, electron-updater and Vite.
 
 ## [0.14.1] - 2026-11-04
