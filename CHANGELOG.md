@@ -4,6 +4,25 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-04
+
+### Added
+
+- **Request and response headers in Network.** Each request now shows its headers, status text and size, like DevTools. When a request is handed to the agent, credentials (Authorization, cookies, API keys, CSRF tokens) are left out.
+- **Clickable links in the terminal.** Ctrl/⌘-click a web address to open it, or a `file:line` to open that file at that line. Terminal sessions can be renamed and show how they exited.
+- **The sidebar and menus work from the keyboard.** Tab reaches every project, chat and ⋯ button; Enter or Space opens them; arrow keys, Home and End move through a menu; Esc returns to where you were. Delete or Backspace removes a chat from Chat history. Screen readers hear what each row and button is.
+- When a local page fails to load, a **Start dev server** button sits right beside it.
+
+### Changed
+
+- **A snappier app while the agent works.** The sidebar and top bar no longer redraw with every word the agent streams, and the "working" shimmer no longer repaints its row each frame. Pinpoint now runs on React 19 with React Compiler.
+- The browser tabs, address bar, page tools menu, Network and Terminal share one height and rhythm; page tools are grouped into Inspect, Viewport and Page state; muted text is a touch easier to read.
+
+### Fixed
+
+- **Blank icons in the top bar.** The chosen mode and the chat-panel toggle showed an empty square in installed builds.
+- "5m ago" times in the sidebar keep counting while it sits idle.
+
 ## [0.15.0] - 2026-11-04
 
 ### Added
