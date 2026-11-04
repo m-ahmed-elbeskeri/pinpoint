@@ -4,6 +4,10 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Changed
+
+- Electron 45, with the latest electron-builder, electron-updater and Vite.
+
 ## [0.14.1] - 2026-11-04
 
 ### Fixed

@@ -176,14 +176,14 @@ server.listen(0, '127.0.0.1', () => {
 
       let recorded = 0;
       for (let attempt = 0; attempt < 3 && !recorded; attempt++) {
-        await ui(`[...document.querySelectorAll('.mode-seg button')].find((b) => /Record/.test(b.textContent)).click(); 0`);
+        await ui(`document.querySelector('.rec-btn').click(); 0`);
         await sleep(600);
         guest().focus();
         const p = await guest().executeJavaScript(`(() => { const r = document.getElementById('go').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
         for (const t of ['mouseMove', 'mouseDown', 'mouseUp']) guest().sendInputEvent({ type: t, x: p.x, y: p.y, button: 'left', clickCount: 1 });
         await sleep(1200);
         recorded = await ui(`(() => { const t = document.querySelector('.frozen-tag.rec'); return t && /1 step/.test(t.textContent) ? 1 : 0; })()`);
-        await ui(`[...document.querySelectorAll('.mode-seg button')].find((b) => /Stop/.test(b.textContent))?.click(); 0`);
+        await ui(`document.querySelector('.rec-btn.rec')?.click(); 0`);
         await sleep(500);
       }
       const flowAnn = await ui(`[...document.querySelectorAll('.ann-title')].map((t) => t.innerText.replace(/\\s+/g, ' ')).find((t) => /Recorded interaction/.test(t)) || ''`);

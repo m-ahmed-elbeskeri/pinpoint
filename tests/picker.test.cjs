@@ -48,7 +48,7 @@ app.whenReady().then(async () => {
     log('"Use default" clears it', saved().claudeEffort === '');
     await ui(`[...document.querySelectorAll('.mp-models .dd-item')].find((b) => /Haiku/.test(b.textContent)).click(); 0`);
     await sleep(300);
-    log('a model without thinking levels says so', saved().claudeModel === 'haiku' && /no thinking levels/.test(await ui(`document.querySelector('.mp-none')?.textContent || ''`)));
+    log('a model without thinking levels shows no level control', saved().claudeModel === 'haiku' && !(await ui(`!!document.querySelector('.mp-slider, .mp-level-title')`)));
     await ui(`[...document.querySelectorAll('.mp-models .dd-item')].find((b) => /Sonnet/.test(b.textContent)).click(); 0`);
     await sleep(300);
     const fits = await ui(`(() => { const m = document.querySelector('.mp-menu').getBoundingClientRect(); return m.left >= 0 && m.right <= innerWidth && m.top >= 0; })()`);

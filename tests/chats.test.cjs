@@ -477,7 +477,7 @@ server.listen(0, '127.0.0.1', () => {
       log('the terminal button is gone from the top bar', !(await ui(`[...document.querySelectorAll('.top-right .icon-btn')].some((b) => /Terminal/.test(b.title))`)));
       const topButton = (re) => ui(`[...document.querySelectorAll('.top-right .icon-btn')].find((b) => ${re}.test(b.title)).click(); 0`);
       await topButton('/^MCP/');
-      log('the MCP tab lists servers with their status', await until(`/docs-server/.test(document.querySelector('.ext-groups')?.textContent || '') && /connected/.test(document.querySelector('.ext-groups').textContent) ? 1 : 0`, 8000) === 1);
+      log('the MCP tab lists servers with their status', await until(`/docs-server/.test(document.querySelector('.ext-groups')?.textContent || '') && /connected/i.test(document.querySelector('.ext-groups').textContent) ? 1 : 0`, 8000) === 1);
       log('servers are grouped by where they apply', (await ui(`[...document.querySelectorAll('.ext-group-title')].map((x) => x.textContent).join()`)) === 'This project,All your projects,Connected apps', await ui(`document.querySelector('.ext-groups')?.innerText || ''`));
       try { fs.writeFileSync(path.join(OUT, 'chats-mcp.png'), (await host.capturePage()).toPNG()); } catch { /* the check above is what counts */ }
       await ui(`document.querySelector('.ext-list [aria-label="docs-server"]').click(); 0`);
@@ -499,7 +499,7 @@ server.listen(0, '127.0.0.1', () => {
       try { fs.writeFileSync(path.join(OUT, 'chats-instructions.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
       await ui(`[...document.querySelectorAll('.seg.instr-mode button')].find((b) => /Read/.test(b.textContent)).click(); 0`);
       log('and read back rendered', await until(`/Always use tabs/.test(document.querySelector('.instr-read')?.textContent || '') ? 1 : 0`, 3000) === 1);
-      await ui(`document.querySelector('.sheet-head > .icon-btn').click(); 0`);
+      await ui(`document.querySelector('.sheet-title > .icon-btn').click(); 0`);
       await sleep(200);
       fs.rmSync(path.join(agentDir, 'args.txt'), { force: true });
       await newChat();
