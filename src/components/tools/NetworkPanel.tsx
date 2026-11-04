@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Plus, RotateCw, Trash2, Wand2, X } from '../ui/icons';
+import { Check, ChevronRight, ClipboardCopy, ExternalLink, FileCode2, FileMinus2, Plus, RotateCw, Trash2, Wand2, X } from '../ui/icons';
 import { uid } from '../../lib/draw';
 import type { ApiHandler, Mock, NetRequest } from '../../types';
 
@@ -37,15 +37,51 @@ const mockMatches = (m: Mock, method: string, url: string) => {
   return parts[parts.length - 1] === '' || at === bare.length;
 };
 
+const STATUS_TEXT: Record<number, string> = {
+  200: 'OK', 201: 'Created', 202: 'Accepted', 204: 'No Content', 301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified', 307: 'Temporary Redirect', 308: 'Permanent Redirect',
+  400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 409: 'Conflict', 413: 'Payload Too Large', 422: 'Unprocessable Content', 429: 'Too Many Requests',
+  500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout',
+};
+const SLOW_MS = 500;
+const statusLabel = (r: NetRequest) => (r.error && !r.status ? 'ERR' : String(r.status ?? '…'));
+const hostOf = (url: string) => { try { return new URL(url).host; } catch { return ''; } };
+// A shell-ready cURL line, so a request can be rerun or pasted into an issue.
+const asCurl = (r: NetRequest) => {
+  const q = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`;
+  const parts = ['curl', r.method !== 'GET' ? `-X ${r.method}` : '', q(r.url)];
+  const heads = r.reqHeaders || {};
+  for (const [k, v] of Object.entries(heads)) parts.push(`-H ${q(`${k}: ${v}`)}`);
+  if (r.reqBody) parts.push(...(heads['content-type'] ? [] : [`-H 'Content-Type: application/json'`]), `--data-raw ${q(r.reqBody)}`);
+  return parts.filter(Boolean).join(' ');
+};
+
+const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} kB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+function HeaderList({ title, headers, note }: { title: string; headers?: Record<string, string>; note: string }) {
+  const rows = Object.entries(headers || {}).sort(([a], [b]) => a.localeCompare(b));
+  return (
+    <div className="net-headers">
+      <div className="net-headers-title">{title} <i>{rows.length}</i></div>
+      {rows.length ? (
+        <dl>{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      ) : <div className="net-headers-none">{note}</div>}
+    </div>
+  );
+}
+
 function statusClass(r: NetRequest) {
   if (failed(r)) return 'bad';
-  if ((r.status ?? 0) >= 300) return 'warn';
+  if ((r.status ?? 0) >= 300) return 'redirect';
   return 'ok';
 }
 
 export function NetworkPanel(p: Props) {
   const [pickedId, setPickedId] = useState<string | null>(null);
-  const [onlyFailed, setOnlyFailed] = useState(false);
+  const [show, setShow] = useState<'all' | 'failed' | 'slow'>('all');
+  const [copied, setCopied] = useState('');
+  // The selection ring is for keyboard users; a mouse click already shows where you are.
+  const [kbd, setKbd] = useState(false);
+  const [headersOpen, setHeadersOpen] = useState(true);
   const [query, setQuery] = useState('');
   const [handlers, setHandlers] = useState<Record<string, ApiHandler | null>>({});
   const [draft, setDraft] = useState<Mock | null>(null);
@@ -53,7 +89,7 @@ export function NetworkPanel(p: Props) {
   const list = useRef<HTMLDivElement>(null);
   const atEnd = useRef(true);
 
-  const shown = useMemo(() => p.requests.filter((r) => (!onlyFailed || failed(r)) && (!query || r.url.toLowerCase().includes(query.toLowerCase()))), [p.requests, onlyFailed, query]);
+  const shown = useMemo(() => p.requests.filter((r) => (show === 'all' || (show === 'failed' ? failed(r) : (r.ms ?? 0) >= SLOW_MS)) && (!query || r.url.toLowerCase().includes(query.toLowerCase()))), [p.requests, show, query]);
   const picked = p.requests.find((r) => r.id + r.at === pickedId) || null;
   const key = picked ? `${picked.method} ${barePath(picked.url)}` : '';
   const handler = key ? handlers[key] : undefined;
@@ -75,13 +111,19 @@ export function NetworkPanel(p: Props) {
   };
   const replay = async (r: NetRequest) => { setBusy(true); try { await p.onReplay(r); } finally { setBusy(false); } };
   const failedCount = p.requests.filter(failed).length;
+  const slowCount = p.requests.filter((r) => (r.ms ?? 0) >= SLOW_MS).length;
+  // Each row's timing bar is scaled to the slowest request in view.
+  const maxMs = Math.max(1, ...shown.map((r) => r.ms ?? 0));
+  const home = hostOf(p.requests[0]?.url || '');
+  const copy = (what: string, text: string) => { navigator.clipboard.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(''), 1400); }).catch(() => {}); };
 
   return (
     <div className="net">
       <div className="net-bar">
         <div className="seg net-seg">
-          <button className={onlyFailed ? '' : 'on'} onClick={() => setOnlyFailed(false)}>All {p.requests.length}</button>
-          <button className={onlyFailed ? 'on' : ''} onClick={() => setOnlyFailed(true)}>Failed {failedCount}</button>
+          <button className={show === 'all' ? 'on' : ''} onClick={() => setShow('all')}>All <i>{p.requests.length}</i></button>
+          <button className={`${show === 'failed' ? 'on' : ''} ${failedCount ? 'has-bad' : ''}`} onClick={() => setShow('failed')}>Failed <i>{failedCount}</i></button>
+          <button className={show === 'slow' ? 'on' : ''} onClick={() => setShow('slow')} title={`Took ${SLOW_MS} ms or longer`}>Slow <i>{slowCount}</i></button>
         </div>
         <input className="net-filter" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by URL" spellCheck={false} />
         {p.mocks.map((m) => (
@@ -94,18 +136,34 @@ export function NetworkPanel(p: Props) {
         ))}
         <div className="spacer" />
         <button className="btn ghost xs" onClick={() => setDraft({ id: uid(), method: 'GET', path: '/api/', status: 200, body: '{\n  \n}', on: true })} title="Answer an endpoint with your own JSON"><Plus size={12} /> Mock</button>
-        <button className="btn ghost xs" onClick={() => { setPickedId(null); p.onClear(); }} title="Clear the list"><Trash2 size={12} /></button>
+        <button className="btn ghost xs" onClick={() => { setPickedId(null); p.onClear(); }} title="Clear the list"><Trash2 size={12} /> Clear</button>
       </div>
       <div className="net-body">
-        <div className="net-list" ref={list} onScroll={(e) => { const el = e.currentTarget; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20; }}>
-          {shown.length === 0 && <div className="net-empty">{p.requests.length ? 'Nothing matches.' : 'Requests the page makes to your API show up here. Pick one to point the agent at it.'}</div>}
+        <div className={`net-list ${kbd ? 'kbd' : ''}`} ref={list} role="listbox" aria-label="Requests" tabIndex={0} onPointerDown={() => setKbd(false)}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            setKbd(true);
+            const at = shown.findIndex((r) => r.id + r.at === pickedId);
+            const next = shown[Math.max(0, Math.min(shown.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))];
+            if (next) { setPickedId(next.id + next.at); setDraft(null); list.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(next.id + next.at)}"]`)?.scrollIntoView({ block: 'nearest' }); }
+          }} onScroll={(e) => { const el = e.currentTarget; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20; }}>
+          {shown.length > 0 && <div className="net-cols" aria-hidden><span>Status</span><span>Method</span><span>Path</span><span /><span>Timing</span><span>Time</span></div>}
+          {shown.length === 0 && (
+            <div className="net-empty">
+              {p.requests.length ? <><b>Nothing matches</b><span>Try another filter{query ? ' or clear the search' : ''}.</span></>
+                : <><b>No requests yet</b><span>Fetch and XHR calls the page makes show up here. Reload the page to catch the ones it makes on load.</span></>}
+            </div>
+          )}
           {shown.map((r) => (
-            <button key={r.id + r.at} className={`net-row ${statusClass(r)} ${pickedId === r.id + r.at ? 'on' : ''}`} onClick={() => { setPickedId(r.id + r.at); setDraft(null); }}>
-              <span className="net-status">{r.error && !r.status ? 'ERR' : r.status}</span>
+            <button key={r.id + r.at} data-key={r.id + r.at} role="option" aria-selected={pickedId === r.id + r.at} className={`net-row ${statusClass(r)} ${pickedId === r.id + r.at ? 'on' : ''}`} onClick={() => { setPickedId(r.id + r.at); setDraft(null); list.current?.focus({ preventScroll: true }); }} tabIndex={-1} title={`${r.method} ${r.url}${r.ms ? ` · ${r.ms.toLocaleString()} ms${r.ms >= SLOW_MS ? ' (slow)' : ''}` : ''}${r.error ? ` · failed: ${r.error}` : ''}`}>
+              <span className="net-status">{statusLabel(r)}</span>
               <span className="net-method">{r.method}</span>
-              <span className="net-path mono">{pathOf(r.url)}</span>
-              {p.mocks.some((m) => mockMatches(m, r.method, r.url)) && <span className="net-tag">mock</span>}
-              <span className="net-ms">{r.ms != null ? `${r.ms} ms` : ''}</span>
+              <span className="net-path mono">{hostOf(r.url) !== home && <small>{hostOf(r.url)}</small>}{pathOf(r.url)}</span>
+              <span className="net-tagcol">{p.mocks.some((m) => mockMatches(m, r.method, r.url)) && <span className="net-tag">mock</span>}</span>
+              {/* Square-root scale so a fast request still shows a bar next to one slow one. */}
+              <span className={`net-track ${(r.ms ?? 0) >= SLOW_MS ? 'slow' : ''}`}>{!!r.ms && <i style={{ width: `max(6px, ${Math.sqrt(r.ms / maxMs) * 100}%)` }} />}</span>
+              <span className={`net-ms ${(r.ms ?? 0) >= SLOW_MS ? 'slow' : ''}`}>{r.ms ? `${r.ms.toLocaleString()} ms` : '–'}</span>
             </button>
           ))}
         </div>
@@ -130,28 +188,43 @@ export function NetworkPanel(p: Props) {
           ) : picked ? (
             <>
               <div className="net-head">
-                <span className={`net-status ${statusClass(picked)}`}>{picked.error && !picked.status ? 'ERR' : picked.status}</span>
+                <span className={`net-pill ${statusClass(picked)}`}>{statusLabel(picked)}{picked.status && (picked.statusText || STATUS_TEXT[picked.status]) ? ` ${picked.statusText || STATUS_TEXT[picked.status]}` : ''}</span>
                 <b className="mono">{picked.method} {pathOf(picked.url)}</b>
-                {picked.ms != null && <span className="net-ms">{picked.ms} ms</span>}
+                {!!picked.ms && <span className={`net-ms ${picked.ms >= SLOW_MS ? 'slow' : ''}`}>{picked.ms.toLocaleString()} ms</span>}
               </div>
+              <div className="net-url mono" title={picked.url}>{picked.url}</div>
+              <div className="net-meta">{[picked.kind === 'xhr' ? 'XHR' : 'fetch', picked.type?.split(';')[0], picked.size != null ? fmtSize(picked.size) : picked.resBody ? fmtSize(new Blob([picked.resBody]).size) : '', new Date(picked.at).toLocaleTimeString()].filter(Boolean).join(' · ')}</div>
               <div className="net-actions">
-                <button className="btn xs primary" onClick={() => p.onAdd(picked, handler ?? null)} title="Attach this request, its response and its handler to your next message"><Plus size={12} /> Add to request</button>
-                <button className="btn xs" disabled={busy} onClick={() => replay(picked)} title="Send the same request again from the page"><RotateCw size={12} /> Send again</button>
+                <button className="btn xs primary" onClick={() => p.onAdd(picked, handler ?? null)} title="Attach this request, its response and its handler to your next message"><Plus size={12} /> {failed(picked) ? 'Attach to fix' : 'Attach to message'}</button>
+                <button className="btn xs" disabled={busy} onClick={() => replay(picked)} title="Send the same request again from the page"><RotateCw size={12} className={busy ? 'spin' : ''} /> Send again</button>
                 <button className="btn xs" onClick={() => startMock(picked)} title="Answer this endpoint with your own JSON">Mock response</button>
+                <button className="btn xs ghost" onClick={() => copy('curl', asCurl(picked))} title="Copy this request as a cURL command">{copied === 'curl' ? <Check size={12} /> : <ClipboardCopy size={12} />} {copied === 'curl' ? 'Copied' : 'Copy as cURL'}</button>
               </div>
               {picked.error && <div className="net-error">{picked.error}</div>}
               <div className="net-handler">
-                Handled by{' '}
-                {handler === undefined ? <i>looking…</i>
-                  : handler ? <button className="mono" onClick={() => p.onOpenFile(handler.file, handler.line)} title="Open in your editor">{handler.file}:{handler.line} <ExternalLink size={10} /></button>
-                    : <i>not found in the project (an external API, or a route this can't read)</i>}
+                {handler === undefined ? <i>Looking for the handler…</i>
+                  : handler ? <><FileCode2 size={12} /> Handled by <button className="mono" onClick={() => p.onOpenFile(handler.file, handler.line)} title="Open in your editor">{handler.file}:{handler.line} <ExternalLink size={10} /></button></>
+                    : <><FileMinus2 size={12} /><i>No handler in this project (an external API, or a route this can't read)</i></>}
                 {handler && !handler.sure && <i> (likely: matched on the end of the path)</i>}
               </div>
+              <button className={`net-h4 net-fold ${headersOpen ? 'open' : ''}`} onClick={() => setHeadersOpen(!headersOpen)} aria-expanded={headersOpen}>
+                <h4><ChevronRight size={11} /> Headers</h4>
+                <span className="net-fold-sum">{Object.keys(picked.reqHeaders || {}).length} sent · {Object.keys(picked.resHeaders || {}).length} received</span>
+              </button>
+              {headersOpen && (picked.reqHeaders || picked.resHeaders ? (
+                <div className="net-headers-wrap">
+                  <HeaderList title="Request" headers={picked.reqHeaders} note="The page set no headers of its own." />
+                  <HeaderList title="Response" headers={picked.resHeaders} note={picked.status ? 'None visible to the page. Cross-origin responses only expose CORS-safelisted headers.' : 'No response arrived.'} />
+                  <div className="net-headers-foot">Browser-added headers like Cookie and User-Agent, and Set-Cookie on responses, aren't visible to page scripts.</div>
+                </div>
+              ) : <div className="net-headers-none">Headers weren't captured for this request. Reload the page to capture them.</div>)}
               {picked.reqBody && <><h4>Sent</h4><pre className="mono">{pretty(picked.reqBody)}</pre></>}
-              <h4>Response{picked.type ? ` · ${picked.type.split(';')[0]}` : ''}</h4>
-              <pre className="mono">{pretty(picked.resBody) || '(empty)'}</pre>
+              <div className="net-h4"><h4>Response{picked.type ? ` · ${picked.type.split(';')[0]}` : ''}</h4>
+                {picked.resBody && <button className="net-copy" onClick={() => copy('body', pretty(picked.resBody))} title="Copy the response body">{copied === 'body' ? <Check size={11} /> : <ClipboardCopy size={11} />}</button>}
+              </div>
+              <pre className="mono">{pretty(picked.resBody) || <span className="net-nobody">{picked.status === 204 || picked.status === 304 ? 'No body for this status' : 'Empty response'}</span>}</pre>
             </>
-          ) : <div className="net-empty">Pick a request to see what was sent, what came back and which file handles it.</div>}
+          ) : <div className="net-empty center"><b>Pick a request</b><span>See what was sent, what came back and which file in the project handles it. Use ↑ ↓ to move through the list.</span></div>}
         </div>
       </div>
     </div>

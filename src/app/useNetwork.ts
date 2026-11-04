@@ -21,7 +21,7 @@ export function useNetwork(app: AppContext) {
     const n = app.nextN();
     const ann: Annotation = {
       id: uid(), n, kind: 'request', note: '', color: app.colorFor(n), pageUrl: app.nav.url,
-      request: { method: r.method, url: r.url, status: r.status, ms: r.ms, error: r.error, reqBody: r.reqBody, resBody: r.resBody, handler: handler ? { file: handler.file, line: handler.line, sure: handler.sure } : undefined },
+      request: { method: r.method, url: r.url, status: r.status, ms: r.ms, error: r.error, reqBody: r.reqBody, resBody: r.resBody, reqHeaders: r.reqHeaders, resHeaders: r.resHeaders, handler: handler ? { file: handler.file, line: handler.line, sure: handler.sure } : undefined },
     };
     app.setAnnotations((prev) => [...prev, ann]);
     app.setActiveId(ann.id);

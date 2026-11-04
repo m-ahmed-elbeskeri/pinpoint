@@ -76,10 +76,12 @@ server.listen(0, '127.0.0.1', () => {
       await clickRow('/api/login');
       const sent = await until(`/"name": "ada"/.test(document.querySelector('.net-detail')?.innerText || '') ? 1 : 0`, 5000);
       log('the body an XHR sent is shown', sent === 1);
+      const heads = await ui(`[...document.querySelectorAll('.net-headers')].map((h) => h.innerText.replace(/\\s+/g, ' ')).join(' | ')`);
+      log('the headers it sent and got back are shown', /content-type application\/json/.test(heads.split(' | ')[0] || '') && /content-length \d+/.test(heads.split(' | ')[1] || ''), heads);
 
       await clickRow('/api/orders/7');
       await sleep(200);
-      await clickBtn('.net-actions', 'Add to request');
+      await clickBtn('.net-actions', 'Attach to fix');
       const ann = await until(`[...document.querySelectorAll('.ann-title')].map((t) => t.innerText.replace(/\\s+/g, ' ')).find((t) => /GET \\/api\\/orders\\/7/.test(t)) || ''`, 5000);
       log('a request can be attached to the next message', /500/.test(ann || '') && /index\.js:4/.test(ann || ''), ann);
 

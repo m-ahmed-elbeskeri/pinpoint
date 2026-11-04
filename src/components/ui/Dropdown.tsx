@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Check, ChevronDown } from './icons';
 import { useDismiss } from '../../lib/hooks';
 
@@ -27,6 +27,7 @@ export function Dropdown({ value, items, onChange, icon, title, tooltip, display
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const id = useId();
   const current = items.find((i) => i.value === value);
 
   useEffect(() => {
@@ -48,18 +49,23 @@ export function Dropdown({ value, items, onChange, icon, title, tooltip, display
 
   return (
     <div className={`dd ${className}`} ref={ref} onKeyDown={onKey}>
-      <button type="button" className={`dd-btn ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} disabled={disabled} title={tooltip ?? title}>
+      <button
+        type="button" className={`dd-btn ${open ? 'open' : ''}`} onClick={() => setOpen(!open)} disabled={disabled} title={tooltip ?? title}
+        role="combobox" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? `${id}-list` : undefined}
+        aria-activedescendant={open && hi >= 0 ? `${id}-${hi}` : undefined} aria-label={title ? `${title}: ${display ?? current?.label ?? 'Select'}` : undefined}
+      >
         {icon}
         <span className="dd-label">{display ?? current?.label ?? 'Select'}</span>
         <ChevronDown size={12} className="dd-chev" />
       </button>
       {open && (
-        <div className={`dd-menu ${align}`} role="listbox">
+        <div className={`dd-menu ${align}`} role="listbox" id={`${id}-list`} aria-label={title}>
           {title && <div className="dd-title">{title}</div>}
           {items.map((i, idx) => (
             <button
               type="button"
               key={i.value}
+              id={`${id}-${idx}`}
               role="option"
               aria-selected={i.value === value}
               className={`dd-item ${idx === hi ? 'hi' : ''} ${i.value === value ? 'sel' : ''}`}

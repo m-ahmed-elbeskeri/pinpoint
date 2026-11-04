@@ -105,7 +105,7 @@ export function InstructionsTab() {
   const [view, setView] = useState<'read' | 'edit'>('read');
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState('');
-  const timer = useRef<number>();
+  const timer = useRef<number>(undefined);
   const pending = useRef<{ key: string; text: string } | null>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
 

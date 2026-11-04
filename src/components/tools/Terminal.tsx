@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Plus, X } from '../ui/icons';
-import { Terminal as Xterm } from '@xterm/xterm';
+import { Terminal as Xterm, type ILink } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import type { TermSession, TermShell } from '../../types';
@@ -11,17 +11,39 @@ import { useDismiss } from '../../lib/hooks';
 const api = window.pinpoint;
 
 const THEME = {
-  background: '#131419', foreground: '#d7d9e0', cursor: '#ffd60a', cursorAccent: '#131419', selectionBackground: 'rgba(255, 214, 10, .28)',
+  background: '#17171b', foreground: '#d7d9e0', cursor: '#ffd60a', cursorAccent: '#17171b', selectionBackground: 'rgba(255, 214, 10, .28)',
   black: '#1c1d24', red: '#ff5d73', green: '#34d399', yellow: '#ffd60a', blue: '#6aa8ff', magenta: '#c792ea', cyan: '#5fd7e6', white: '#d7d9e0',
   brightBlack: '#6b7080', brightRed: '#ff8597', brightGreen: '#6ee7b7', brightYellow: '#ffe45c', brightBlue: '#93c0ff', brightMagenta: '#dab4f5', brightCyan: '#8be9f5', brightWhite: '#ffffff',
 };
 
 const LIGHT = {
-  background: '#fbfbfb', foreground: '#26262c', cursor: '#26262c', cursorAccent: '#fbfbfb', selectionBackground: 'rgba(0, 0, 0, .12)',
+  background: '#fafafa', foreground: '#26262c', cursor: '#26262c', cursorAccent: '#fafafa', selectionBackground: 'rgba(0, 0, 0, .12)',
   black: '#26262c', red: '#c81e3a', green: '#0f7b56', yellow: '#8a6a00', blue: '#1f5fbf', magenta: '#8a3fb5', cyan: '#0a7d8c', white: '#d7d9e0',
   brightBlack: '#6b7080', brightRed: '#e0314f', brightGreen: '#14936a', brightYellow: '#a07c00', brightBlue: '#2f73d9', brightMagenta: '#a052cf', brightCyan: '#0e95a8', brightWhite: '#ffffff',
 };
 const themeNow = () => (document.documentElement.dataset.theme === 'light' ? LIGHT : THEME);
+
+// URLs open in the browser; file paths (with an optional :line) open in the editor. Ctrl/Cmd+click, like VS Code.
+const LINK = /(https?:\/\/[^\s"'<>()]+[^\s"'<>().,;:])|((?:[A-Za-z]:)?[\w.\-/\\]*[\w-]+\.(?:tsx?|jsx?|mjs|cjs|css|scss|html|vue|svelte|json|md|py|go|rs)(?::(\d+))?(?::\d+)?)/g;
+function linksOn(t: Xterm, y: number): ILink[] {
+  const text = t.buffer.active.getLine(y - 1)?.translateToString(true) || '';
+  const out: ILink[] = [];
+  for (const m of text.matchAll(LINK)) {
+    const start = m.index! + 1;
+    const [whole, url, file, line] = m;
+    out.push({
+      range: { start: { x: start, y }, end: { x: start + whole.length - 1, y } },
+      text: whole,
+      decorations: { underline: true, pointerCursor: true },
+      activate: (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        if (url) api.openExternal(url);
+        else if (file) api.openFile(file.replace(/:\d+(:\d+)?$/, ''), line ? Number(line) : undefined).catch(() => {});
+      },
+    });
+  }
+  return out;
+}
 
 function Screen({ id, active }: { id: string; active: boolean }) {
   const box = useRef<HTMLDivElement>(null);
@@ -50,6 +72,7 @@ function Screen({ id, active }: { id: string; active: boolean }) {
     });
     const offData = api.onTermData((e) => { if (e.id === id) t.write(e.data); });
     const offExit = api.onTermExit((e) => { if (e.id === id) t.write(`\r\n\x1b[2m[process ended${e.code ? ` with code ${e.code}` : ''}]\x1b[0m\r\n`); });
+    const links = t.registerLinkProvider({ provideLinks: (y, cb) => cb(linksOn(t, y)) });
     const typed = t.onData((data) => api.termWrite(id, data));
     const sized = t.onResize(({ cols, rows }) => api.termResize(id, cols, rows));
     t.attachCustomKeyEventHandler((e) => {
@@ -58,7 +81,7 @@ function Screen({ id, active }: { id: string; active: boolean }) {
       if (e.key.toLowerCase() === 'v') { navigator.clipboard.readText().then((text) => { if (text) t.paste(text); }).catch(() => {}); e.preventDefault(); return false; }
       return true;
     });
-    return () => { live = false; themeWatch.disconnect(); offData(); offExit(); typed.dispose(); sized.dispose(); t.dispose(); term.current = null; };
+    return () => { live = false; themeWatch.disconnect(); offData(); offExit(); links.dispose(); typed.dispose(); sized.dispose(); t.dispose(); term.current = null; };
   }, [id]);
 
   useEffect(() => {
@@ -79,8 +102,11 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
   const [shells, setShells] = useState<TermShell[] | null>(null);
   const [sessions, setSessions] = useState<TermSession[]>([]);
   const [current, setCurrent] = useState<string | null>(null);
-  const [menu, setMenu] = useState<{ left: number; bottom: number } | null>(null);
+  const [menu, setMenu] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [codes, setCodes] = useState<Record<string, number>>({});
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [renaming, setRenaming] = useState<string | null>(null);
   const started = useRef(false);
   const [starting, setStarting] = useState(true);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -109,7 +135,10 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
     return () => { live = false; };
   }, []);
 
-  useEffect(() => api.onTermExit((e) => setSessions((l) => l.map((s) => (s.id === e.id ? { ...s, exited: true } : s)))), []);
+  useEffect(() => api.onTermExit((e) => {
+    setSessions((l) => l.map((s) => (s.id === e.id ? { ...s, exited: true } : s)));
+    if (e.code) setCodes((m) => ({ ...m, [e.id]: e.code! }));
+  }), []);
   useDismiss(!!menu, () => setMenu(null), { ref: menuRef });
 
   const close = (id: string) => {
@@ -125,23 +154,35 @@ export function TerminalPane({ cwd, preferred, onPrefer, barSlot }: { cwd: strin
   const bar = (
   <div className="term-bar">
     {sessions.map((s) => (
-      <div key={s.id} className={`term-tab ${s.id === current ? 'on' : ''} ${s.exited ? 'ended' : ''}`} onClick={() => setCurrent(s.id)} title={s.exited ? `${s.name} (ended)` : s.name}>
-        <span>{s.name}</span>
+      <div key={s.id} className={`term-tab ${s.id === current ? 'on' : ''} ${s.exited ? 'ended' : ''}`} onClick={() => setCurrent(s.id)} onDoubleClick={() => setRenaming(s.id)}
+        title={`${names[s.id] || s.name}${s.exited ? (codes[s.id] ? ` (exited with code ${codes[s.id]})` : ' (ended)') : ''} · double-click to rename`}>
+        <i className={`term-dot ${s.exited ? (codes[s.id] ? 'bad' : 'off') : 'on'}`} />
+        {renaming === s.id
+          ? <input className="term-rename" autoFocus defaultValue={names[s.id] || s.name} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()}
+              onBlur={(e) => { const v = e.target.value.trim(); setNames((m) => ({ ...m, [s.id]: v || s.name })); setRenaming(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setRenaming(null); }} />
+          : <span>{names[s.id] || s.name}</span>}
         <button onClick={(e) => { e.stopPropagation(); close(s.id); }} title="Close this terminal"><X size={11} /></button>
       </div>
     ))}
-    <div className="term-new" ref={menuRef}>
+    <div className="term-new split-btn" ref={menuRef}>
       <button className="term-plus" onClick={() => start(usual?.id)} disabled={!usual} title={usual ? `New ${usual.name} terminal` : 'No shell found'}><Plus size={13} /></button>
       <button
         className="term-plus" disabled={!shells?.length} title="Choose a shell"
-        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu(menu ? null : { left: Math.max(8, Math.min(r.left - 20, window.innerWidth - 300)), bottom: window.innerHeight - r.top + 6 }); }}
+        onClick={(e) => {
+          if (menu) { setMenu(null); return; }
+          // Right-aligned to the button, and opening away from the nearest edge: down from a header, up from a bottom drawer.
+          const r = e.currentTarget.getBoundingClientRect();
+          const left = Math.max(8, Math.min(r.right - 280, window.innerWidth - 288));
+          setMenu(r.top < window.innerHeight / 2 ? { left, top: r.bottom + 6 } : { left, bottom: window.innerHeight - r.top + 6 });
+        }}
       ><ChevronDown size={12} /></button>
       {menu && (
         <div className="term-menu" style={menu}>
           <div className="dd-title">Shells on this computer</div>
           {shells!.map((s) => (
             <button key={s.id} onClick={() => start(s.id)} title={s.path}>
-              <b>{s.name}</b><small>{s.path}</small>
+              <span className="term-shell-name"><b>{s.name}</b>{s.id === usual?.id && <em className="term-default">Default</em>}</span><small>{s.path}</small>
             </button>
           ))}
         </div>

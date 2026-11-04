@@ -115,10 +115,11 @@ export interface ApiHandler { file: string; line: number; pattern: string; metho
 export interface NetRequest {
   id: string; kind: 'fetch' | 'xhr'; method: string; url: string; at: number; ms?: number;
   status?: number; type?: string; error?: string; reqBody?: string; resBody?: string;
+  statusText?: string; size?: number; reqHeaders?: Record<string, string>; resHeaders?: Record<string, string>;
 }
 export interface RequestNote {
   method: string; url: string; status?: number; ms?: number; error?: string;
-  reqBody?: string; resBody?: string; handler?: { file: string; line: number; sure: boolean };
+  reqBody?: string; resBody?: string; reqHeaders?: Record<string, string>; resHeaders?: Record<string, string>; handler?: { file: string; line: number; sure: boolean };
 }
 export interface Mock { id: string; method: string; path: string; status: number; body: string; on: boolean }
 

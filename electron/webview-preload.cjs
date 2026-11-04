@@ -53,25 +53,48 @@ try {
     };
     const report = (entry) => { try { document.dispatchEvent(new CustomEvent('pinpoint-net', { detail: JSON.stringify(entry) })); } catch (err) { /* the page broke dispatch: lose this entry */ } };
     const absolute = (u) => { try { return new URL(u, location.href).href; } catch (err) { return String(u); } };
+    // Headers as a plain object. Only what page script can see: no Cookie, no Set-Cookie, and only CORS-exposed ones cross-origin.
+    const headerObj = (h) => {
+      const o = {};
+      try {
+        if (!h) return o;
+        if (typeof Headers !== 'undefined' && h instanceof Headers) h.forEach((v, k) => { o[k] = v; });
+        else if (Array.isArray(h)) h.forEach((pair) => { if (pair && pair.length > 1) o[String(pair[0]).toLowerCase()] = String(pair[1]); });
+        else if (typeof h === 'object') Object.keys(h).forEach((k) => { o[k.toLowerCase()] = String(h[k]); });
+      } catch (err) { /* unreadable headers */ }
+      return o;
+    };
+    const rawHeaders = (text) => {
+      const o = {};
+      String(text || '').trim().split(/[\\r\\n]+/).forEach((line) => { const at = line.indexOf(':'); if (at > 0) o[line.slice(0, at).trim().toLowerCase()] = line.slice(at + 1).trim(); });
+      return o;
+    };
 
     const nativeFetch = window.fetch;
     if (nativeFetch) window.fetch = function (input, init) {
       const started = performance.now();
       const isReq = typeof Request !== 'undefined' && input instanceof Request;
-      const entry = { id: 'f' + (++seq), kind: 'fetch', method: String((init && init.method) || (isReq && input.method) || 'GET').toUpperCase(), url: absolute(isReq ? input.url : input), reqBody: bodyText(init && init.body), at: Date.now() };
+      const entry = { id: 'f' + (++seq), kind: 'fetch', method: String((init && init.method) || (isReq && input.method) || 'GET').toUpperCase(), url: absolute(isReq ? input.url : input), reqBody: bodyText(init && init.body), reqHeaders: Object.assign(isReq ? headerObj(input.headers) : {}, headerObj(init && init.headers)), at: Date.now() };
       const done = (extra) => report(Object.assign(entry, { ms: Math.round(performance.now() - started) }, extra));
       return nativeFetch.apply(this, arguments).then((res) => {
         const type = res.headers.get('content-type') || '';
-        if (textual(type)) res.clone().text().then((t) => done({ status: res.status, type, resBody: clip(t) }), () => done({ status: res.status, type, resBody: '' }));
-        else done({ status: res.status, type, resBody: '[' + (type || 'binary') + ']' });
+        const head = { status: res.status, statusText: res.statusText, type, resHeaders: headerObj(res.headers) };
+        const len = Number(res.headers.get('content-length')) || undefined;
+        if (textual(type)) res.clone().text().then((t) => done(Object.assign(head, { resBody: clip(t), size: len || new Blob([t]).size })), () => done(Object.assign(head, { resBody: '', size: len })));
+        else done(Object.assign(head, { resBody: '[' + (type || 'binary') + ']', size: len }));
         return res;
       }, (err) => { done({ status: 0, error: String((err && err.message) || err) }); throw err; });
     };
 
     const X = window.XMLHttpRequest;
     if (X) {
-      const open = X.prototype.open, send = X.prototype.send;
-      X.prototype.open = function (method, url) { this.__pp = { id: 'x' + (++seq), kind: 'xhr', method: String(method || 'GET').toUpperCase(), url: absolute(url) }; return open.apply(this, arguments); };
+      const open = X.prototype.open, send = X.prototype.send, setHeader = X.prototype.setRequestHeader;
+      X.prototype.open = function (method, url) { this.__pp = { id: 'x' + (++seq), kind: 'xhr', method: String(method || 'GET').toUpperCase(), url: absolute(url), reqHeaders: {} }; return open.apply(this, arguments); };
+      X.prototype.setRequestHeader = function (name, value) {
+        const h = this.__pp && this.__pp.reqHeaders;
+        if (h) { const k = String(name).toLowerCase(); h[k] = h[k] ? h[k] + ', ' + value : String(value); }
+        return setHeader.apply(this, arguments);
+      };
       X.prototype.send = function (body) {
         const entry = this.__pp;
         if (entry) {
@@ -81,7 +104,9 @@ try {
             const type = this.getResponseHeader('content-type') || '';
             let resBody = '';
             try { resBody = this.responseType === '' || this.responseType === 'text' ? clip(this.responseText) : this.responseType === 'json' ? clip(JSON.stringify(this.response)) : '[' + this.responseType + ']'; } catch (err) { /* body not readable as text */ }
-            report(Object.assign(entry, { ms: Math.round(performance.now() - started), status: this.status, type, resBody }, this.status === 0 ? { error: 'The request did not complete' } : null));
+            const resHeaders = rawHeaders(this.getAllResponseHeaders());
+            const size = Number(resHeaders['content-length']) || (resBody && resBody[0] !== '[' ? new Blob([resBody]).size : undefined);
+            report(Object.assign(entry, { ms: Math.round(performance.now() - started), status: this.status, statusText: this.statusText, type, resBody, resHeaders, size }, this.status === 0 ? { error: 'The request did not complete' } : null));
           });
         }
         return send.apply(this, arguments);

@@ -146,6 +146,9 @@ function describeSelected(a, note) {
   return lines;
 }
 
+// Credentials stay out of the prompt: the agent needs to know a header was sent, not its value.
+const SECRET_HEADER = /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|x-auth-token|x-csrf-token|x-xsrf-token)$/i;
+
 function describeRequest(a, note) {
   const r = a.request;
   const lines = [`### [${a.n}] API request the page made: ${note}`];
@@ -153,6 +156,9 @@ function describeRequest(a, note) {
   lines.push(`- Result: ${r.error && !r.status ? `failed before a response (${r.error})` : `status ${r.status}`}${r.ms != null ? ` in ${r.ms} ms` : ''}`);
   if (r.handler) lines.push(`- Handled by: ${r.handler.file}:${r.handler.line}${r.handler.sure ? '' : ' (best match on the end of the path; confirm it is mounted there)'}`);
   else lines.push('- No handler for this path was found in the project: it may be an external API, or a route registered in a way that could not be read.');
+  const heads = (h) => Object.entries(h || {}).map(([k, v]) => `${k}: ${SECRET_HEADER.test(k) ? '[redacted]' : v}`).join('\n');
+  if (r.reqHeaders && Object.keys(r.reqHeaders).length) lines.push('- Request headers:\n```\n' + heads(r.reqHeaders) + '\n```');
+  if (r.resHeaders && Object.keys(r.resHeaders).length) lines.push('- Response headers:\n```\n' + heads(r.resHeaders) + '\n```');
   if (r.reqBody) lines.push('- Body sent:\n```\n' + clipBody(r.reqBody) + '\n```');
   lines.push('- Response body:\n```\n' + (clipBody(r.resBody) || '(empty)') + '\n```');
   lines.push('- The request is about this endpoint or how the page uses its answer. Read the handler and the code that calls it before changing either.');

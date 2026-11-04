@@ -142,11 +142,15 @@
 .proj-row:hover .proj-icon > svg:first-child { opacity: 0; }
 .proj-row:hover .proj-chev { opacity: 1; color: var(--text-2); }
 .proj-row.open .proj-chev { transform: rotate(90deg); }
-.proj-tools { display: none; gap: 1px; flex-shrink: 0; margin-left: auto; }
-.proj-row:hover .proj-tools, .proj-row.menu-open .proj-tools { display: flex; }
+/* Hidden tools are out of the flow and see-through rather than display: none, so Tab can still land on them:
+   moving focus blurs the row for a moment, and a display: none target would drop the focus. */
+.proj-row { position: relative; }
+.proj-tools { display: flex; gap: 1px; flex-shrink: 0; margin-left: auto; position: absolute; right: 4px; opacity: 0; pointer-events: none; }
+.proj-row:hover .proj-tools, .proj-row.menu-open .proj-tools, .proj-row:has(:focus-visible) .proj-tools { position: static; opacity: 1; pointer-events: auto; }
 /* A collapsed project still shows what its chats are doing; the tools take its place on hover. */
 .proj-status { margin-left: auto; display: flex; align-items: center; gap: 5px; padding-right: 8px; color: var(--text-2); }
 .proj-row:hover .proj-status, .proj-row.menu-open .proj-status { display: none; }
+.proj-row:has(:focus-visible) .proj-status { display: none; }
 .proj-count {
   min-width: 16px;
   height: 16px;
@@ -234,21 +238,29 @@
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  display: none;
+  display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
   border-radius: 6px;
   color: var(--muted);
   background: var(--row-bg);
+  /* See-through until wanted, not display: none, so keyboard focus can reach them (see .proj-tools). */
+  opacity: 0;
+  pointer-events: none;
 }
 .thread-x { right: 4px; box-shadow: -12px 0 8px -2px var(--row-bg); }
 .thread .pull-icon { right: 28px; box-shadow: -12px 0 8px -2px var(--row-bg); }
 .thread:has(.pull-icon) .thread-x { box-shadow: none; }
-.thread:hover .thread-x, .thread:hover .pull-icon { display: grid; }
+.thread:hover :is(.thread-x, .pull-icon), .thread:has(:focus-visible:not(input)) :is(.thread-x, .pull-icon), .thread-more.open { opacity: 1; pointer-events: auto; }
 .thread:hover .thread-time, .thread:has(.thread-more.open) .thread-time { visibility: hidden; }
+/* Keyboard focus on a row's name or buttons brings up the same tools hover does, and the name rings the whole row.
+   Not the rename input: a focused text field always counts as focus-visible, and renaming keeps the row as it was. */
+.thread:has(:focus-visible:not(input)) .thread-time { visibility: hidden; }
+.thread:has(> .thread-title:focus-visible), .proj-row:has(> .proj-name:focus-visible) { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+:is(.thread-title, .proj-name):focus-visible { outline: none; }
 .thread-x:hover { color: var(--text); background: var(--bg-4); }
-.thread-more.open { display: grid; color: var(--text); background: var(--bg-4); }
+.thread-more.open { color: var(--text); background: var(--bg-4); }
 .thread .pull-icon.merged { color: #a78bfa; }
 .thread .pull-icon:hover { color: var(--text); background: var(--bg-4); }
 .thread-rename {
@@ -264,20 +276,27 @@
   font-size: 13px;
 }
 
-/* A chat that's working: a soft band of light travels across its row. */
-.thread.running {
-  background-image: linear-gradient(100deg, transparent 40%, color-mix(in srgb, var(--text) var(--shimmer, 6%), transparent) 50%, transparent 60%);
-  background-size: 250% 100%;
-  background-repeat: no-repeat;
+/* A chat that's working: a soft band of light travels across its row.
+   The band is a 250%-wide child moved with transform, so it runs on the compositor instead of repainting the row.
+   Its own box clips it, not the row, so the row's menu can still hang outside. */
+.thread-shine { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none; }
+.thread-shine::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 250%;
+  background: linear-gradient(100deg, transparent 40%, color-mix(in srgb, var(--text) var(--shimmer, 6%), transparent) 50%, transparent 60%);
   animation: thread-working 3.2s ease-in-out infinite;
 }
+/* The band paints under the row's content, as a background would. */
+.thread.running :is(.thread-state, .thread-time, .thread-rename) { position: relative; }
 /* Sweep, then rest a beat, so it reads as alive rather than as a second selection. */
 @keyframes thread-working {
-  0% { background-position: 130% 0; }
-  70%, 100% { background-position: -30% 0; }
+  0% { transform: translateX(-78%); }
+  70%, 100% { transform: translateX(18%); }
 }
 :root[data-theme="light"] .threads { --shimmer: 5%; }
-@media (prefers-reduced-motion: reduce) { .thread.running { animation: none; background-image: none; } }
+@media (prefers-reduced-motion: reduce) { .thread-shine { display: none; } }
 
 /* Side chats and background tasks, one step in under the chat that started them. */
 /* Children end where their parent's title ends, so the column stays square. */
@@ -378,7 +397,7 @@
 .history-menu { width: 300px; }
 .history-item { cursor: pointer; }
 .history-item .icon-btn { opacity: 0; }
-.history-item:hover .icon-btn { opacity: 1; }
+.history-item:hover .icon-btn, .history-item:focus-visible .icon-btn { opacity: 1; }
 .history-count {
   position: absolute;
   top: -3px;

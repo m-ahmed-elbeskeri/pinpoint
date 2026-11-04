@@ -77,7 +77,7 @@ function DesignTab({ settings, saveSettings, design, setDesign, canExtract, extr
   const [saved, setSaved] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [busy, setBusy] = useState(false);
   const [confirmReplace, setConfirmReplace] = useState<string | null>(null);
-  const timer = useRef<number>();
+  const timer = useRef<number>(undefined);
 
   useEffect(() => { setText(design?.content || ''); }, [design?.path]);
 
