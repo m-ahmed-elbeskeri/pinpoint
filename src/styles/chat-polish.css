@@ -1,0 +1,143 @@
+/* Chat panel polish: one type scale, aligned result rows, clearer live states, a useful empty chat. */
+
+/* ---- type scale: 13 body, 12 UI, 11 meta ---- */
+.msg.agent, .msg.user, .composer-box textarea, .question-text { font-size: 13px; }
+.msg.agent { line-height: 1.6; }
+.question-options button { font-size: 13px; }
+.question-label small, .file-name small, .tool-ms, .tool-detail { font-size: 11px; }
+
+/* ---- message actions sit on the bubble's top edge, clear of whatever follows ---- */
+.msg.user .msg-actions { top: -14px; bottom: auto; right: 8px; left: auto; background: var(--bg-3); }
+/* The agent's reply has no bubble, so its actions tuck into the corner its ragged last line leaves free. */
+.msg.agent .msg-actions {
+  display: flex;
+  top: auto;
+  bottom: 0;
+  right: -4px;
+  left: auto;
+  padding: 0 0 0 10px;
+  border: 0;
+  background: linear-gradient(to right, transparent, var(--bg) 10px);
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+}
+.msg.agent:hover .msg-actions, .msg.agent .msg-actions:focus-within { opacity: 1; pointer-events: auto; }
+
+/* ---- changed files: stats and chevrons line up on the right ---- */
+.done-files .file-row { height: auto; min-height: 26px; padding-right: 0; flex-wrap: wrap; }
+.done-files .file-row > .file-line { flex: 1 1 100%; min-width: 0; }
+.done-files .file-name { flex: 0 1 auto; }
+.file-line .df-stat { font-variant-numeric: tabular-nums; }
+.file-line .file-actions { display: flex; gap: 2px; margin-left: auto; }
+.file-row .toggle-btn {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+}
+.file-row .toggle-btn:hover { background: var(--bg-4); color: var(--text); }
+.file-row .toggle-btn.on { background: none; color: var(--text); }
+
+/* ---- the agent's question: obvious targets, number keys ---- */
+.question-card { border-color: var(--ring); }
+.question-options button { transition: background .12s, border-color .12s; }
+.question-options button:hover { background: var(--bg-4); border-color: var(--text-2); }
+.question-options button:focus-visible { border-color: var(--text); outline: 0; }
+.question-key { margin-left: auto; flex: none; min-width: 18px; text-align: center; }
+.question-options button:hover .question-key { color: var(--text); border-color: var(--text-2); }
+
+/* ---- working line: what it's doing and for how long ---- */
+.working { min-width: 0; }
+.working > .shimmer { flex: none; }
+.working-time {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* One spinner is enough: the live step gets a bar instead. */
+.chat > .tool-row.running .tool-head > .spin, .work-body > .tool-row.running .tool-head > .spin { display: none; }
+.tool-row.running > .tool-head { box-shadow: inset 2px 0 0 var(--text); border-radius: 0 8px 8px 0; background: var(--tint); }
+.tool-row.running .tool-name, .tool-row.running .tool-icon { color: var(--text); }
+
+/* ---- steering: Stop holds the right edge's side; the meter sits beside the actions ---- */
+.composer-foot:has(.stop-btn) .ctx-meter { margin-left: auto; }
+
+/* ---- stop reads as stop ---- */
+.run-actions .stop-btn {
+  background: rgba(255, 77, 109, .16);
+  color: var(--bad-fg);
+  box-shadow: inset 0 0 0 1px rgba(255, 77, 109, .35);
+}
+.run-actions .stop-btn:hover { background: var(--bad) !important; color: #fff !important; }
+
+/* ---- empty chat: a few starters and the keys worth knowing ---- */
+.chat-empty {
+  margin: auto 0;
+  display: grid;
+  gap: 14px;
+  padding: 0 2px 4px;
+}
+.empty-intro { display: grid; gap: 4px; }
+.empty-intro b { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -.01em; }
+.empty-intro span { font-size: 12px; color: var(--muted); }
+.empty-starters { display: grid; gap: 6px; }
+.empty-starters button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.empty-starters button svg { flex: none; color: var(--muted); }
+.empty-starters button:hover { background: var(--bg-3); border-color: var(--line-2); color: var(--text); }
+.empty-starters button:hover svg { color: var(--text-2); }
+.empty-tips {
+  list-style: none;
+  margin: 0;
+  padding: 10px 2px 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 7px;
+}
+.empty-tips li { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.empty-tips kbd { min-width: 18px; text-align: center; }
+.empty-tips span + kbd { margin-left: 8px; }
+
+/* ---- what you pointed at rides on top of the composer as one drawer, not a separate strip ---- */
+.composer > .ann-list:has(+ .composer-box) {
+  margin: 0 0 -6px;
+  padding: 5px 5px 6px;
+  gap: 2px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+}
+.composer > .ann-list:has(+ .composer-box) .ann { background: none; border-color: transparent; }
+.composer > .ann-list:has(+ .composer-box) .ann:hover, .composer > .ann-list:has(+ .composer-box) .ann.active { background: var(--bg-3); }
+.composer > .ann-list:has(+ .composer-box) + .composer-box { z-index: 1; border-top-left-radius: 0; border-top-right-radius: 0; box-shadow: none; }
+
+/* ---- the rest of the panel on the same scale ---- */
+.panel .ptab, .panel .msg-note, .panel .done-head, .panel .done-card.quiet .done-head { font-size: 12px; }
+.panel .msg-att, .panel .work-sum, .panel .btn.xs, .panel .ctx-bar .chip, .panel .ctx-meter, .panel .df-stat i, .panel .turn-summary { font-size: 11px; }
+.msg.agent .md code { font-size: 12px; }
+
+/* The agent picker's "more" row is a disclosure, not another agent. */
+.agent-menu .more-row .dd-item-text > span { color: var(--text-2); font-weight: 400; }
+.agent-menu .more-row .dd-item-icon { width: 16px; color: var(--muted); }
+
+.question-hint { margin: -2px 0 0; font-size: 11px; color: var(--muted); }

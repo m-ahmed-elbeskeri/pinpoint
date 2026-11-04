@@ -52,7 +52,7 @@ export function AgentPicker({ value, harnesses, agents, disabled, onPick, onSetu
           {installed.map(row)}
           {missing.length > 0 && (showMissing
             ? <><div className="dd-title">Not installed</div>{missing.map(row)}</>
-            : <button className="dd-item more-row" onClick={() => setShowMissing(true)}><span className="agent-icon letter more-icon" aria-hidden="true">+</span><span className="dd-item-text"><span>{missing.length} more agents</span><small>Not installed: {missing.slice(0, 3).map((h) => h.name).join(', ')}{missing.length > 3 ? '…' : ''}</small></span></button>)}
+            : <button className="dd-item more-row" onClick={() => setShowMissing(true)}><ChevronDown size={12} className="dd-item-icon" /><span className="dd-item-text"><span>{missing.length} more agent{missing.length === 1 ? '' : 's'}</span><small>Not installed: {missing.slice(0, 3).map((h) => h.name).join(', ')}{missing.length > 3 ? '…' : ''}</small></span></button>)}
           {mcp.length > 0 && (
             <>
               <div className="dd-title">MCP servers</div>

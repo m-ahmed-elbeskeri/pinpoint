@@ -95,7 +95,7 @@ export function FileRow({ runId, change, disabled, onReview, onRevert, onOpen }:
           <b>{name}</b>{dir && <small>{dir}</small>}
         </button>
         {change.reverted ? <span className="df-tag">reverted</span>
-          : change.add != null ? <span className="df-stat"><i className="add">+{change.add}</i><i className="del">−{change.del}</i></span> : null}
+          : change.add != null ? <span className="df-stat">{change.add ? <i className="add">+{change.add}</i> : null}{change.del ? <i className="del">−{change.del}</i> : null}</span> : null}
         <div className="file-actions">
           {change.kind !== 'delete' && <button className="mini-btn" onClick={() => onOpen()} title="Open in editor"><ExternalLink size={11} /></button>}
           {!change.reverted && (

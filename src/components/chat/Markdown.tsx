@@ -31,13 +31,15 @@ function Linked({ text }: { text: string }) {
 }
 
 function Inline({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  // *word* only counts as emphasis when it hugs the text, so "2 * 3 * 4" stays as written.
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|(?<![\w*])\*[^*\s](?:[^*]*[^*\s])?\*(?![\w*]))/g);
   return (
     <>
       {parts.map((p, i) =>
         p.startsWith('`') && p.endsWith('`') ? <code key={i}>{LINK.test(p.slice(1, -1)) && /^(https?:\/\/|www\.)\S+$/.test(p.slice(1, -1)) ? <Linked text={p.slice(1, -1)} /> : <WithSwatches text={p.slice(1, -1)} />}</code>
           : p.startsWith('**') && p.endsWith('**') ? <strong key={i}><Linked text={p.slice(2, -2)} /></strong>
-            : <span key={i}><Linked text={p} /></span>,
+            : p.length > 2 && p.startsWith('*') && p.endsWith('*') ? <em key={i}><Linked text={p.slice(1, -1)} /></em>
+              : <span key={i}><Linked text={p} /></span>,
       )}
     </>
   );

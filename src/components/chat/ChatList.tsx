@@ -59,8 +59,9 @@ export const ChatList = memo(function ChatList({ items, actions, root, busy, git
       const end = rest.findIndex((x) => x.kind === 'user');
       const turn = end < 0 ? rest : rest.slice(0, end);
       const done = turn.find((x): x is ItemOf<'done'> => x.kind === 'done' && x.changes.length > 0 && !x.undone);
-      // Only worth it when the result is a scroll away.
-      if (done && turn.length >= 4) out.push(<TurnSummary key={`sum-${item.id}`} done={done} onReview={actions.onReview} />);
+      // Only worth it when the result is a scroll away; a run of steps renders as one work log, so it counts once.
+      const blocks = turn.filter((x, k) => !isStep(x) || k === 0 || !isStep(turn[k - 1])).length;
+      if (done && blocks >= 6) out.push(<TurnSummary key={`sum-${item.id}`} done={done} onReview={actions.onReview} />);
     }
     i++;
   }

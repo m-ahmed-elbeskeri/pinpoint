@@ -1,7 +1,7 @@
 import { BackgroundChat } from '../../components/agent/BackgroundChat';
 import { api } from '../shared';
-import { useState } from 'react';
-import { MATCH_ROUNDS, combo } from '../shared';
+import { useEffect, useState } from 'react';
+import { MATCH_ROUNDS, MOD, combo } from '../shared';
 import { Composer } from './Composer';
 import { ChatList } from '../../components/chat';
 import { EmptyChat } from '../../components/shell/EmptyChat';
@@ -11,6 +11,15 @@ import { PullIcon } from '../../components/git/PullIcon';
 import { SideChat } from '../../components/agent/SideChat';
 import { chatTitle } from '../../lib/chat';
 import type { AppContext } from '../context';
+
+// Time since this run started; remounted per run by its key.
+function Elapsed() {
+  const [start] = useState(Date.now);
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
+  const s = Math.floor((Date.now() - start) / 1000);
+  return <span className="working-time">{s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`}</span>;
+}
 
 function LayoutIcon({ layout }: { layout: string }) {
   const Icon = layout === 'expanded' ? Expand : layout === 'tab' ? TabIcon : layout === 'floating' ? FloatIcon : PanelRight;
@@ -123,12 +132,13 @@ export function ChatPanel({ app }: { app: AppContext }) {
       <div className={`chat-wrap ${app.away ? 'away' : ''}`}>
         <div className="chat" ref={app.chatBox} onScroll={(e) => { app.onChatScroll(e); app.markBelow(); if (app.askAside) app.setAskAside(null); }} onWheel={app.onChatWheel} onMouseUp={app.onChatMouseUp}>
           {app.chat.length === 0 ? (
-            <EmptyChat agentName={app.agentName} cliMissing={!!app.agents && !app.agentReady} />
+            <EmptyChat agentName={app.agentName} cliMissing={!!app.agents && !app.agentReady} mod={MOD} onPick={(text) => { app.setInstruction(text); requestAnimationFrame(() => { const t = app.composerRef.current; if (t) { t.focus(); t.setSelectionRange(text.length, text.length); } }); }} />
           ) : <ChatList items={app.chat} actions={app.chatActions} root={app.root} gitRepo={!!app.gitStatus?.repo} busy={!!app.runId || !!app.job} />}
           {(app.runId || app.job) && (
             <div className="working">
               <Loader2 size={14} className="spin" />{' '}
               <span className="shimmer">{app.job || `${app.runMeta?.variant ? `Variant ${app.runMeta.variant.index} of ${app.runMeta.variant.total}: ` : ''}${app.agentName} is ${app.runMeta?.verify ? 'checking the result' : app.runMeta?.match ? `matching the mockup, round ${app.runMeta.match} of ${MATCH_ROUNDS}` : 'working'}…`}</span>
+              <Elapsed key={app.runId || app.job || ''} />
             </div>
           )}
           <div ref={app.chatEnd} />

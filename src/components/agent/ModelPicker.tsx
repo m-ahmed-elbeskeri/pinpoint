@@ -81,13 +81,13 @@ export function ModelPicker({ model, models, modelLabel, onModel, level, levels,
             ))}
           </div>
 
-          <div className="dd-title mp-level-title">
+          {levels.length > 0 && <div className="dd-title mp-level-title">
             <span>Thinking level{levels.length > 0 && <span className="mp-inline"> · {levelText}</span>}</span>
             {levels.length > 0 && (level
               ? <button className="mp-reset" onClick={() => onLevel('')} title="Let the model use its default level">Use default</button>
               : null)}
-          </div>
-          {levels.length === 0 ? <p className="mp-none">This model has no thinking levels.</p> : (
+          </div>}
+          {levels.length > 0 && (
             <div className="mp-slider">
               <div
                 className="mp-track" ref={track} role="slider" tabIndex={0}

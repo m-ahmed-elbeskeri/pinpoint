@@ -16,6 +16,12 @@ import type { AppContext } from '../context';
 export function Composer({ app }: { app: AppContext }) {
   const settings = app.settings!;
   const [composerMore, setComposerMore] = useState(false);
+  const asking = app.chat.find((it) => it.kind === 'question' && it.status === 'pending');
+  // While the agent waits on a question, what you type is the answer.
+  const submit = (how?: 'now' | 'queue') => {
+    if (asking && app.instruction.trim()) { app.chatActions.onAnswer(asking.id, app.instruction.trim()); app.setInstruction(''); return; }
+    app.send(how);
+  };
   useDismiss(composerMore, () => setComposerMore(false), { ignore: '.composer-tray-wrap' });
   return (
     <div className={`composer ${composerMore ? 'more' : ''}`}>
@@ -93,9 +99,9 @@ export function Composer({ app }: { app: AppContext }) {
           value={app.instruction}
           onChange={(e) => { app.setInstruction(e.target.value); app.assist.track(); }}
           onSelect={app.assist.track}
-          placeholder={app.runId
-            ? `Steer the agent: Enter adds it after the current step · ${MOD}+Enter interrupts now`
-            : app.annotations.length ? 'Anything else? (optional)' : app.chat.length ? 'Follow up' : 'Describe a change  ·  @ files  ·  / commands'}
+          placeholder={asking?.kind === 'question' ? `Press 1–${Math.min(9, asking.options.length)} to answer, or type your own answer`
+            : app.runId ? 'Steer the agent…'
+            : app.annotations.length ? 'Anything else? (optional)' : app.chat.length ? 'Follow up' : 'Describe a change…'}
           onKeyDown={(e) => {
             if (app.assist.onKeyDown(e)) return;
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); app.setHistoryOpen(true); return; }
@@ -117,7 +123,7 @@ export function Composer({ app }: { app: AppContext }) {
             }
             if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
             e.preventDefault();
-            app.send(app.runId && (e.ctrlKey || e.metaKey) ? 'now' : 'queue');
+            submit(app.runId && (e.ctrlKey || e.metaKey) ? 'now' : 'queue');
           }}
           onPaste={app.onPaste}
           rows={3}
@@ -136,7 +142,7 @@ export function Composer({ app }: { app: AppContext }) {
           )}
           <input ref={app.fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) app.addReferences(e.target.files); e.target.value = ''; }} />
           {app.runId
-            ? <span className="steer-hint"><kbd>↵</kbd> after this step <kbd>{MOD}↵</kbd> now</span>
+            ? app.instruction.trim() && <span className="steer-hint"><kbd>↵</kbd> after this step <kbd>{MOD}↵</kbd> now</span>
             : <>
               <AgentPicker
                 value={settings.agent} harnesses={app.harnesses} agents={app.agents} disabled={!!app.runId} mcp={app.mcp}
@@ -148,12 +154,12 @@ export function Composer({ app }: { app: AppContext }) {
           {app.runId ? (
             <div className="run-actions">
               <button className="icon-btn stop-btn" onClick={app.cancel} title="Stop the agent"><Square size={11} weight="fill" /></button>
-              <button className="btn sm ghost send-btn" disabled={!app.canSend} onClick={() => app.send('now')} title={`Interrupt the current step and send now (${MOD}+Enter)`}><Zap size={13} /><span className="btn-text">Now</span></button>
-              <button className="btn primary sm send-btn" disabled={!app.canSend} onClick={() => app.send('queue')} title="Send after the agent's current step (Enter)"><CornerDownRight size={13} /><span className="btn-text">Steer</span></button>
+              {app.canSend && <button className="btn sm ghost send-btn" onClick={() => app.send('now')} title={`Interrupt the current step and send now (${MOD}+Enter)`}><Zap size={13} /><span className="btn-text">Now</span></button>}
+              {app.canSend && <button className="btn primary sm send-btn" onClick={() => submit('queue')} title={asking ? 'Send as your answer (Enter)' : "Send after the agent's current step (Enter)"}><CornerDownRight size={13} /><span className="btn-text">Steer</span></button>}
             </div>
           ) : (
             <div className="run-actions">
-              <button className="btn primary sm send-btn round" disabled={!app.canSend} onClick={() => app.send()} title="Send (Enter)"><ArrowUp size={15} /><span className="sr-only">Send</span></button>
+              <button className="btn primary sm send-btn round" disabled={!app.canSend} onClick={() => submit()} title="Send (Enter)"><ArrowUp size={15} /><span className="sr-only">Send</span></button>
             </div>
           )}
         </div>
