@@ -26,7 +26,8 @@ function start(notify) {
   const set = (next) => { state = next; notify(state); };
   if (!app.isPackaged) return;
 
-  if (process.platform === 'darwin') {
+  // electron-builder's portable .exe sets PORTABLE_EXECUTABLE_DIR.
+  if (process.platform === 'darwin' || process.env.PORTABLE_EXECUTABLE_DIR) {
     const check = () => latestRelease()
       .then((r) => { if (newer(r.version, app.getVersion())) set({ status: 'available', version: r.version, url: r.url, manual: true }); })
       .catch(() => { /* offline or no release: the next check tries again */ });

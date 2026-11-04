@@ -37,7 +37,8 @@ const PLAN_STATUS = { pending: 'pending', in_progress: 'in_progress', completed:
 // Remembering "Always" for a run: per tool, and per command name for shell commands.
 const approvalKey = (tool, input = {}) => (/^(Bash|PowerShell)$/.test(tool) ? `${tool}:${String(input.command || '').trim().split(/\s+/)[0]}` : tool);
 
-function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askApproval }) {
+function runClaude(opts) {
+  const { settings, cwd, prompt, images, sessionId, onEvent, askApproval } = opts;
   const mode = settings.claudePermission || 'acceptEdits';
   const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--verbose', '--permission-mode', mode];
   // In "Edit files" mode, anything beyond edits (commands, web…) is asked about in the chat instead of being refused.
@@ -48,6 +49,11 @@ function runClaude({ settings, cwd, prompt, images, sessionId, onEvent, askAppro
   if (settings.claudeModel) args.push('--model', settings.claudeModel);
   if (settings.claudeEffort) args.push('--effort', settings.claudeEffort);
   args.push(...claudeArgs(settings));
+  if (opts.mcp && opts.requestDir) {
+    const file = path.join(opts.requestDir, 'pinpoint-mcp.json');
+    fs.writeFileSync(file, JSON.stringify({ mcpServers: { pinpoint: { type: 'http', url: opts.mcp.url, headers: { Authorization: `Bearer ${opts.mcp.token}` } } } }));
+    args.push('--mcp-config', file, '--allowedTools', 'mcp__pinpoint');
+  }
 
   const proc = spawnCli(settings.claudePath || 'claude', args, cwd);
   let finished = false;

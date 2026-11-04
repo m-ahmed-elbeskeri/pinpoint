@@ -6,6 +6,10 @@ export interface SavedLayout { name: string; threadsHidden: boolean; panelHidden
 export interface DesignDoc { path: string; exists: boolean; content: string }
 
 export interface Settings {
+  // Where the chat sits: beside the page, over the whole page area, or floating over the page.
+  chatLayout?: 'docked' | 'expanded' | 'tab' | 'floating';
+  // Pinpoint's own MCP tools for Claude Code and Codex runs (page, other chats, visuals). On unless switched off.
+  pinpointTools?: boolean;
   // What's switched on or off per agent, by MCP server or skill.
   extensions?: Record<string, { mcp?: Record<string, boolean>; skills?: Record<string, boolean> }>;
   agent: AgentId;

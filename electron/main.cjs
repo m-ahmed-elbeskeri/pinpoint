@@ -38,7 +38,11 @@ fixPath();
 
 const isMac = process.platform === 'darwin';
 const APP_ICON = path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
-if (process.platform === 'win32') app.setAppUserModelId('dev.pinpoint.app');
+// The same as package.json's build.appId. A run from the source gets its own ID: Electron makes a Start menu
+// shortcut for it (for notifications), and under the shared ID Windows would show that shortcut's Electron icon
+// for the installed app too.
+const APP_ID = app.isPackaged ? 'dev.pinpoint.app' : 'dev.pinpoint.app.source';
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 const TITLEBAR_HEIGHT = 52;
 
 function createWindow() {
@@ -75,6 +79,13 @@ function createWindow() {
   win.on('enter-full-screen', sendFs);
   win.on('leave-full-screen', sendFs);
   win.on('closed', () => { win = null; });
+  // The taskbar takes its icon from the app ID's shortcut. Without one (a portable copy, or a run from the source)
+  // it would show the icon of electron.exe, so the window names its own. It has to be a file on disk, not inside the app's archive.
+  // Windows ignores the icon unless the window also says how to start the app again.
+  if (process.platform === 'win32') {
+    const relaunchCommand = app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`;
+    win.setAppDetails({ appId: APP_ID, appIconPath: app.isPackaged ? process.execPath : APP_ICON, appIconIndex: 0, relaunchCommand, relaunchDisplayName: 'Pinpoint' });
+  }
 
   if (isDev) win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));

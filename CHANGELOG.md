@@ -4,6 +4,33 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-04
+
+### Added
+
+- **Design check.** Each page is read for drift from a consistent design: colors that aren't your tokens, too many font sizes or families, spacing off the 4px grid, headings that read backwards, lines too long to read, and the tells of generic generated UI (gradient text, blue-to-purple gradients, emoji as icons). It shows as a chip next to accessibility, with **Fix all**.
+- **Vision in Test conditions.** See the page as someone with red-green or blue-yellow color blindness, no color, blurred vision or low contrast. Chromium draws it, so screenshots and the agent see it too.
+- **Keyboard order.** A switch in Test conditions numbers every Tab stop on the page and draws the path between them, and flags positive tabindex, controls with no name, click handlers the keyboard can't reach, and an order that jumps back up the page. **Ask to fix** writes it up for the agent.
+- **Render activity.** Another switch flashes React components as they render and counts them, says which ones re-rendered with nothing changed or got a new function or object prop each time, and catches clicks that took over 200 ms and content that jumped. **Ask to fix** sends the list.
+- **Recordings remember what happened.** Each recorded step now keeps the component state that changed after it, the requests it made and any errors, so the agent can follow a behaviour bug ("the total is wrong after I remove an item") step by step.
+- **Translations in the element note.** When the picked copy comes from a translation file, the Content tab shows its key in every language. Edit any of them and **Apply now** writes the JSON directly, with a diff and Undo; **Translate missing** asks the agent to fill the gaps, for that key or the whole project.
+- **User flows.** A new page tool follows every link from the open page and lays the pages out by how many clicks away they are, with screenshots. It lists broken links, dead ends, project pages nothing links to, and redirects, with **Fix**. Shift+click pages to put a whole flow, in order, into your request.
+- **Pinpoint's tools for the agents.** Claude Code and Codex runs get Pinpoint's own MCP server, with nothing to install:
+  - **The page:** `page_snapshot` (what's on screen, with selectors and an optional screenshot), `page_console` (errors and failed requests), `selected_element` (what you picked), and `page_navigate`, `page_click`, `page_type` and `page_resize` to check their own work.
+  - **Other chats:** `list_sessions` (other chats, background tasks and side chats, with branch, files touched and claims), `read_session` and `send_to_session`, plus `claim_files` and `release_files` so two chats don't edit the same file.
+  - **In the chat:** `ask_user` shows options to pick as buttons and waits for your answer; `show_visual` shows a chart, diagram or mockup in a locked-down frame.
+  - Side chats and Plan only runs get only the tools that change nothing. Switch it all off in Settings.
+- **Every run knows who else is working.** Its prompt lists the other chats working on the project right now, which are on the same branch, and the files they've touched.
+- **Four ways to show the chat:** beside the page as before; as the main view with the page beside it; as a tab next to your pages, floating as a composer over a page when the page is in front; or floating over the page as just the composer until you open it. Pick one from the button at the right of the chat's header, double-click the header to switch between beside the page and the main view, or press Ctrl/⌘+Shift+\\ to cycle. Drag the divider until the chat is very thin and it becomes a tab, or very wide and it becomes the main view. Esc goes back from the big views, the chat glides into its new place, and while it's small the agent's latest reply shows above the composer.
+
+### Changed
+
+- **A lighter Windows install.** The installer no longer walks through setup steps: it installs for you only, with no admin rights, in a few seconds, then starts Pinpoint. There's also a portable `.exe` that runs without installing.
+
+### Fixed
+
+- **The Pinpoint logo in the Windows taskbar.** The small icon sizes are now bitmaps, which the taskbar needs; it showed a generic icon before.
+
 ## [0.13.2] - 2026-11-03
 
 ### Added

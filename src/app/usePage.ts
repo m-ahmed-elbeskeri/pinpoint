@@ -4,6 +4,8 @@ import { DEVICE_OFF, type Breakpoint, type Device } from '../components/page/Dev
 import { NO_CONDITIONS, type Conditions } from '../components/page/PageTools';
 import type { A11yIssue, Mock, Mode, PageEnv } from '../types';
 import { errText } from '../lib/util';
+import { designCheckScript, designInstruction, type DesignIssue } from '../lib/designcheck';
+import { focusInstruction, probeScript, renderInstruction, type FocusReport, type RenderReport } from '../lib/probes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AppContext } from './context';
 
@@ -31,6 +33,49 @@ export function usePage(app: AppContext) {
   const [a11y, setA11y] = useState<A11yIssue[]>([]);
   const [includeA11y, setIncludeA11y] = useState(false);
   const axeRef = useRef<string | null>(null);
+  const [designIssues, setDesignIssues] = useState<DesignIssue[]>([]);
+  const runDesign = useCallback(async () => {
+    if (!/^(https?|file):/.test(app.nav.url)) { setDesignIssues([]); return; }
+    const tokens = (app.designSystem?.tokens || []).map((t) => t.value);
+    const res = await app.browser.current?.evaluate<DesignIssue[]>(designCheckScript(tokens)).catch(() => null);
+    if (res) setDesignIssues(res);
+  }, []);
+  const askDesign = () => {
+    if (!app.designIssues.length) return;
+    app.setInstruction(designInstruction(app.designIssues, !!app.design?.content?.trim()));
+    if (app.settings?.panelHidden) app.saveSettings({ panelHidden: false });
+    app.focusComposer(50);
+  };
+  const [focusReport, setFocusReport] = useState<FocusReport | null>(null);
+  const [renderReport, setRenderReport] = useState<RenderReport | null>(null);
+  // The page-world probes are lost on every load, so they are switched on again whenever the page is ready.
+  const applyProbes = useCallback(async (c: Conditions) => {
+    const b = app.browser.current;
+    if (!b) return;
+    const run = <T,>(cmd: Parameters<typeof probeScript>[0]) => b.evaluate<T>(probeScript(cmd)).catch(() => null);
+    const id = b.id();
+    if (id != null) api.setVision(id, c.vision).catch(() => {});
+    setFocusReport(c.focus ? await run<FocusReport>('focus:on') : (await run('focus:off'), null));
+    if (c.renders) await run('renders:on'); else { await run('renders:off'); setRenderReport(null); }
+  }, []);
+  useEffect(() => {
+    if (!cond.focus && !cond.renders) return;
+    const t = setInterval(async () => {
+      const b = app.browser.current;
+      if (!b || app.loading) return;
+      if (cond.focus) { const r = await b.evaluate<FocusReport | null>(probeScript('focus:report')).catch(() => null); if (r) setFocusReport(r); }
+      if (cond.renders) { const r = await b.evaluate<RenderReport | null>(probeScript('renders:report')).catch(() => null); if (r) setRenderReport(r); }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [cond.focus, cond.renders]);
+  const askProbe = (text: string) => {
+    app.setInstruction(text);
+    if (app.settings?.panelHidden) app.saveSettings({ panelHidden: false });
+    app.focusComposer(50);
+  };
+  const askFocus = () => { if (app.focusReport) askProbe(focusInstruction(app.focusReport)); };
+  const askRenders = () => { if (app.renderReport) askProbe(renderInstruction(app.renderReport)); };
+  const resetRenders = () => { app.browser.current?.evaluate(probeScript('renders:reset')).catch(() => {}); setRenderReport(null); };
   const applyEnv = useCallback(async (e: PageEnv, isFrozen: boolean) => {
     const id = app.browser.current?.id();
     if (id == null) return;
@@ -65,13 +110,15 @@ export function usePage(app: AppContext) {
       app.browser.current?.breakpoints().then(setBreakpoints);
       app.browser.current?.classNames().then(app.setClassNames);
       if (app.cond.stress.length) app.browser.current?.send('stress', app.cond.stress);
+      if (app.cond.vision || app.cond.focus || app.cond.renders) applyProbes(app.cond);
     }, 1500);
     const audit = setTimeout(runA11y, 2500);
+    const design = setTimeout(runDesign, 3200);
     const warmup = setTimeout(() => {
       const warm = app.otherRoutes(app.nav.url);
       if (warm?.routes.length && !app.runRef.current) api.prewarmRoutes(warm.routes, warm.partition).catch(() => {});
     }, 5000);
-    return () => { clearTimeout(t); clearTimeout(audit); clearTimeout(warmup); };
+    return () => { clearTimeout(t); clearTimeout(audit); clearTimeout(design); clearTimeout(warmup); };
   }, [app.nav.url, app.loading, settings?.a11yCheck, runA11y]);
   const changeConditions = async (next: Conditions) => {
     const prev = app.cond;
@@ -83,6 +130,7 @@ export function usePage(app: AppContext) {
       if (next.stress.join() !== prev.stress.join()) b.send('stress', next.stress);
       if (next.anim !== prev.anim) await api.setAnimationRate(id, next.anim);
       if (next.network !== prev.network) { await api.setNetwork(id, next.network); b.reload(); }
+      if (next.vision !== prev.vision || next.focus !== prev.focus || next.renders !== prev.renders) await applyProbes(next);
     } catch (e) { app.flash(errText(e)); }
   };
   const stepAnimation = async () => {
@@ -141,10 +189,11 @@ export function usePage(app: AppContext) {
     app.browser.current?.send('layout', app.settings?.layoutOverlay !== false);
     app.browser.current?.send('record', !!app.rec);
     if (app.cond.stress.length) app.browser.current?.send('stress', app.cond.stress);
-  }, [applyEnv]);
+    applyProbes(app.cond);
+  }, [applyEnv, applyProbes]);
   const deviceScale = !device.on || !avail.w ? 1
     : device.zoom === 'fit' ? Math.min(1, avail.w / device.w, device.h ? avail.h / device.h : 1) : device.zoom;
   const deviceH = device.h || avail.h / deviceScale;
 
-  Object.assign(app, { a11y, area, askA11y, breakpoints, changeConditions, cond, device, deviceH, deviceScale, dragging, env, frozen, includeA11y, includeDiag, mocks, mode, multi, onFrozen, runA11y, setA11y, setAvail, setDevice, setEnv, setFrozen, setFrozenState, setIncludeA11y, setIncludeDiag, setMocks, setMode, setMulti, startDeviceResize, stepAnimation, syncPage });
+  Object.assign(app, { a11y, area, askA11y, askDesign, designIssues, runDesign, askFocus, askRenders, focusReport, renderReport, resetRenders, breakpoints, changeConditions, cond, device, deviceH, deviceScale, dragging, env, frozen, includeA11y, includeDiag, mocks, mode, multi, onFrozen, runA11y, setA11y, setAvail, setDevice, setEnv, setFrozen, setFrozenState, setIncludeA11y, setIncludeDiag, setMocks, setMode, setMulti, startDeviceResize, stepAnimation, syncPage });
 }

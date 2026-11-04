@@ -5,18 +5,31 @@ import { MATCH_ROUNDS, combo } from '../shared';
 import { Composer } from './Composer';
 import { ChatList } from '../../components/chat';
 import { EmptyChat } from '../../components/shell/EmptyChat';
-import { ArrowDown, Check, CornerDownRight, GitPullRequestArrow, History, ImagePlus, Loader2, MessageSquare, Plus, SquarePen, X, SquareStack } from '../../components/ui/icons';
+import { ArrowDown, Check, CornerDownRight, GitPullRequestArrow, History, ImagePlus, Loader2, MessageSquare, Plus, SquarePen, X, SquareStack, Expand, FloatIcon, PanelRight, ChevronDown, TabIcon } from '../../components/ui/icons';
+import { Dropdown } from '../../components/ui/Dropdown';
 import { PullIcon } from '../../components/git/PullIcon';
 import { SideChat } from '../../components/agent/SideChat';
 import { chatTitle } from '../../lib/chat';
 import type { AppContext } from '../context';
 
+function LayoutIcon({ layout }: { layout: string }) {
+  const Icon = layout === 'expanded' ? Expand : layout === 'tab' ? TabIcon : layout === 'floating' ? FloatIcon : PanelRight;
+  return <Icon size={13} />;
+}
+
 export function ChatPanel({ app }: { app: AppContext }) {
   const settings = app.settings!;
   const [dragOver, setDragOver] = useState(false);
+  const { floatOpen, setFloatOpen } = app;
+  const layout = app.chatLayout;
+  // As a tab and not in front, it floats as a composer; opening it brings its tab to the front.
+  const lastReply = (() => { for (let i = app.chat.length - 1; i >= 0; i--) { const it = app.chat[i]; if (it.kind === 'user') return null; if (it.kind === 'text' && it.text.trim()) return it; } return null; })();
+  // While it's small, the bar says what the agent is doing, so there's no need to open the chat to check.
+  const step = (() => { if (!app.runId) return ''; for (let i = app.chat.length - 1; i >= 0; i--) { const it = app.chat[i]; if (it.kind === 'user') break; if (it.kind === 'tool') return `${it.name} ${(it.detail || '').split(/[\/]/).pop()}`.trim(); } return 'Thinking'; })();
+  const mini = (layout === 'floating' && !floatOpen && !app.activeSide) || (layout === 'tab' && !app.chatTabOn);
   return (
     <aside
-      className={`panel ${app.left ? 'left' : 'right'} ${app.activeSide ? 'side-active' : ''}`}
+      className={`panel ${app.left ? 'left' : 'right'} ${app.activeSide ? 'side-active' : ''} ${mini ? 'float-mini' : layout === 'floating' ? 'float-open' : ''}`}
       style={settings.panelHidden ? { display: 'none' } : undefined}
       onDragOver={(e) => { if ([...e.dataTransfer.items].some((i) => i.kind === 'file')) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
@@ -29,7 +42,19 @@ export function ChatPanel({ app }: { app: AppContext }) {
         onDoubleClick={() => { app.setPanelWidth(null); app.saveSettings({ panelWidth: 400 }); }}
         title="Drag to resize · double-click to reset"
       />
-      <div className="panel-head">
+      {mini && lastReply && (
+        <button className="chat-peek" onClick={() => (layout === 'tab' ? app.setChatTabOn(true) : setFloatOpen(true))} title="Open the chat">
+          <span>{lastReply.text.replace(/\s+/g, ' ').slice(0, 280)}</span>
+        </button>
+      )}
+      {(layout === 'floating' || (layout === 'tab' && !app.chatTabOn)) && (
+        <button className="float-toggle" onClick={() => (layout === 'tab' ? app.setChatTabOn(true) : setFloatOpen(!floatOpen))} title={floatOpen ? 'Show just the composer' : 'Show the whole chat'}>
+          {app.runId ? <Loader2 size={12} className="spin" /> : <MessageSquare size={12} />}
+          <span>{app.runId ? <>Working{step ? <em> · {step}</em> : null}</> : chatTitle(app.chat) || 'Chat'}</span>
+          <ChevronDown size={12} className={floatOpen ? 'flip' : ''} />
+        </button>
+      )}
+      <div className="panel-head" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest('button, .dd')) app.setChatLayout(layout === 'expanded' ? 'docked' : 'expanded'); }}>
         <div className="panel-tabs" ref={app.tabsStrip} onScroll={app.fadeTabs} onWheel={(e) => { if (e.deltaY && !e.deltaX) e.currentTarget.scrollLeft += e.deltaY; }}>
           <button className={`ptab ${app.activeSide ? '' : 'on'}`} onClick={() => app.setActiveSide(null)} title={chatTitle(app.chat) || 'This chat'}>
             {app.runId ? <Loader2 size={12} className="spin" /> : <MessageSquare size={12} />}<span>Chat</span>
@@ -54,6 +79,17 @@ export function ChatPanel({ app }: { app: AppContext }) {
           <button className="ptab-new" onClick={() => app.newSide()} disabled={!app.projectDir} title={`New side chat: ask without touching this chat (${combo('A', true)})`}><Plus size={13} /></button>
         </div>
         <div className="spacer" />
+        <Dropdown
+          className="layout-pick" align="right" title="Where the chat sits" tooltip={`Where the chat sits (${combo('\\', true)} to cycle)`}
+          value={layout} display="" icon={<LayoutIcon layout={layout} />}
+          onChange={(v) => app.setChatLayout(v as typeof layout)}
+          items={[
+            { value: 'docked', label: 'Beside the page', desc: 'Double-click the header to make it the main view', icon: <PanelRight size={14} /> },
+            { value: 'expanded', label: 'Main view', desc: 'The chat in the big area, the page beside it', icon: <Expand size={14} /> },
+            { value: 'tab', label: 'As a tab', desc: 'Next to your pages; floats as a composer over a page', icon: <TabIcon size={14} /> },
+            { value: 'floating', label: 'Floating', desc: 'Just the composer over the page until you open it', icon: <FloatIcon size={14} /> },
+          ]}
+        />
         <button className="btn ghost xs panel-new quiet" onClick={app.newChat} disabled={!!app.job || !app.chat.length} title={`${app.runId ? 'Start another chat. This one keeps working.' : app.session ? 'Continuing the same agent session. Click to start fresh.' : 'Start a fresh agent session'} (${combo('O', true)})`}><SquarePen size={13} /><span className="btn-text">New chat</span></button>
       </div>
       {app.activeBg && (

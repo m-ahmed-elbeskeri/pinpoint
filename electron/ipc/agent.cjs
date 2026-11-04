@@ -1,3 +1,5 @@
+const mcpServer = require('../mcp/server.cjs');
+const mcpTools = require('../mcp/tools.cjs');
 const { app, ipcMain } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -29,8 +31,16 @@ function readOnly(settings) {
   return { ...settings, claudePermission: 'plan', codexSandbox: 'read-only', agentAccess: { ...settings.agentAccess, ...(first ? { [id]: first } : {}) }, gitAutoCommit: false };
 }
 
+// Plan-only runs may look but not touch: no clicking, typing, messaging or claiming.
+const isReadOnly = (s) => (s.agent === 'claude' ? s.claudePermission === 'plan' : s.agent === 'codex' ? s.codexSandbox === 'read-only' : false);
+async function pinpointTools(settings, info) {
+  if (settings.pinpointTools === false || !['claude', 'codex'].includes(settings.agent)) return null;
+  try { return await mcpServer.issue(info); } catch (e) { console.warn("Pinpoint's tools couldn't start:", e.message); return null; }
+}
+
 function register(ctx) {
   const { active, sideRuns, loadSettings, projectDir } = ctx;
+  mcpTools.setWindow(ctx.getWin);
   const agentsFile = () => path.join(app.getPath('userData'), 'agents.json');
   ipcMain.handle('agents:known', () => readJson(agentsFile()));
   ipcMain.handle('agents:detect', async () => {
@@ -50,9 +60,10 @@ function register(ctx) {
     const design = settings.useDesign ? project.readDesign(cwd) : null;
     const memory = settings.useMemory ? project.readMemory(cwd).filter((m) => m.enabled !== false && m.text?.trim()) : [];
     const designSystem = sessionId ? null : inspectSafe(cwd);
+    const toolsOn = settings.pinpointTools !== false && ['claude', 'codex'].includes(settings.agent);
     const prompt = request.verify
       ? buildVerifyPrompt({ request })
-      : buildPrompt({ request, files, projectDir: cwd, followUp: !!sessionId, design: design?.exists ? design.content : '', memory, designSystem });
+      : buildPrompt({ request: { ...request, tools: toolsOn && !sessionId }, files, projectDir: cwd, followUp: !!sessionId, design: design?.exists ? design.content : '', memory, designSystem });
     const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('agent:event', { runId, ...evt }); };
 
     if (active.size && !request.verify) send({ type: 'status', text: 'Another chat is also editing this project. Changes made at the same time can show up in both results.' });
@@ -121,7 +132,9 @@ function register(ctx) {
       approvals.set(`${runId}:${approvalId}`, resolve);
       send({ type: 'approval', approvalId, tool, detail: String(detail || '').slice(0, 600) });
     });
-    const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, requestDir: files.dir, onEvent, askApproval });
+    const mcp = await pinpointTools(settings, { runId, kind: 'chat', label: (request.instruction || 'a chat').split('\n')[0].slice(0, 60), readOnly: isReadOnly(settings) });
+    const handle = runAgent({ settings, cwd, prompt, images: files.images, sessionId, requestDir: files.dir, onEvent, askApproval, mcp });
+    handle.done.finally(() => { mcpServer.revoke(mcp?.token); mcpTools.releaseAll(runId); });
     active.set(runId, handle);
     handle.done.finally(() => {
       active.delete(runId); othersWrote.delete(runId);
@@ -161,7 +174,7 @@ function register(ctx) {
   // Side chat: a quick question to the same agent, read-only, in its own session. It never snapshots,
   // records a run or touches the main chat.
 
-  ipcMain.handle('side:ask', (e, { sideId, question, context, sessionId }) => {
+  ipcMain.handle('side:ask', async (e, { sideId, question, context, sessionId }) => {
     const settings = loadSettings();
     const cwd = settings.projectDir;
     if (!cwd || !fs.existsSync(cwd)) throw new Error('Pick a project folder first.');
@@ -176,7 +189,9 @@ function register(ctx) {
     ].join('\n');
     const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('side:event', { sideId, ...evt }); };
     sideRuns.get(sideId)?.kill();
-    const handle = runAgent({ settings: readOnly(settings), cwd, prompt, images: [], sessionId: sessionId || null, requestDir, onEvent: send });
+    const mcp = await pinpointTools(settings, { runId: sideId, kind: 'side', label: 'a side chat', readOnly: true });
+    const handle = runAgent({ settings: readOnly(settings), cwd, prompt, images: [], sessionId: sessionId || null, requestDir, onEvent: send, mcp });
+    handle.done.finally(() => mcpServer.revoke(mcp?.token));
     sideRuns.set(sideId, handle);
     handle.done.finally(() => { if (sideRuns.get(sideId) === handle) sideRuns.delete(sideId); });
     return true;

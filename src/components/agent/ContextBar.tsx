@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Accessibility, AlertTriangle, Component, FileCode2, Wrench, X } from '../ui/icons';
+import { Accessibility, AlertTriangle, Component, FileCode2, Palette, Wrench, X } from '../ui/icons';
+import type { DesignIssue } from '../../lib/designcheck';
 import type { A11yIssue, ConsoleEntry, DesignSystem, NetworkFailure, RouteInfo } from '../../types';
 import { useDismiss } from '../../lib/hooks';
 
@@ -17,13 +18,17 @@ interface Props {
   includeA11y: boolean;
   setIncludeA11y(v: boolean): void;
   onAskA11y(): void;
+  design: DesignIssue[];
+  onAskDesign(): void;
   onShowNode(selector: string): void;
 }
 
 export function ContextBar(p: Props) {
   const [open, setOpen] = useState(false);
   const [a11yOpen, setA11yOpen] = useState(false);
-  useDismiss(open || a11yOpen, () => { setOpen(false); setA11yOpen(false); }, { ignore: '.diag-pop, [data-diag-chip]' });
+  const [designOpen, setDesignOpen] = useState(false);
+  useDismiss(open || a11yOpen || designOpen, () => { setOpen(false); setA11yOpen(false); setDesignOpen(false); }, { ignore: '.diag-pop, [data-diag-chip]' });
+  const designWarn = p.design.filter((d) => d.level === 'warn').length;
   const ds = p.designSystem;
   const dsLabel = ds ? [ds.tailwind && 'Tailwind', ...ds.libraries.slice(0, 2), !ds.tailwind && !ds.libraries.length && (ds.tokenFiles.length ? 'CSS tokens' : ds.styling[0])].filter(Boolean).join(' · ') : '';
   const a11yNodes = p.a11y.reduce((s, v) => s + v.count, 0);
@@ -52,16 +57,43 @@ export function ContextBar(p: Props) {
           </span>
         )}
         {diagCount > 0 && (
-          <button data-diag-chip className={`chip ${errors || p.network.length ? 'danger' : 'warn'} ${p.includeDiag ? '' : 'excluded'}`} onClick={() => { setOpen(!open); setA11yOpen(false); }} title="Problems on the page">
+          <button data-diag-chip className={`chip ${errors || p.network.length ? 'danger' : 'warn'} ${p.includeDiag ? '' : 'excluded'}`} onClick={() => { setOpen(!open); setA11yOpen(false); setDesignOpen(false); }} title="Problems on the page">
             <AlertTriangle size={12} /> {diagLabel}
           </button>
         )}
         {p.a11y.length > 0 && (
-          <button data-diag-chip className={`chip ${p.includeA11y ? 'warn' : ''}`} onClick={() => { setA11yOpen(!a11yOpen); setOpen(false); }} title={`${a11yNodes} accessibility problem${a11yNodes === 1 ? '' : 's'} on this page (axe-core, WCAG A/AA)`}>
+          <button data-diag-chip className={`chip ${p.includeA11y ? 'warn' : ''}`} onClick={() => { setA11yOpen(!a11yOpen); setOpen(false); setDesignOpen(false); }} title={`${a11yNodes} accessibility problem${a11yNodes === 1 ? '' : 's'} on this page (axe-core, WCAG A/AA)`}>
             <Accessibility size={12} /> {a11yNodes} a11y issue{a11yNodes === 1 ? '' : 's'}
           </button>
         )}
+        {p.design.length > 0 && (
+          <button data-diag-chip className={`chip ${designWarn ? 'warn' : ''}`} onClick={() => { setDesignOpen(!designOpen); setOpen(false); setA11yOpen(false); }} title="Design check: where this page drifts from a consistent design system">
+            <Palette size={12} /> {p.design.length} design note{p.design.length === 1 ? '' : 's'}
+          </button>
+        )}
       </div>
+
+      {designOpen && p.design.length > 0 && (
+        <div className="diag-pop">
+          <div className="diag-head">
+            <b>Design check</b>
+            <div className="spacer" />
+            <button className="btn xs" onClick={() => { p.onAskDesign(); setDesignOpen(false); }}><Wrench size={12} /> Fix all</button>
+            <button className="icon-btn xs" onClick={() => setDesignOpen(false)} title="Close"><X size={13} /></button>
+          </div>
+          <ul className="diag-list">
+            {p.design.map((d) => (
+              <li key={d.id} className={d.level === 'warn' ? 'warning' : 'info'}>
+                <span className="diag-tag">{d.level === 'warn' ? 'DRIFT' : 'NOTE'}</span>
+                <span>{d.text}</span>
+                {d.examples.map((e, i) => (
+                  <small key={i}><button className="a11y-node mono" onClick={() => p.onShowNode(e.selector)} title={`${e.selector}\n\nClick to scroll to it`}>{e.label}</button></small>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {a11yOpen && p.a11y.length > 0 && (
         <div className="diag-pop">

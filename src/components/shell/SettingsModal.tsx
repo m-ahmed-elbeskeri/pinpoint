@@ -123,6 +123,10 @@ export function SettingsModal({ settings, agents, harnesses, onSave, onClose }: 
             <input type="checkbox" checked={s.tray !== false} onChange={(e) => set('tray', e.target.checked)} />
             Show chats that are working or need you in the system tray
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.pinpointTools !== false} onChange={(e) => set('pinpointTools', e.target.checked)} />
+            Give Claude Code and Codex Pinpoint's tools: see the page and its errors, check their work, see the other chats, show visuals
+          </label>
           <div className="setting-row">
             <span>Theme</span>
             <div className="seg">

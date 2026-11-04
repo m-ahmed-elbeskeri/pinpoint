@@ -12,6 +12,7 @@ const only = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',
 
 const SUITES = [
   { name: 'unit', runner: 'node', about: 'instant edits and component discovery' },
+  { name: 'i18n', runner: 'node', about: 'translation files and recorded state' },
   { name: 'ci-mode', runner: 'node', about: 'headless capture / compare' },
   { name: 'page', runner: 'electron', about: 'page-side tools, change check' },
   { name: 'tools', runner: 'electron', about: 'main-process tools against a served page' },

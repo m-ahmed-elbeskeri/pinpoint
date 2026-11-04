@@ -9,6 +9,7 @@ import type { AppContext } from './context';
 
 export function useReviewAndSweep(app: AppContext) {
   const [sweepOpen, setSweepOpen] = useState(false);
+  const [flowMapOpen, setFlowMapOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
@@ -76,5 +77,5 @@ export function useReviewAndSweep(app: AppContext) {
     app.focusComposer(50);
   };
 
-  Object.assign(app, { addReviewComments, reviewComments, reviewOpen, reviewing, setReviewComments, setReviewOpen, setReviewing, setSweepOpen, sweepFix, sweepOpen, sweepOpenPage, sweepPlan });
+  Object.assign(app, { flowMapOpen, setFlowMapOpen, addReviewComments, reviewComments, reviewOpen, reviewing, setReviewComments, setReviewOpen, setReviewing, setSweepOpen, sweepFix, sweepOpen, sweepOpenPage, sweepPlan });
 }

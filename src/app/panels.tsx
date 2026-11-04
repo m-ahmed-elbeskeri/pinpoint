@@ -8,6 +8,7 @@ function deferred<T extends ComponentType<any>>(load: () => Promise<T>) {
 }
 export const FilesPanel = deferred(() => import('../components/tools/FilesPanel').then((m) => m.FilesPanel));
 export const LayoutsSheet = deferred(() => import('../components/shell/LayoutsSheet').then((m) => m.LayoutsSheet));
+export const FlowMapView = deferred(() => import('../components/page/FlowMapView').then((m) => m.FlowMapView));
 export const SweepView = deferred(() => import('../components/page/SweepView').then((m) => m.SweepView));
 export const ReviewPanel = deferred(() => import('../components/tools/ReviewPanel').then((m) => m.ReviewPanel));
 export const VariantsLive = deferred(() => import('../components/page/VariantsLive').then((m) => m.VariantsLive));

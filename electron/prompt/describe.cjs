@@ -176,7 +176,14 @@ function describeAnnotation(a) {
   } else if (a.kind === 'flow') {
     lines.push(`### [${a.n}] Recorded interaction: ${note}`);
     lines.push(`- The user did this in the page${a.startUrl ? ` (starting at ${a.startUrl})` : ''}:`);
-    (a.steps || []).forEach((s, i) => lines.push(`  ${i + 1}. ${fmtStep(s)}`));
+    (a.steps || []).forEach((s, i) => {
+      lines.push(`  ${i + 1}. ${fmtStep(s)}`);
+      const after = s.after || {};
+      for (const x of after.state || []) lines.push(`     - state changed: ${x}`);
+      for (const x of after.requests || []) lines.push(`     - request: ${x}`);
+      for (const x of after.errors || []) lines.push(`     - console error: ${x}`);
+    });
+    if ((a.steps || []).some((s) => s.after)) lines.push('- Under each step is what the page did before the next one: React component state that changed (state #n is the nth useState/useReducer in that component), the requests it made and any errors. Use these to find where the behaviour goes wrong.');
     if (a.seen?.errors?.length) lines.push('- Console errors while the user did this:', ...a.seen.errors.map((x) => `  - ${x}`));
     if (a.seen?.failed?.length) lines.push('- Requests that failed while the user did this:', ...a.seen.failed.map((x) => `  - ${x}`));
     lines.push('- The request is about what happens during or after these steps. Follow the same path through the code to find it.');

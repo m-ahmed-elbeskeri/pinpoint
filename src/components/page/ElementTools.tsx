@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BookOpen, Box, RotateCcw, X } from '../ui/icons';
 import type { Annotation, CssRuleInfo, ForcedState } from '../../types';
+import { Translations } from './Translations';
 
 export type ToolSection = 'tweak' | 'content' | 'component' | 'rules';
 
@@ -21,6 +22,8 @@ interface Props {
   onIsolate(on: boolean): void;
   onStory(): void;
   onOpenFile(file: string, line?: number): void;
+  onTranslate(edits: { file: string; key: string; value: string }[]): Promise<void>;
+  onAsk(instruction: string): void;
 }
 
 const STATES: { id: ForcedState; label: string; hint: string }[] = [
@@ -173,6 +176,7 @@ export function ElementTools(p: Props) {
               <input value={ann.textEdit?.to ?? el.text} onChange={(e) => p.onText(e.target.value)} spellCheck={false} />
             </label>
           ) : <p className="hint el-hint">This element contains other elements. Pick the one holding the text to edit its copy.</p>}
+          {el.leaf && el.text.trim() && <Translations text={el.text} onApply={p.onTranslate} onAsk={p.onAsk} />}
           <div className={`el-classes ${ann.classEdit ? 'set' : ''}`}>
             {classes.map((c) => {
               const pending = p.classNames.length > 0 && !(el.classes || []).includes(c) && !p.classNames.includes(c) && !p.generated.includes(c);

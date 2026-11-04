@@ -239,6 +239,7 @@ export function useChats(app: AppContext) {
     onApprove: approve,
     onRewind: (itemId: string) => rewindTo(itemId),
     onFork: (itemId: string) => { forkFrom(itemId); },
+    onAnswer: (itemId: string, answer: string) => app.answerQuestion(itemId, answer),
     onEditMessage: (text: string) => {
       app.setInstruction(text);
       app.setActiveSide(null);

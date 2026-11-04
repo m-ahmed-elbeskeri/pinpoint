@@ -16,6 +16,7 @@ export type ChatActions = {
   onApprove(itemId: string, decision: ApprovalDecision): void;
   onEditMessage(text: string): void;
   onSendText(text: string): void;
+  onAnswer(itemId: string, answer: string): void;
   onSaveSnippet(text: string): void;
   onRewind(itemId: string): void;
   onFork(itemId: string): void;

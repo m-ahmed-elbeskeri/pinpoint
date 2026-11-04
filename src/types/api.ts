@@ -2,7 +2,7 @@ import type { TranscriptEvent } from '../components/agent/Transcript';
 import type { AgentEvent, AgentId, DevDetection, HarnessInfo, ModelCatalog, SideEvent } from './agent';
 import type { ApprovalDecision, Chat, ChatMeta, DiffFile, FileChange, Handoff, MemoryItem, RevertResult } from './chat';
 import type { BranchCompare, GitBranchInfo, GitCommit, GitPull, GitStatus } from './git';
-import type { ApiHandler, BuildSize, ComponentEntry, CssRuleInfo, DesignSystem, FlowStep, NetworkFailure, NetworkMode, PageEnv, Pin, Profile, Rect, ReviewComment, ReviewState, RouteInfo, SweepEvent } from './page';
+import type { ApiHandler, BuildSize, ComponentEntry, CssRuleInfo, DesignSystem, FlowStep, NetworkFailure, NetworkMode, PageEnv, Pin, Profile, Rect, ReviewComment, ReviewState, FlowMapEvent, MissingTranslations, RouteInfo, SweepEvent, TranslationMatch } from './page';
 import type { DesignDoc, Settings, UpdateState } from './settings';
 import type { AgentExtensions, InstructionFile } from './agent';
 
@@ -47,6 +47,7 @@ export interface PinpointAPI {
   applyRun(runId: string): Promise<RevertResult>;
   forceState(webContentsId: number, selector: string, classes: string[]): Promise<number>;
   emulate(webContentsId: number, env: PageEnv & { focus: boolean; touch?: boolean }): Promise<boolean>;
+  setVision(webContentsId: number, type: string): Promise<boolean>;
   designSystem(): Promise<DesignSystem | null>;
   componentUsage(name: string): Promise<{ count: number; files: string[]; fileCount?: number }>;
   a11ySource(): Promise<string>;
@@ -65,6 +66,9 @@ export interface PinpointAPI {
   prewarmRoutes(list: { route: string; url: string; current?: boolean }[], partition?: string): Promise<boolean>;
   instantPlan(annotation: unknown): Promise<{ ok: boolean; summary?: string[]; files?: string[]; reason?: string }>;
   instantApply(runId: string, annotation: unknown): Promise<{ changes: FileChange[]; summary: string[] }>;
+  i18nFind(text: string): Promise<{ files: number; matches: TranslationMatch[] }>;
+  i18nMissing(): Promise<MissingTranslations[]>;
+  i18nApply(runId: string, edits: { file: string; key: string; value: string }[]): Promise<{ changes: FileChange[]; summary: string[] }>;
   listComponents(): Promise<ComponentEntry[]>;
   readProfiles(): Promise<Profile[]>;
   writeProfiles(list: Profile[]): Promise<Profile[]>;
@@ -92,6 +96,9 @@ export interface PinpointAPI {
   sweepStart(args: { pages: { route: string; url: string }[]; partition?: string; crawl?: boolean }): Promise<boolean>;
   sweepStop(): Promise<boolean>;
   onSweepEvent(cb: (e: SweepEvent) => void): () => void;
+  flowMapStart(args: { start: string; partition?: string }): Promise<boolean>;
+  flowMapStop(): Promise<boolean>;
+  onFlowMapEvent(cb: (e: FlowMapEvent) => void): () => void;
   updateState(): Promise<UpdateState>;
   updateInstall(): Promise<boolean>;
   nudgeAgent(runId: string): Promise<boolean>;
@@ -166,6 +173,8 @@ export interface PinpointAPI {
   startDev(command: string): Promise<boolean>;
   detectDev(): Promise<DevDetection>;
   stopDev(): Promise<boolean>;
+  onMcpAsk(cb: (q: { id: string; tool: string; args: Record<string, unknown>; run: { runId: string; kind: string; claims: Record<string, string> } }) => void): () => void;
+  mcpAnswer(id: string, result: unknown, error?: string): void;
   openExternal(url: string): Promise<void>;
   installDevTools(): Promise<boolean>;
   cachedExtensions(): Promise<AgentExtensions | null>;

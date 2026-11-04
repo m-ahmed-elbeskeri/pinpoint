@@ -193,7 +193,8 @@ function runCodex(opts) {
       initialized = true;
       clearTimeout(timer);
       send({ method: 'initialized' });
-      const common = { cwd, sandbox: settings.codexSandbox === BYPASS ? 'danger-full-access' : settings.codexSandbox || 'workspace-write', approvalPolicy: opts.askApproval && (settings.codexSandbox === 'workspace-write' || settings.codexSandbox === 'danger-full-access') ? 'on-request' : 'never', ...(settings.codexModel ? { model: settings.codexModel } : {}) };
+      const mcpConfig = opts.mcp ? { config: { 'mcp_servers.pinpoint': { url: opts.mcp.url, http_headers: { Authorization: `Bearer ${opts.mcp.token}` }, tool_timeout_sec: 900 } } } : {};
+      const common = { ...mcpConfig, cwd, sandbox: settings.codexSandbox === BYPASS ? 'danger-full-access' : settings.codexSandbox || 'workspace-write', approvalPolicy: opts.askApproval && (settings.codexSandbox === 'workspace-write' || settings.codexSandbox === 'danger-full-access') ? 'on-request' : 'never', ...(settings.codexModel ? { model: settings.codexModel } : {}) };
       const th = sessionId
         ? await request('thread/resume', { threadId: sessionId, ...common })
         : await request('thread/start', common);
@@ -240,9 +241,9 @@ function runCodex(opts) {
   };
 }
 
-function runCodexExec({ settings, cwd, prompt, images, sessionId, onEvent }) {
+function runCodexExec({ settings, cwd, prompt, images, sessionId, onEvent, mcp }) {
   const sandbox = settings.codexSandbox || 'workspace-write';
-  const common = ['--json', '--skip-git-repo-check', ...(sandbox === BYPASS ? ['--dangerously-bypass-approvals-and-sandbox'] : ['-c', `sandbox_mode="${sandbox}"`]), ...codexArgs(settings)];
+  const common = ['--json', '--skip-git-repo-check', ...(sandbox === BYPASS ? ['--dangerously-bypass-approvals-and-sandbox'] : ['-c', `sandbox_mode="${sandbox}"`]), ...codexArgs(settings), ...(mcp ? ['-c', `mcp_servers.pinpoint.url="${mcp.url}"`, '-c', `mcp_servers.pinpoint.http_headers={ Authorization = "Bearer ${mcp.token}" }`] : [])];
   if (settings.codexModel) common.push('-m', settings.codexModel);
   if (settings.codexEffort) common.push('-c', `model_reasoning_effort="${settings.codexEffort}"`);
   for (const img of images || []) common.push('-i', img);

@@ -68,6 +68,18 @@ export function useAnnotations(app: AppContext) {
       app.refreshGit();
     } catch (e) { app.flash(errText(e)); }
   };
+  // Edits to translation files land in the chat like any instant edit, with a diff and Undo.
+  const applyTranslations = async (edits: { file: string; key: string; value: string }[]) => {
+    const runId = uid();
+    const res = await api.i18nApply(runId, edits);
+    if (!app.chatId) { app.setChatId(uid()); app.setChatCreated(Date.now()); }
+    app.setChat((c) => [...c,
+      { kind: 'status', id: uid(), text: `Translation edit: ${res.summary.join('; ')}` },
+      { kind: 'done', id: uid(), runId, ok: true, changes: res.changes, instant: true },
+    ]);
+    if (/^file:/.test(app.nav.url)) app.browser.current?.reload();
+    app.refreshGit();
+  };
   const onManip = (m: { uid: string; kind: 'resize' | 'reorder'; width?: string | null; height?: string | null; from?: number; to?: number; count?: number; before?: string | null }) => {
     const a = app.annotations.find((x) => x.element?.uid === m.uid);
     if (!a) return;
@@ -330,5 +342,5 @@ export function useAnnotations(app: AppContext) {
 
   const focusNote = (id: string) => { setTimeout(() => document.querySelector<HTMLTextAreaElement>(`[data-note="${id}"]`)?.focus({ preventScroll: true }), 50); };
 
-  Object.assign(app, { focusNote, activeId, addReferences, addScribble, annotations, applyInstant, captureSizes, classNames, color, colorFor, commitCurrent, diffMockup, drawShapes, editClasses, editProp, editText, focusAnn, generated, isolate, isolated, makeDrawing, makeSketch, nextN, onManip, onPicked, openStory, overlay, page, patchAnn, pendingMarks, plan, popAnn, popover, popoverStyle, releaseElement, removeAnn, resetTweaks, setActiveId, setAnnotations, setClassNames, setColor, setOverlay, setPopover, setSize, setStates, setTool, setToolSection, size, sketch, tool, toolSection, tweak, updateNote });
+  Object.assign(app, { focusNote, activeId, addReferences, addScribble, annotations, applyInstant, applyTranslations, captureSizes, classNames, color, colorFor, commitCurrent, diffMockup, drawShapes, editClasses, editProp, editText, focusAnn, generated, isolate, isolated, makeDrawing, makeSketch, nextN, onManip, onPicked, openStory, overlay, page, patchAnn, pendingMarks, plan, popAnn, popover, popoverStyle, releaseElement, removeAnn, resetTweaks, setActiveId, setAnnotations, setClassNames, setColor, setOverlay, setPopover, setSize, setStates, setTool, setToolSection, size, sketch, tool, toolSection, tweak, updateNote });
 }

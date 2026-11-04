@@ -57,6 +57,8 @@ export interface BrowserHandle {
   /** Hide Pinpoint's marks on the page and resolve once they're gone from the screen. */
   hideMarks(): Promise<void>;
   capture(rect?: Rect, jpeg?: boolean): Promise<string>;
+  /** Runs a script in the page and resolves with what it returns. */
+  evaluate<T = unknown>(js: string): Promise<T>;
   hitTest(points: [number, number][]): Promise<ElementInfo[]>;
   locateSource(uid: string): Promise<ElementInfo['source']>;
   size(): { width: number; height: number };
@@ -130,6 +132,10 @@ export const BrowserView = forwardRef<BrowserHandle, Props>(function BrowserView
         setTimeout(done, 500);
         wv.current!.send('hide', true, token);
       });
+    },
+    evaluate(js) {
+      if (!ready.current || !wv.current) return Promise.reject(new Error('The page is still loading.'));
+      return wv.current.executeJavaScript(js);
     },
     async capture(rect, jpeg) {
       const id = wv.current!.getWebContentsId();

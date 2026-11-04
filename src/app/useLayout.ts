@@ -1,3 +1,4 @@
+import { flushSync } from 'react-dom';
 import { THREADS_W } from './shared';
 import type { CompareTarget } from '../components/page/CompareView';
 import type { ContextTab } from '../components/agent/ContextSheet';
@@ -5,6 +6,11 @@ import type { DrawerTab } from '../components/tools/Drawer';
 import type { SavedLayout } from '../types';
 import { useEffect, useRef, useState } from 'react';
 import type { AppContext } from './context';
+
+export type ChatLayout = 'docked' | 'expanded' | 'tab' | 'floating';
+export const CHAT_LAYOUTS: ChatLayout[] = ['docked', 'expanded', 'tab', 'floating'];
+const SNAP_TAB_PX = 240; // a chat dragged thinner than this becomes a tab
+const SNAP_MAIN_SHARE = 0.68; // and wider than this share of the window, the main view
 
 export function useLayout(app: AppContext) {
   const settings = app.settings;
@@ -37,7 +43,9 @@ export function useLayout(app: AppContext) {
     const grid = (e.currentTarget as HTMLElement).closest('.app') as HTMLElement | null;
     const left = app.settings?.panelSide === 'left';
     const tw = app.settings?.threadsHidden ? 0 : THREADS_W;
-    let last = 0, frame = 0;
+    let last = 0, raw = 0, frame = 0;
+    const room = window.innerWidth - tw;
+    const snapOf = (w: number) => (w < SNAP_TAB_PX ? 'tab' : w > room * SNAP_MAIN_SHARE ? 'expanded' : null);
     const paint = () => {
       frame = 0;
       if (!grid || !last) return;
@@ -46,6 +54,10 @@ export function useLayout(app: AppContext) {
     const move = (ev: PointerEvent) => {
       if (which === 'panel') {
         const w = left ? ev.clientX - tw : window.innerWidth - ev.clientX;
+        raw = w;
+        // Past the ends, the drag becomes a layout change; the page shows what letting go will do.
+        const snap = snapOf(w);
+        grid?.setAttribute('data-snap', snap || '');
         last = Math.round(Math.min(Math.max(300, w), Math.min(820, window.innerWidth - tw - 480)));
       } else {
         last = Math.round(Math.min(Math.max(120, window.innerHeight - ev.clientY), window.innerHeight * 0.65));
@@ -57,6 +69,9 @@ export function useLayout(app: AppContext) {
       window.removeEventListener('pointerup', up);
       if (frame) cancelAnimationFrame(frame);
       app.dragging.current = false;
+      const snap = raw ? snapOf(raw) : null;
+      grid?.removeAttribute('data-snap');
+      if (snap) { grid?.style.removeProperty('grid-template-columns'); setResizing(null); setChatLayout(snap); return; }
       if (last) setPanelWidth(last);
       const a = app.area.current;
       if (a) app.setAvail({ w: Math.floor(a.clientWidth), h: Math.floor(a.clientHeight) });
@@ -86,7 +101,29 @@ export function useLayout(app: AppContext) {
   const left = settings?.panelSide === 'left';
   const threadsOn = !settings?.threadsHidden && !zen;
   const tw = threadsOn ? THREADS_W : 0;
-  const pw = settings?.panelHidden ? 0 : panelWidth ?? settings?.panelWidth ?? 400;
+  const chatLayout = settings?.chatLayout || 'docked';
+  // As a tab, the chat is either the tab in front or a small composer floating over the page.
+  const [chatTabOn, setChatTabOn] = useState(true);
+  const [floatOpen, setFloatOpen] = useState(false);
+  const lastLayout = useRef<ChatLayout>('docked');
+  // Moves the chat. The view transition makes it glide and resize into place instead of jumping.
+  const setChatLayout = (next: ChatLayout) => {
+    if (next === chatLayout) return;
+    lastLayout.current = chatLayout;
+    const apply = () => flushSync(() => {
+      setChatTabOn(true);
+      setFloatOpen(false);
+      app.setSettings((s) => (s ? { ...s, chatLayout: next, panelHidden: false } : s));
+    });
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    if (doc.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) doc.startViewTransition(apply); else apply();
+    app.saveSettings({ chatLayout: next, panelHidden: false });
+  };
+  const cycleChatLayout = () => setChatLayout(CHAT_LAYOUTS[(CHAT_LAYOUTS.indexOf(chatLayout) + 1) % CHAT_LAYOUTS.length]);
+  // From the big views, back to wherever the chat was before.
+  const chatLayoutBack = () => setChatLayout(lastLayout.current === chatLayout ? 'docked' : lastLayout.current);
+  // Docked, the chat has the side column; as the main view, the page takes it instead. Floating, the page has it all.
+  const pw = settings?.panelHidden || chatLayout === 'floating' || chatLayout === 'tab' ? 0 : chatLayout === 'expanded' ? Math.max(420, panelWidth ?? settings?.panelWidth ?? 400) : panelWidth ?? settings?.panelWidth ?? 400;
   const row2 = left ? "'threads panel stage'" : "'threads stage panel'";
   const statusOn = settings?.statusBar === true && !zen;
   const split = settings?.split === true && drawerOpen;
@@ -96,5 +133,5 @@ export function useLayout(app: AppContext) {
     gridTemplateAreas: `'threads top top' ${row2}${statusOn ? " 'threads status status'" : ''}`,
   };
 
-  Object.assign(app, { applyLayout, compare, diffView, drawerOpen, drawerTab, enginesOpen, frame, gridStyle, historyOpen, layoutsOpen, left, openTool, paletteOpen, patchView, resizing, saveLayout, setCompare, setDiffView, setDrawerOpen, setDrawerTab, setEnginesOpen, setHistoryOpen, setLayoutsOpen, setPaletteOpen, setPanelWidth, setPatchView, setResizing, setSettingsOpen, setSheet, setShortcutsOpen, setTimelineOpen, setToolTabs, setWsOpen, settingsOpen, sheet, shortcutsOpen, split, startResize, statusOn, threadsOn, timelineOpen, togglePanel, toggleThreads, toggleZen, toolTabs, wsOpen, zen });
+  Object.assign(app, { chatLayout, chatTabOn, setChatTabOn, floatOpen, setFloatOpen, setChatLayout, cycleChatLayout, chatLayoutBack, applyLayout, compare, diffView, drawerOpen, drawerTab, enginesOpen, frame, gridStyle, historyOpen, layoutsOpen, left, openTool, paletteOpen, patchView, resizing, saveLayout, setCompare, setDiffView, setDrawerOpen, setDrawerTab, setEnginesOpen, setHistoryOpen, setLayoutsOpen, setPaletteOpen, setPanelWidth, setPatchView, setResizing, setSettingsOpen, setSheet, setShortcutsOpen, setTimelineOpen, setToolTabs, setWsOpen, settingsOpen, sheet, shortcutsOpen, split, startResize, statusOn, threadsOn, timelineOpen, togglePanel, toggleThreads, toggleZen, toolTabs, wsOpen, zen });
 }

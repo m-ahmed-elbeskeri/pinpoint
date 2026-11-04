@@ -35,7 +35,7 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "    if (m.type !== 'user') continue;",
   "    const text = m.message.content.filter((c) => c.type === 'text').map((c) => c.text).join(' ');",
   "    if (/<earlier-conversation>/.test(text)) fs.writeFileSync(path.join(process.cwd(), 'carried.txt'), text);",
-  "    const word = (text.match(/(slow|quick)-(\\w+)/) || [])[0] || 'other';",
+  "    const word = ([...text.matchAll(/(slow|quick)-(\\w+)/g)].pop() || [])[0] || 'other';",
     "    if (!process.argv.includes('haiku')) fs.writeFileSync(path.join(__dirname, 'args.txt'), process.argv.join(' '));",
     "    emit({ type: 'system', subtype: 'init', session_id: 'sess-' + word, model: 'stand-in', mcp_servers: [{ name: 'docs-server', status: 'connected', source: 'user' }, { name: 'repo-db', status: 'connected', source: 'project' }, { name: 'mail', status: 'needs-auth', source: 'claudeai' }], skills: ['my-skill', 'other-skill'] });",
   "    if (word === 'quick-ask') {",
@@ -43,6 +43,27 @@ fs.writeFileSync(path.join(agentDir, 'fake-claude.js'), [
   "      emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'edit-1', name: 'Edit', input: { file_path: 'index.html', old_string: '<h1>Home</h1>', new_string: '<h1>Welcome home</h1>' } }] } });",
   "      emit({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'edit-1', content: 'ok' }] } });",
   "      emit({ type: 'control_request', request_id: 'perm-1', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'npm test' } } });",
+  "      continue;",
+  "    }",
+  "    if (word === 'quick-mcp') {",
+  "      const at = process.argv.indexOf('--mcp-config');",
+  "      const cfg = at > 0 ? JSON.parse(fs.readFileSync(process.argv[at + 1], 'utf8')).mcpServers.pinpoint : null;",
+  "      const rpc = async (method, params, id) => { const r = await fetch(cfg.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: cfg.headers.Authorization }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }) }); return r.status === 202 ? null : r.json(); };",
+  "      (async () => {",
+  "        const out = { allowed: process.argv.includes('mcp__pinpoint') };",
+  "        out.init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'stand-in', version: '1' } }, 1);",
+  "        out.tools = (await rpc('tools/list', {}, 2)).result.tools.map((t) => t.name);",
+  "        out.sessions = JSON.parse((await rpc('tools/call', { name: 'list_sessions', arguments: {} }, 3)).result.content[0].text);",
+  "        out.console = (await rpc('tools/call', { name: 'page_console', arguments: {} }, 4)).result;",
+  "        out.snapshot = (await rpc('tools/call', { name: 'page_snapshot', arguments: {} }, 5)).result;",
+  "        out.claim = (await rpc('tools/call', { name: 'claim_files', arguments: { paths: ['index.html'] } }, 6)).result;",
+  "        out.visual = (await rpc('tools/call', { name: 'show_visual', arguments: { title: 'Sizes', html: '<div id=bar>chart</div>' } }, 7)).result;",
+  "        out.answer = (await rpc('tools/call', { name: 'ask_user', arguments: { question: 'Which colour?', options: [{ label: 'Blue' }, { label: 'Green' }] } }, 8)).result;",
+  "        out.badToken = (await fetch(cfg.url, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer nope' }, body: '{}' })).status;",
+  "        fs.writeFileSync(path.join(__dirname, 'mcp.json'), JSON.stringify(out));",
+  "        emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'Used the tools.' }] } });",
+  "        emit({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 100, num_turns: 1 });",
+  "      })().catch((e) => { fs.writeFileSync(path.join(__dirname, 'mcp.json'), JSON.stringify({ error: String(e && e.stack || e) })); emit({ type: 'result', subtype: 'error', is_error: true }); });",
   "      continue;",
   "    }",
   "    if (word === 'quick-link') { emit({ type: 'assistant', message: { content: [{ type: 'text', text: 'See [the docs](https://example.com/docs), or open http://localhost:9/x to check.' }] } }); emit({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 100, num_turns: 1 }); continue; }",
@@ -186,7 +207,7 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(500);
       await send('quick-also this');
       const waiting = await until(`document.querySelector('.msg.user.steer .steer-now') ? document.querySelector('.msg.user.steer:last-of-type .steer-tag, .msg.user.steer .steer-tag').textContent : ''`, 5000);
-      log('a message sent while the agent works waits behind its current step, with a Send now button', /Steered after the current step/.test(waiting || '') && /Send now/.test(waiting || ''), waiting);
+      log('a message sent while the agent works waits behind its current step, with a Send now button', /Steered after the current step/.test(waiting || '') && /Send now/.test(waiting || ''), waiting || (await ui(`[...document.querySelectorAll('.chat .msg.user')].slice(-2).map((m) => m.className + ': ' + m.innerText.replace(/\\s+/g, ' ').slice(0, 120)).join(' | ')`)));
       await ui(`document.querySelector('.msg.user.steer .steer-now').click(); 0`);
       const forced = await until(`!document.querySelector('.steer-now') && /Interrupted and sent/.test([...document.querySelectorAll('.msg.user.steer .steer-tag')].pop().textContent) ? 1 : 0`, 5000);
       log('pressing it interrupts the agent and marks the message as sent', forced === 1, await ui(`[...document.querySelectorAll('.msg.user.steer .steer-tag')].pop().textContent`));
@@ -397,6 +418,50 @@ server.listen(0, '127.0.0.1', () => {
       try { fs.writeFileSync(path.join(OUT, 'chats-zen.png'), (await host.capturePage()).toPNG()); } catch {  }
       await press('.');
       log('and comes back', await until(`!document.querySelector('.app.zen') && document.querySelector('.threads') ? 1 : 0`, 2000) === 1);
+
+      // Pinpoint's tools, used by the agent itself.
+      fs.rmSync(path.join(agentDir, 'mcp.json'), { force: true });
+      await send('quick-mcp please');
+      log('the agent asks the user, with options as buttons', await until(`document.querySelector('.question-card.pending .question-options button') ? 1 : 0`, 15000) === 1);
+      log('a waiting question counts as needing you', /needs you/.test(await ui(`document.querySelector('.thread.on')?.textContent || ''`)));
+      await ui(`[...document.querySelectorAll('.question-card.pending .question-options button')].find((b) => /Green/.test(b.textContent)).click(); 0`);
+      await until(`document.querySelector('.chat .working') ? 0 : 1`, 15000);
+      const mcp = JSON.parse(fs.existsSync(path.join(agentDir, 'mcp.json')) ? fs.readFileSync(path.join(agentDir, 'mcp.json'), 'utf8') : '{}');
+      log('the run is given Pinpoint\'s tools, allowed', mcp.allowed && mcp.init?.result?.serverInfo?.name === 'pinpoint', JSON.stringify(mcp).slice(0, 300));
+      log('it lists the page, chat, claim, question and visual tools', ['page_snapshot', 'page_console', 'selected_element', 'page_click', 'list_sessions', 'send_to_session', 'claim_files', 'ask_user', 'show_visual'].every((t) => mcp.tools?.includes(t)), JSON.stringify(mcp.tools));
+      log('list_sessions knows which chat is asking', Array.isArray(mcp.sessions) && mcp.sessions.some((s) => s.you && /quick-mcp/.test(s.lastAsk || '')), JSON.stringify(mcp.sessions).slice(0, 300));
+      log('page_snapshot reads the open page', /Deep button|"url"/.test(JSON.stringify(mcp.snapshot || '')), JSON.stringify(mcp.snapshot).slice(0, 200));
+      log('page_console answers', !!mcp.console && !mcp.console.isError);
+      log('claim_files records the claim', /index\.html/.test(JSON.stringify(mcp.claim || '')));
+      log('the user\'s pick goes back to the agent', /answered: Green/.test(JSON.stringify(mcp.answer || '')), JSON.stringify(mcp.answer));
+      log('a visual shows in the chat, in a locked-down frame', (await ui(`(() => { const f = document.querySelector('.visual-item iframe'); return !!f && f.getAttribute('sandbox') === 'allow-scripts' && /chart/.test(f.getAttribute('srcdoc')) && /Content-Security-Policy/.test(f.getAttribute('srcdoc')); })()`)));
+      log('a wrong token is refused', mcp.badToken === 401, String(mcp.badToken));
+      const argv2 = fs.existsSync(path.join(agentDir, 'args.txt')) ? fs.readFileSync(path.join(agentDir, 'args.txt'), 'utf8') : '';
+      log('the run got the server through --mcp-config', /--mcp-config/.test(argv2), argv2.slice(0, 200));
+
+      // Where the chat sits.
+      const layoutBtn = async (re) => { await ui(`document.querySelector('.layout-pick .dd-btn').click(); 0`); await sleep(120); await ui(`[...document.querySelectorAll('.layout-pick .dd-item')].find((b) => ${re}.test(b.textContent)).click(); 0`); await sleep(350); };
+      await layoutBtn('/Main view/');
+      log('the chat can be the main view, with the page beside it', await until(`document.querySelector('.app.chat-expanded') && document.querySelector('.panel').getBoundingClientRect().width > document.querySelector('.stage').getBoundingClientRect().width && document.querySelector('.stage').getBoundingClientRect().width > 300 ? 1 : 0`, 3000) === 1);
+      try { fs.writeFileSync(path.join(OUT, 'chats-main.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
+      await layoutBtn('/As a tab/');
+      log('the chat can be a tab next to the pages', await until(`document.querySelector('.app.chat-tab.chat-tab-on') && document.querySelector('.tabbar .chat-tab.on') ? 1 : 0`, 3000) === 1);
+      await ui(`document.querySelector('.tabbar .tab:not(.chat-tab):not(.tool-tab)').click(); 0`);
+      log('a page tab brings the site to the front, with the composer floating over it', await until(`!document.querySelector('.app.chat-tab-on') && document.querySelector('.panel.float-mini') && document.querySelector('.composer-box textarea').offsetParent ? 1 : 0`, 3000) === 1);
+      try { fs.writeFileSync(path.join(OUT, 'chats-tab.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
+      await ui(`document.querySelector('.float-toggle').click(); 0`);
+      log('and the composer\'s bar brings the chat tab back', await until(`document.querySelector('.app.chat-tab-on') ? 1 : 0`, 3000) === 1);
+      await layoutBtn('/^Floating/');
+      log('or float over the page as just the composer', await until(`document.querySelector('.app.chat-floating .panel.float-mini') && !document.querySelector('.panel .chat-wrap').offsetParent && document.querySelector('.composer-box textarea').offsetParent ? 1 : 0`, 3000) === 1);
+      try { fs.writeFileSync(path.join(OUT, 'chats-floating.png'), (await host.capturePage()).toPNG()); } catch { /* the checks are what count */ }
+      await ui(`document.querySelector('.float-toggle').click(); 0`);
+      log('and open into the whole chat', await until(`document.querySelector('.panel.float-open') && document.querySelector('.panel .chat-wrap').offsetParent ? 1 : 0`, 3000) === 1);
+      await layoutBtn('/Beside/');
+      await ui(`document.querySelector('.panel-head').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); 0`);
+      log('double-clicking the chat header makes it the main view', await until(`document.querySelector('.app.chat-expanded') ? 1 : 0`, 3000) === 1);
+      await ui(`document.body.focus(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); 0`);
+      log('and Esc puts it back where it was', await until(`document.querySelector('.app.chat-docked') ? 1 : 0`, 3000) === 1);
+      await sleep(200);
 
       // Links in replies.
       await send('quick-link please');

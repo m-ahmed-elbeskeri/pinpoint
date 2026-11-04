@@ -84,7 +84,7 @@ jobs:
             echo
             echo "### Install"
             echo
-            echo "- **Windows:** download the \`.exe\` installer."
+            echo "- **Windows:** download \`Pinpoint-…-win-x64.exe\` (installs in a few seconds, no admin rights), or the \`-portable.exe\` to run it without installing."
             echo "- **macOS:** download the \`.dmg\` for your Mac (\`arm64\` for Apple Silicon, \`x64\` for Intel). The build is unsigned, so the first time right-click the app and choose **Open**."
             echo "- **Linux:** download the \`.AppImage\`, then \`chmod +x\` it and run it."
             echo

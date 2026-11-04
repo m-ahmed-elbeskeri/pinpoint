@@ -57,6 +57,8 @@ export type ChatItem =
   | { kind: 'approval'; id: string; runId: string; approvalId: string; tool: string; detail: string; status: 'pending' | ApprovalDecision | 'expired' }
   | { kind: 'error'; id: string; text: string }
   | { kind: 'status'; id: string; text: string }
+  | { kind: 'visual'; id: string; html: string; title?: string; height: number }
+  | { kind: 'question'; id: string; question: string; options: { label: string; description?: string }[]; multi?: boolean; status: 'pending' | 'answered' | 'expired'; answer?: string }
   | {
     kind: 'done'; id: string; runId: string; ok: boolean; cost?: number; durationMs?: number; changes: FileChange[]; undone?: boolean; commit?: GitCommit | null; shots?: boolean;
     verify?: boolean;

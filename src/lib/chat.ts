@@ -16,6 +16,7 @@ export interface AgentRequest {
   note?: string;
   site?: { kind: 'live' | 'built'; local?: string };
   carried?: string;
+  others?: { title: string; branch?: string; sameBranch: boolean; files: string[] }[];
 }
 
 // The conversation as plain text, for an agent session that wasn't part of it. Keeps the end when it's too long.
@@ -108,4 +109,4 @@ export function expireApprovals(items: ChatItem[]): ChatItem[] {
     : items;
 }
 
-export const needsInput = (items: ChatItem[]) => items.some((it) => it.kind === 'approval' && it.status === 'pending');
+export const needsInput = (items: ChatItem[]) => items.some((it) => (it.kind === 'approval' || it.kind === 'question') && it.status === 'pending');

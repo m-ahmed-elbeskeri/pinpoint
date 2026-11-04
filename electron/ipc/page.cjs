@@ -8,6 +8,7 @@ const review = require('../page/review.cjs');
 const routecheck = require('../page/routecheck.cjs');
 const runs = require('../project/runs.cjs');
 const sweep = require('../page/sweep.cjs');
+const flowmap = require('../page/flowmap.cjs');
 
 function onWhite(img) {
   const { width, height } = img.getSize();
@@ -168,6 +169,14 @@ function register(ctx) {
     return true;
   });
 
+  // Color blindness and low vision, drawn by Chromium itself so screenshots show it too.
+  ipcMain.handle('page:vision', async (_e, { webContentsId, type }) => {
+    const wc = guest(webContentsId);
+    if (!type && !wc.debugger.isAttached()) return true;
+    await cdp(wc, 'Emulation.setEmulatedVisionDeficiency', { type: type || 'none' });
+    return true;
+  });
+
   ipcMain.handle('page:rules', async (_e, { webContentsId, uid }) => {
     const wc = guest(webContentsId);
     const [nodeId] = await queryNodes(wc, `[data-pinpoint="${String(uid).replace(/[^\w-]/g, '')}"]`);
@@ -292,6 +301,13 @@ function register(ctx) {
     return true;
   });
   ipcMain.handle('sweep:stop', () => { sweep.stop(); return true; });
+
+  ipcMain.handle('flowmap:start', (e, { start, partition }) => {
+    const send = (evt) => { if (!e.sender.isDestroyed()) e.sender.send('flowmap:event', evt); };
+    flowmap.run({ start, partition: partition || undefined, onEvent: send }).catch((err) => send({ type: 'done', stopped: true, error: err.message }));
+    return true;
+  });
+  ipcMain.handle('flowmap:stop', () => { flowmap.stop(); return true; });
 
   ipcMain.handle('review:start', (e, url) => review.start({ url, onComment: (c) => { if (!e.sender.isDestroyed()) e.sender.send('review:comment', c); } }));
   ipcMain.handle('review:stop', () => review.stop());

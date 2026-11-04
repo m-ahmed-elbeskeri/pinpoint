@@ -52,6 +52,16 @@ function buildPrompt({ request, files, projectDir, followUp, design, memory, des
 
   if (note) { out.push(note); out.push(''); }
   if (variantLines.length) { out.push(...variantLines); out.push(''); }
+  if (request.others?.length) {
+    out.push('## Other chats working on this project right now');
+    out.push('They share these files with you. Check list_sessions before a big change, and use claim_files for files you are about to edit.');
+    for (const o of request.others) out.push(`- "${o.title}"${o.sameBranch ? ' (on your branch)' : o.branch ? ` (branch ${o.branch})` : ''}${o.files?.length ? `, has touched ${o.files.join(', ')}` : ''}`);
+    out.push('');
+  }
+  if (request.tools) {
+    out.push("Pinpoint's tools are available (the \"pinpoint\" MCP server): page_snapshot and page_console show the page the user sees and its errors, selected_element is what they picked, page_navigate, page_click, page_type and page_resize let you check your work, list_sessions, read_session and send_to_session reach the other chats, ask_user asks the user to pick from options, and show_visual puts a chart or diagram in the chat.");
+    out.push('');
+  }
   if (carried?.trim() && !followUp) {
     out.push('## Earlier in this conversation');
     out.push('This chat started with another agent session, which you cannot see. Here is what was said, for context:');

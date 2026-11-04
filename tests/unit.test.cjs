@@ -308,6 +308,9 @@ check('custom args without {prompt} get it appended', harnesses({ customAgents: 
   const { buildPrompt } = require(path.join(repo, 'electron', 'prompt', 'index.cjs'));
   const reqBase = { url: 'http://x/', title: '', viewport: { width: 1000, height: 800 }, instruction: 'Do it', annotations: [], carried: 'User: earlier words' };
   check('a new session is told the earlier conversation', buildPrompt({ request: reqBase, files: {}, projectDir: repo, followUp: false }).includes('earlier words'));
+  const withOthers = buildPrompt({ request: { ...reqBase, carried: '', others: [{ title: 'Fix the header', branch: 'feat', sameBranch: true, files: ['src/Header.tsx'] }], tools: true }, files: {}, projectDir: repo, followUp: false });
+  check('a run is told about other chats on its branch and their files', /Other chats working on this project right now/.test(withOthers) && /"Fix the header" \(on your branch\), has touched src\/Header\.tsx/.test(withOthers), withOthers.slice(0, 300));
+  check('and about Pinpoint\'s tools', /ask_user/.test(withOthers) && /page_snapshot/.test(withOthers));
   check('a resumed session is not', !buildPrompt({ request: reqBase, files: {}, projectDir: repo, followUp: true }).includes('earlier words'));
 })().catch((e) => check('git branches and worktrees', false, e.stack)).finally(() => {
   console.log(`${pass} pass, ${failed} fail`);

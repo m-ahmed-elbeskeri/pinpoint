@@ -339,3 +339,12 @@
   padding: 3px 0;
   white-space: pre-wrap;
 }
+
+/* Translations of the picked copy, one row per language. */
+.i18n-box { display: grid; gap: 6px; margin-top: 2px; }
+.i18n-key { display: grid; gap: 3px; }
+.i18n-key .el-label { display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.i18n-key .el-field > span { min-width: 34px; color: var(--muted); font-size: 10.5px; }
+.el-field.missing { border-style: dashed; }
+.i18n-actions { display: flex; align-items: center; gap: 6px; }
+.i18n-actions .spacer { flex: 1; }

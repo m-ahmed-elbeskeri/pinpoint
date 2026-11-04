@@ -49,7 +49,11 @@ export interface CssRuleInfo {
   wins: string[];
 }
 
-export interface FlowStep { type: 'click' | 'fill' | 'check' | 'key' | 'navigate'; selector?: string; tag?: string; text?: string; value?: string; key?: string; url?: string; secret?: boolean }
+export interface FlowStep {
+  type: 'click' | 'fill' | 'check' | 'key' | 'navigate'; selector?: string; tag?: string; text?: string; value?: string; key?: string; url?: string; secret?: boolean;
+  /** What happened between this step and the next: component state that changed, requests made, errors. */
+  after?: { state?: string[]; requests?: string[]; errors?: string[] };
+}
 
 export interface FlowResult { done: number; total: number; errors: string[]; failed: string[]; before?: { errors: number; failed: number } }
 
@@ -115,3 +119,13 @@ export interface RequestNote {
   reqBody?: string; resBody?: string; handler?: { file: string; line: number; sure: boolean };
 }
 export interface Mock { id: string; method: string; path: string; status: number; body: string; on: boolean }
+
+export interface TranslationMatch { key: string; ns: string; values: { locale: string; file: string; value: string | null }[] }
+export interface MissingTranslations { ns: string; from: string; fromLocale: string; file: string; locale: string; keys: string[]; count: number }
+
+export interface FlowMapLink { to: string; text: string; where: 'nav' | 'footer' | 'content' }
+export interface FlowMapPage { path: string; depth: number; status: number; error?: string; title?: string; thumb?: string; links: FlowMapLink[]; redirected?: string }
+export type FlowMapEvent =
+  | { type: 'start'; start: string }
+  | { type: 'page'; page: FlowMapPage; done: number; total: number }
+  | { type: 'done'; stopped: boolean; capped?: boolean; error?: string };

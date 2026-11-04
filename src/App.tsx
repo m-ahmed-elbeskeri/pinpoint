@@ -30,6 +30,7 @@ import { useReviewAndSweep } from './app/useReviewAndSweep';
 import { useHandoff } from './app/useHandoff';
 import { useBackgroundRuns } from './app/useBackgroundRuns';
 import { useSideChats } from './app/useSideChats';
+import { useMcpBridge } from './app/useMcpBridge';
 import { useCommands } from './app/useCommands';
 import { useShortcuts } from './app/useShortcuts';
 import { useAppStatus } from './app/useAppStatus';
@@ -57,6 +58,7 @@ export default function App() {
   useHandoff(app);
   useBackgroundRuns(app);
   useSideChats(app);
+  useMcpBridge(app);
   useCommands(app);
   useShortcuts(app);
   useAppStatus(app);
@@ -65,7 +67,7 @@ export default function App() {
   if (!settings) return <div className="boot"><Loader2 className="spin" /></div>;
 
   return (
-    <div className={`app ${app.resizing ? 'resizing' : ''} ${app.threadsOn ? 'threads-on' : ''} ${app.zen ? 'zen' : ''}`} style={app.gridStyle}>
+    <div className={`app ${app.resizing ? 'resizing' : ''} ${app.threadsOn ? 'threads-on' : ''} ${app.zen ? 'zen' : ''} chat-${app.chatLayout} ${app.chatLayout === 'tab' && app.chatTabOn ? 'chat-tab-on' : ''}`} style={app.gridStyle}>
       {app.threadsOn && (
         <ThreadSidebar
           subChats={[

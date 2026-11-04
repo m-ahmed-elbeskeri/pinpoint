@@ -930,3 +930,80 @@
 
 .md a { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; cursor: pointer; overflow-wrap: anywhere; }
 .md a:hover { text-decoration-color: var(--text-2); }
+
+.visual-item { margin: 2px 0 6px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-2); }
+.visual-item figcaption { padding: 7px 12px; border-bottom: 1px solid var(--line); color: var(--text-2); font-size: 12px; font-weight: 500; }
+.visual-item iframe { display: block; width: 100%; border: 0; background: transparent; }
+
+.question-card { display: grid; gap: 10px; margin: 2px 0 6px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--bg-2); }
+.question-text { color: var(--text); font-size: 13px; line-height: 1.5; }
+.question-options { display: grid; gap: 6px; }
+.question-options button { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg-3); color: var(--text); text-align: left; font-size: 12.5px; }
+.question-options button:hover { border-color: var(--line-2); background: var(--bg-4); }
+.question-options button.on { border-color: var(--text-2); }
+.question-label { display: grid; gap: 2px; min-width: 0; }
+.question-label small { color: var(--muted); font-size: 11.5px; }
+.question-box { display: grid; place-items: center; flex: none; width: 15px; height: 15px; border: 1px solid var(--line-2); border-radius: 4px; }
+.question-other { display: flex; gap: 6px; }
+.question-other input { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 12.5px; outline: 0; }
+.question-other input:focus { border-color: var(--line-2); }
+.question-answer { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12.5px; }
+.question-card.expired { opacity: .6; }
+
+/* Where the chat sits. */
+.chat-layouts { display: flex; gap: 1px; flex: none; margin-right: 4px; padding: 2px; border-radius: 8px; background: var(--bg-3); }
+.chat-layouts button { display: grid; place-items: center; width: 24px; height: 22px; border-radius: 6px; color: var(--muted); }
+.chat-layouts button:hover { color: var(--text); }
+.chat-layouts button.on { background: var(--bg-4); color: var(--text); }
+.app.chat-floating .panel { grid-area: stage; z-index: 45; }
+/* The chat as the main view: it takes the big area and the page moves into the side column. */
+.app.chat-expanded .panel { grid-area: stage; border-left: 0; }
+.app.chat-expanded .stage { grid-area: panel; border-left: 1px solid var(--line); }
+.app.chat-expanded .panel .chat, .app.chat-expanded .panel .composer { width: min(820px, 100%); margin-inline: auto; }
+.app:not(.chat-docked) .panel > .resizer { display: none; }
+.app.chat-floating .panel { position: absolute; right: 20px; bottom: 20px; width: min(440px, calc(100% - 40px)); height: auto; max-height: calc(100% - 96px); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: 0 18px 48px rgba(0, 0, 0, .45); overflow: hidden; }
+.app.chat-floating .panel.left { right: auto; left: 20px; }
+.app.chat-floating .panel.float-open { height: min(640px, calc(100% - 96px)); }
+.app.chat-floating .panel.float-mini .panel-head, .app.chat-floating .panel.float-mini .chat-wrap, .app.chat-floating .panel.float-mini .other-chats { display: none; }
+.float-toggle { display: flex; align-items: center; gap: 7px; flex: none; height: 32px; padding: 0 12px; border-bottom: 1px solid var(--line); color: var(--text-2); font-size: 12px; text-align: left; }
+.float-toggle span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.float-toggle:hover { color: var(--text); background: var(--bg-3); }
+.float-toggle .flip { transform: rotate(180deg); }
+.app.chat-floating .panel.float-open .float-toggle { display: none; }
+
+/* The chat as a tab: in front it fills the page area; behind, it floats as a composer over the page. */
+.app.chat-tab .panel { grid-area: stage; z-index: 45; }
+.app.chat-tab.chat-tab-on .panel { top: 34px; height: calc(100% - 34px); align-self: end; border-left: 0; }
+.app.chat-tab.chat-tab-on .panel .chat, .app.chat-tab.chat-tab-on .panel .composer { width: min(820px, 100%); margin-inline: auto; }
+.app.chat-tab:not(.chat-tab-on) .panel { position: absolute; right: 20px; bottom: 20px; width: min(440px, calc(100% - 40px)); height: auto; max-height: calc(100% - 96px); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: 0 18px 48px rgba(0, 0, 0, .45); overflow: hidden; }
+.app.chat-tab .panel.float-mini .panel-head, .app.chat-tab .panel.float-mini .chat-wrap, .app.chat-tab .panel.float-mini .other-chats { display: none; }
+.app.chat-tab.chat-tab-on .panel { position: relative; }
+.app.chat-tab.chat-tab-on .float-toggle { display: none; }
+/* The address bar belongs to a page, so it steps away while the chat tab is in front. */
+.app.chat-tab-on .navbar { display: none; }
+.tab.chat-tab { flex: none; }
+
+/* Moving the chat: it glides and resizes into place. */
+.panel { view-transition-name: chat-panel; }
+.stage { view-transition-name: page-stage; }
+::view-transition-group(chat-panel), ::view-transition-group(page-stage) { animation-duration: .24s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(chat-panel), ::view-transition-new(chat-panel), ::view-transition-old(page-stage), ::view-transition-new(page-stage) { animation-duration: .18s; height: 100%; object-fit: cover; }
+.layout-pick .dd-btn { padding: 0 6px; gap: 4px; }
+.layout-pick .dd-label { display: none; }
+.panel.float-mini, .panel.float-open { transition: height .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s; }
+.chat-peek { display: block; flex: none; width: 100%; padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
+.chat-peek span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.chat-peek:hover { background: var(--bg-3); color: var(--text); }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }
+
+/* While dragging past an end: what letting go will do. */
+.app[data-snap] .stage::after { position: absolute; inset: auto 50% 24px auto; transform: translateX(50%); z-index: 80; padding: 7px 12px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line-2); color: var(--text); font-size: 12px; white-space: nowrap; pointer-events: none; }
+.app[data-snap="tab"] .stage::after { content: 'Let go to make the chat a tab'; }
+.app[data-snap="expanded"] .stage::after { content: 'Let go to make the chat the main view'; }
+.app[data-snap="tab"] .panel, .app[data-snap="expanded"] .stage { opacity: .55; transition: opacity .12s; }
+
+/* Floating sits under the middle of the page, where the eyes already are. */
+.app.chat-floating .panel, .app.chat-tab:not(.chat-tab-on) .panel { left: 50%; right: auto; transform: translateX(-50%); width: min(560px, calc(100% - 40px)); }
+.app.chat-floating .panel.left { left: 50%; }
+.float-toggle em { font-style: normal; color: var(--muted); }
+.float-toggle { min-height: 34px; }

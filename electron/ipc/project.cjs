@@ -8,6 +8,7 @@ const components = require('../project/components.cjs');
 const designsystem = require('../project/designsystem.cjs');
 const { inspectSafe } = require('../fsutil.cjs');
 const instant = require('../project/instant.cjs');
+const i18n = require('../project/i18n.cjs');
 const pins = require('../project/pins.cjs');
 const project = require('../project/store.cjs');
 const runs = require('../project/runs.cjs');
@@ -184,6 +185,19 @@ function register(ctx) {
     for (const [abs, content] of writes) fs.writeFileSync(abs, content);
     const changes = runs.save(root, runId, snap, files.map((p) => ({ path: p, kind: 'modify' })), {
       request: { instruction: `Instant edit: ${summary.join('; ')}`, annotations: [] }, agent: 'Pinpoint (instant edit)',
+    });
+    return { changes, summary };
+  });
+
+  ipcMain.handle('i18n:find', (_e, text) => i18n.find(projectDir(), text));
+  ipcMain.handle('i18n:missing', () => i18n.missing(projectDir()));
+  ipcMain.handle('i18n:apply', (_e, { runId, edits }) => {
+    const root = projectDir();
+    const { writes, summary, files } = i18n.prepare(root, edits);
+    const snap = { root, files: new Map(files.map((rel) => [rel, { content: fs.readFileSync(path.join(root, rel)) }])) };
+    for (const [abs, content] of writes) fs.writeFileSync(abs, content);
+    const changes = runs.save(root, runId, snap, files.map((p) => ({ path: p, kind: 'modify' })), {
+      request: { instruction: `Translation edit: ${summary.join('; ')}`, annotations: [] }, agent: 'Pinpoint (instant edit)',
     });
     return { changes, summary };
   });

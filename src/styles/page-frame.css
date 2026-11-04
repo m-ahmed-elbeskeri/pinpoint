@@ -876,3 +876,68 @@
 }
 .cond-close:hover { color: var(--text); background: var(--bg-4); }
 .cond-toggle.on .cond-label b { color: var(--text); }
+
+/* Vision choices wrap onto two rows; the overlay reports sit under their switches. */
+.cond-pop section > .cond-seg.wrap { flex-wrap: wrap; }
+.cond-pop section > .cond-seg.wrap button { flex: 1 0 30%; }
+.cond-report { display: grid; gap: 4px; margin: 0 6px 6px; }
+.cond-report .cond-note { margin: 0 0 2px; }
+.cond-issue {
+  display: grid;
+  gap: 1px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--bg);
+  border-left: 2px solid var(--bad);
+  font-size: 11px;
+}
+.cond-issue.warn { border-left-color: var(--warn); }
+.cond-issue b { font-weight: 500; color: var(--text); }
+.cond-issue small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cond-report > .btn, .cond-actions { justify-self: end; }
+.cond-actions { display: flex; gap: 6px; }
+
+/* User flows: pages as cards in columns by clicks from the start, links drawn between them. */
+.flowmap-body { flex: 1; min-height: 0; display: flex; }
+.flowmap-canvas { flex: 1; min-width: 0; overflow: auto; position: relative; background: var(--bg); }
+.flowmap-stage { position: relative; }
+.flowmap-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.flowmap-edges { position: absolute; inset: 0; pointer-events: auto; }
+.flowmap-edges path { fill: none; stroke: var(--line-2); stroke-width: 1.5; transition: stroke .12s, opacity .12s; }
+.flowmap-edges path.back { stroke-dasharray: 4 4; }
+.flowmap-edges path.out { stroke: var(--accent); stroke-width: 2; }
+.flowmap-edges path.in { stroke: var(--info-fg); stroke-width: 2; }
+.flowmap-edges path.faded { opacity: .15; }
+.flowmap-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  text-align: left;
+  cursor: pointer;
+  transition: opacity .12s, border-color .12s;
+}
+.flowmap-card:hover { border-color: var(--ring); }
+.flowmap-card.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.flowmap-card.bad { border-color: var(--bad); }
+.flowmap-card.faded { opacity: .35; }
+.flowmap-card b { font-size: 11px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flowmap-card small { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flowmap-card.bad small { color: var(--bad-fg); }
+.flowmap-thumb { flex: 1; min-height: 0; border-radius: 6px; overflow: hidden; background: var(--bg); display: flex; align-items: center; justify-content: center; }
+.flowmap-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.flowmap-thumb em { font-style: normal; font-size: 10.5px; color: var(--muted); }
+.flowmap-n { position: absolute; top: -8px; left: -8px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font: 700 10px/18px var(--mono); font-style: normal; text-align: center; }
+.flowmap-side { width: 280px; flex-shrink: 0; overflow: auto; padding: 14px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.flowmap-side > b { font-size: 12.5px; color: var(--text); word-break: break-all; }
+.flowmap-side small { color: var(--muted); }
+.flowmap-side h5 { margin: 8px 0 0; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.flowmap-side ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.flowmap-side li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flowmap-side li.bad .mono { color: var(--bad-fg); }
+.flowmap-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.flowmap-chrome { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-2); }

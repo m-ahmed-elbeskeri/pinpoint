@@ -34,6 +34,7 @@ export function Composer({ app }: { app: AppContext }) {
           onClearDiag={app.clearDiagnostics} onAskFix={app.askToFix}
           designSystem={app.designSystem}
           a11y={app.a11y} includeA11y={app.includeA11y} setIncludeA11y={app.setIncludeA11y} onAskA11y={app.askA11y}
+          design={app.designIssues} onAskDesign={app.askDesign}
           onShowNode={(sel) => app.browser.current?.reveal(sel)}
         />
       )}

@@ -2,7 +2,7 @@ import { api, rememberPrompt } from './shared';
 import { sleep, type FrameTarget } from '../components/page/BrowserView';
 import { invalidateDiff } from '../components/chat';
 import { MAX_VARIANTS, describeConditions } from '../components/page/PageTools';
-import { conversationText, mergeRequests, type AgentRequest, type RunMeta } from '../lib/chat';
+import { conversationText, mergeRequests, type AgentRequest, type RunMeta, chatTitle } from '../lib/chat';
 import { thumbnail, uid } from '../lib/draw';
 import { looksSame } from '../lib/pixeldiff';
 import type { AgentEvent, ConsoleEntry, FlowResult, RevertResult } from '../types';
@@ -78,6 +78,17 @@ export function useRuns(app: AppContext) {
       while (cut >= 0 && items[cut].kind !== 'user') cut--;
       const earlier = conversationText(items.slice(0, Math.max(0, cut)), 6000);
       if (earlier) request = { ...request, carried: earlier };
+    }
+    // What the other chats on this project are doing right now, so this run knows before it starts.
+    if (!meta.variant && !meta.verify) {
+      const mine = (app.chatId && app.branchOf.current.get(app.chatId)) || app.gitStatus?.branch;
+      const others = [...app.parked.current.values()].filter((p) => p.runId).map((p) => {
+        const branch = app.branchOf.current.get(p.id);
+        const files = [...new Set(p.items.flatMap((it) => (it.kind === 'done' ? it.changes.map((c) => c.path) : it.kind === 'tool' && /Edit|Write/.test(it.name) && it.detail ? [it.detail] : [])))].slice(-12);
+        return { title: chatTitle(p.items), branch, sameBranch: !!branch && branch === mine, files };
+      });
+      for (const r of app.bgRuns) if (r.status === 'running') others.push({ title: `${r.title} (background task, in its own copy)`, branch: undefined, sameBranch: false, files: [] });
+      if (others.length) request = { ...request, others };
     }
     try {
       await api.runAgent({ runId: id, request, sessionId: resume, check: meta.variant || meta.verify || request.site ? undefined : otherRoutes(request.url, request.annotations.flatMap((a) => (a.kind === 'element' && a.element ? [a.element.selector] : (a.hits || []).map((h) => h.selector)))) });
@@ -289,6 +300,7 @@ export function useRuns(app: AppContext) {
     if (!e.changes?.length || meta.site) return;
     await captureAfter(e.runId);
     app.runA11y();
+    app.runDesign();
     const flow = app.runFlowRef.current[e.runId];
     let replayed: FlowResult | null = null;
     let flowShot: string | null = null;

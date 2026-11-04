@@ -25,6 +25,9 @@ export function useShortcuts(app: AppContext) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { if (e.shiftKey) app.toggleThreads(); else app.togglePanel(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') { app.setSettingsOpen(true); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === '.') { app.toggleZen(); e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.code === 'Backslash' || e.key === '|')) { app.cycleChatLayout(); e.preventDefault(); return; }
+      // Esc from the big chat views goes back to where the chat was, unless something smaller is open.
+      if (e.key === 'Escape' && !typing && !app.popover && (app.chatLayout === 'expanded' || (app.chatLayout === 'tab' && app.chatTabOn)) && !document.querySelector('.modal-backdrop, .sheet-backdrop, .cmd-backdrop, .dd-menu')) { app.chatLayoutBack(); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'e') { app.openTool('files'); e.preventDefault(); return; }
       if (!typing && !e.ctrlKey && !e.metaKey && e.key === '?') { app.setShortcutsOpen((o) => !o); e.preventDefault(); return; }
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') { app.setPaletteOpen((o) => !o); e.preventDefault(); return; }

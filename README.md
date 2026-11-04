@@ -107,9 +107,9 @@ While you select, the hovered element shows its margin and padding, and flex and
 
 ## Test it under pressure
 
-The flask button next to the address bar controls how the page is shown: light or dark color scheme, reduced motion, the layout overlay, and conditions that break layouts: long text, pseudo-localized text, right-to-left, empty lists, a slow or offline network, API requests that hang (loading state) or fail (error state), and slowed, paused or stepped animations. Whatever is on is told to the agent with your request.
+The flask button next to the address bar controls how the page is shown: light or dark color scheme, reduced motion, color blindness and low vision, the layout overlay, and conditions that break layouts: long text, pseudo-localized text, right-to-left, empty lists, a slow or offline network, API requests that hang (loading state) or fail (error state), and slowed, paused or stepped animations. Whatever is on is told to the agent with your request.
 
-Press the record button to capture an interaction as steps ("click Menu, type in Search, press Enter") when the problem only shows up after you do something. Steps can be copied as a Playwright test. After the run Pinpoint replays them and the card says whether they still run and whether errors come up.
+Press the record button to capture an interaction as steps ("click Menu, type in Search, press Enter") when the problem only shows up after you do something. Each step keeps the component state that changed, the requests it made and any errors, for the agent to follow. Steps can be copied as a Playwright test. After the run Pinpoint replays them and the card says whether they still run and whether errors come up.
 
 <br />
 
@@ -152,6 +152,10 @@ The tablet and phone buttons next to the address bar open a device toolbar like 
 | **Check every page** | Loads every page at phone, tablet and desktop widths and lists sideways scrolling, spilling text, broken images, tiny tap targets, errors and failed requests, with **Fix all**. |
 | **API requests** | The Network tab lists the page's API calls with what was sent and returned, and the file that handles each one. Attach a request to your message, send it again, or mock its response. |
 | **Accessibility** | axe-core checks the open page against WCAG A/AA. Violations show up as a chip with **Ask to fix**. |
+| **Design check** | Flags colors that aren't your tokens, too many font sizes, spacing off the grid, backwards heading sizes and generic generated-UI tells, as a chip with **Fix all**. |
+| **Keyboard and renders** | In the flask menu: number every Tab stop and flag what a keyboard user would trip on, or flash React components as they render and catch slow clicks and layout shifts. |
+| **User flows** | Follow every link from a page and see how the pages connect, with broken links, dead ends and unlinked pages. Shift+click pages to describe a flow in your request. |
+| **Translations** | When picked copy comes from a translation file, edit it in every language from the element note and write it straight back, or ask the agent to fill missing ones. |
 | **No visible change** | When a run edits files but the page looks the same, its card says so in plain sight, and the result check is told to find out why. |
 | **Unintended changes** | Every run screenshots the open page and your other routes before and after, then lists each page that changed and what changed on it ("the header, the footer links"), with a before/after compare. |
 | **Load cost** | Each run shows what it did to the open page's JS and CSS size, requests, DOM size, layout shift and largest paint. **Build size** on a run card runs your real build and reports its gzipped JS and CSS against the last measurement. |
@@ -183,7 +187,8 @@ Download the latest build from **[Releases](https://github.com/m-ahmed-elbeskeri
 
 | Platform | File | Notes |
 |---|---|---|
-| Windows | `Pinpoint-x.y.z-win-x64.exe` | Installer |
+| Windows | `Pinpoint-x.y.z-win-x64.exe` | Installs in a few seconds, just for you: no admin rights, no setup steps. Updates itself. |
+| Windows, no install | `Pinpoint-x.y.z-win-x64-portable.exe` | Runs from wherever you put it. Tells you when a new version is out. |
 | macOS | `Pinpoint-x.y.z-mac-arm64.dmg` / `-x64.dmg` | Apple Silicon / Intel. Builds are unsigned for now, so the first time right-click the app and choose **Open**. |
 | Linux | `Pinpoint-x.y.z-linux-x86_64.AppImage` | `chmod +x` it, then run it |
 

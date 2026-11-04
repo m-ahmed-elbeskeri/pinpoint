@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { QUICK_SIZES, combo } from '../shared';
 import { DEVICE_OFF } from '../../components/page/DeviceBar';
 import { TOOLS } from '../../components/tools/Drawer';
-import { AppWindow, ArrowLeft, ArrowRight, Boxes, Columns3, DotsThree, Globe, Loader2, Monitor, Plus, RotateCw, ShieldCheck, Smartphone, Snowflake, Tablet, X } from '../../components/ui/icons';
+import { AppWindow, ArrowLeft, ArrowRight, Boxes, Columns3, DotsThree, Globe, Loader2, Monitor, Plus, RotateCw, FlowMap, ShieldCheck, Smartphone, Snowflake, Tablet, X, MessageSquare } from '../../components/ui/icons';
 import { failed as requestFailed } from '../../components/tools/NetworkPanel';
-import { ConditionsMenu, PinsChip } from '../../components/page/PageTools';
+import { conditionCount, ConditionsMenu, PinsChip } from '../../components/page/PageTools';
 import { RoutePicker } from '../../components/page/RoutePicker';
 import { SiteChip } from '../../components/page/SiteChip';
 import { ProfileMenu } from '../../components/page/Workbench';
@@ -27,10 +27,15 @@ export function PageBar({ app }: { app: AppContext }) {
     <>
       <div className="tabbar">
         <div className="tabstrip">
+          {app.chatLayout === 'tab' && (
+            <div className={`tab chat-tab ${app.chatTabOn ? 'on' : ''}`} title="The chat" onClick={() => app.setChatTabOn(true)}>
+              {app.runId ? <Loader2 size={11} className="spin" /> : <MessageSquare size={11} />}<span>Chat</span>
+            </div>
+          )}
           {app.tabs.map((t) => (
             <div
-              key={t.id} className={`tab ${t.id === app.activeTab && (!app.drawerOpen || app.split) ? 'on' : ''}`} title={t.url || 'New tab'}
-              onClick={() => { if (!app.split) app.setDrawerOpen(false); app.switchTab(t.id); }}
+              key={t.id} className={`tab ${t.id === app.activeTab && (!app.drawerOpen || app.split) && !(app.chatLayout === 'tab' && app.chatTabOn) ? 'on' : ''}`} title={t.url || 'New tab'}
+              onClick={() => { if (!app.split) app.setDrawerOpen(false); app.setChatTabOn(false); app.switchTab(t.id); }}
               onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); app.closeTab(t.id); } }}
             >
               {t.loading ? <Loader2 size={11} className="spin" /> : <Globe size={11} />}
@@ -42,7 +47,7 @@ export function PageBar({ app }: { app: AppContext }) {
           {app.toolTabs.map((t) => {
             const tool = TOOLS.find((x) => x.id === t)!;
             return (
-              <div key={t} className={`tab tool-tab ${app.drawerOpen && app.drawerTab === t ? 'on' : ''}`} title={tool.label} onClick={() => { app.setDrawerTab(t); app.setDrawerOpen(true); }}>
+              <div key={t} className={`tab tool-tab ${app.drawerOpen && app.drawerTab === t ? 'on' : ''}`} title={tool.label} onClick={() => { app.setChatTabOn(false); app.setDrawerTab(t); app.setDrawerOpen(true); }}>
                 <tool.icon size={11} />
                 <span>{tool.label}</span>
                 {t === 'dev' && app.devRunning && <i className="live-dot" />}
@@ -106,13 +111,14 @@ export function PageBar({ app }: { app: AppContext }) {
             {app.multi && <Columns3 size={14} className="vp-state" />}
             {app.wsOpen && <Boxes size={14} className="vp-state" />}
             {app.frozen && <Snowflake size={14} className="vp-state" />}
-            {(app.cond.stress.length > 0 || app.cond.network !== 'normal' || app.cond.anim !== 1) && <span className="vp-state-dot" title="Test conditions are on" />}
+            {conditionCount(app.cond) > 0 && <span className="vp-state-dot" title="Test conditions are on" />}
             <DotsThree size={15} />
           </button>
           <div className={`vp-toggles ${pageToolsOpen || toolsHover ? 'open' : ''}`}>
             <button type="button" className={app.wsOpen ? 'on' : ''} onClick={() => { if (app.wsOpen) app.browser.current?.closeWorkspace(); app.setWsOpen(!app.wsOpen); }} disabled={!app.projectDir || !/^https?:/.test(app.nav.url)} title="Components: render any component from the project on its own, with its props and variants"><Boxes size={14} /><span className="vp-label">Components</span></button>
             <button type="button" onClick={() => app.setEnginesOpen(true)} disabled={!/^https?:/.test(app.nav.url)} title="Other browsers: see this page in Safari's engine (WebKit) and Firefox"><AppWindow size={14} /><span className="vp-label">Other browsers</span></button>
             <button type="button" className={app.sweepOpen ? 'on' : ''} onClick={() => app.setSweepOpen(true)} disabled={!app.projectDir || !/^https?:/.test(app.nav.url)} title="Check every page at phone, tablet and desktop widths for layout, loading and accessibility problems"><ShieldCheck size={14} /><span className="vp-label">Check every page</span></button>
+            <button type="button" className={app.flowMapOpen ? 'on' : ''} onClick={() => app.setFlowMapOpen(true)} disabled={!/^https?:/.test(app.nav.url)} title="User flows: follow every link from this page and map how the pages connect, with broken links and dead ends"><FlowMap size={14} /><span className="vp-label">User flows</span></button>
             <span className="vp-sep" />
             {QUICK_SIZES.map((q) => {
               const on = q.w ? app.device.on && app.device.w === q.w : !app.device.on;
@@ -126,6 +132,8 @@ export function PageBar({ app }: { app: AppContext }) {
               env={app.env} setEnv={app.setEnv}
               layout={settings.layoutOverlay !== false}
               setLayout={(on) => { app.saveSettings({ layoutOverlay: on }); app.browser.current?.send('layout', on); }}
+              focusReport={app.focusReport} renderReport={app.renderReport}
+              onAskFocus={app.askFocus} onAskRenders={app.askRenders} onResetRenders={app.resetRenders}
             />
           </div>
         </div>

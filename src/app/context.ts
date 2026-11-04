@@ -11,6 +11,8 @@ import type { CompareTarget } from '../components/page/CompareView';
 import type { Overlay } from '../components/page/MockupOverlay';
 import type { ToolSection } from '../components/page/ElementTools';
 import type { Conditions } from '../components/page/PageTools';
+import type { FocusReport, RenderReport } from '../lib/probes';
+import type { DesignIssue } from '../lib/designcheck';
 import type { AgentRequest, ParkedChat, RunMeta } from '../lib/chat';
 import type { SiteKind } from '../lib/site';
 import type { ChatActions } from '../components/chat';
@@ -59,6 +61,14 @@ export interface TabsSlice {
 }
 
 export interface LayoutSlice {
+  chatLayout: 'docked' | 'expanded' | 'tab' | 'floating';
+  chatTabOn: boolean;
+  floatOpen: boolean;
+  setFloatOpen: Dispatch<SetStateAction<boolean>>;
+  setChatLayout: (next: 'docked' | 'expanded' | 'tab' | 'floating') => void;
+  cycleChatLayout: () => void;
+  chatLayoutBack: () => void;
+  setChatTabOn: Dispatch<SetStateAction<boolean>>;
   applyLayout: ({ name, ...l }: SavedLayout) => void;
   compare: CompareTarget | null;
   diffView: { runId: string; path?: string; } | null;
@@ -174,14 +184,19 @@ export interface PageSlice {
   a11y: A11yIssue[];
   area: RefObject<HTMLDivElement>;
   askA11y: () => void;
+  askDesign: () => void;
+  askFocus: () => void;
+  askRenders: () => void;
   breakpoints: Breakpoint[];
   changeConditions: (next: Conditions) => Promise<void>;
   cond: Conditions;
   device: Device;
   deviceH: number;
   deviceScale: number;
+  designIssues: DesignIssue[];
   dragging: MutableRefObject<boolean>;
   env: PageEnv;
+  focusReport: FocusReport | null;
   frozen: boolean;
   includeA11y: boolean;
   includeDiag: boolean;
@@ -189,7 +204,10 @@ export interface PageSlice {
   mode: Mode;
   multi: boolean;
   onFrozen: (on: boolean) => Promise<void>;
+  renderReport: RenderReport | null;
+  resetRenders: () => void;
   runA11y: () => Promise<void>;
+  runDesign: () => Promise<void>;
   setA11y: Dispatch<SetStateAction<A11yIssue[]>>;
   setAvail: Dispatch<SetStateAction<{ w: number; h: number; }>>;
   setDevice: Dispatch<SetStateAction<Device>>;
@@ -266,6 +284,7 @@ export interface AnnotationsSlice {
   addScribble: (points: [number, number][]) => void;
   annotations: Annotation[];
   applyInstant: (id: string) => Promise<void>;
+  applyTranslations: (edits: { file: string; key: string; value: string }[]) => Promise<void>;
   captureSizes: (id: string) => Promise<void>;
   classNames: string[];
   color: string;
@@ -345,7 +364,7 @@ export interface FlowsSlice {
   replayFlow: (flow: { steps: FlowStep[]; startUrl: string; }) => Promise<FlowResult | null>;
   runFlowRef: MutableRefObject<Record<string, { steps: FlowStep[]; startUrl: string; seen?: { errors: string[]; failed: string[]; }; }>>;
   tapRef: MutableRefObject<{ errors: string[]; failed: string[]; } | null>;
-  toggleRecording: () => void;
+  toggleRecording: () => Promise<void>;
 }
 
 export interface RunsSlice {
@@ -401,6 +420,8 @@ export interface ReviewSlice {
   setSweepOpen: Dispatch<SetStateAction<boolean>>;
   sweepFix: (pages: SweepPage[]) => Promise<void>;
   sweepOpen: boolean;
+  flowMapOpen: boolean;
+  setFlowMapOpen: Dispatch<SetStateAction<boolean>>;
   sweepOpenPage: (url: string, width: number) => void;
   sweepPlan: () => { pages: { route: string; url: string; }[]; crawl: boolean; };
 }
@@ -410,6 +431,10 @@ export interface HandoffSlice {
   exportHandoff: () => Promise<void>;
   importHandoff: () => Promise<void>;
   issueHandoff: () => Promise<void>;
+}
+
+export interface McpSlice {
+  answerQuestion: (itemId: string, answer: string) => void;
 }
 
 export interface BackgroundSlice {
@@ -473,6 +498,7 @@ export type AppContext = SettingsSlice
   & ReviewSlice
   & HandoffSlice
   & BackgroundSlice
+  & McpSlice
   & SideSlice
   & CommandsSlice
   & ShortcutsSlice

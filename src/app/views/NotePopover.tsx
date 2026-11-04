@@ -65,6 +65,8 @@ export function NotePopover({ app }: { app: AppContext }) {
           onIsolate={(on) => app.isolate(on ? popAnn.id : null)}
           onStory={() => app.openStory(popAnn.id)}
           onOpenFile={app.openFile}
+          onTranslate={app.applyTranslations}
+          onAsk={(text) => { app.setInstruction(text); app.focusComposer(50); }}
         />
       )}
       <div className="note-pop-foot">

@@ -53,6 +53,7 @@ export function useCommands(app: AppContext) {
     { id: 'chat:share', group: 'Chat', label: 'Hand this chat to a teammate…', hint: 'saves a file they can open', icon: Users, disabled: !app.chatId, run: () => { if (app.chatId) api.shareChat(app.chatId).then((f) => { if (f) app.flash(`Saved ${f}. Push your branch so they can pick up the code too.`); }).catch((e) => app.flash(errText(e))); } },
     { id: 'chat:receive', group: 'Chat', label: 'Open a chat from a teammate…', icon: Users, disabled: !app.projectDir || !!app.job, run: app.receiveChat },
     { id: 'view:files', group: 'View', label: 'Files', hint: 'tree and code viewer', icon: FileTree, keys: combo('E', true), disabled: !app.projectDir, run: () => app.openTool('files') },
+    ...([['docked', 'Chat beside the page'], ['expanded', 'Chat as the main view'], ['tab', 'Chat as a tab'], ['floating', 'Chat floating over the page']] as const).map(([v, label]) => ({ id: `view:chat-${v}`, group: 'View', label, icon: MessageSquare, disabled: app.chatLayout === v, run: () => app.setChatLayout(v) })),
     { id: 'view:zen', group: 'View', label: app.zen ? 'Leave zen mode' : 'Zen mode', hint: 'just the page and the chat', icon: Maximize, keys: `${MOD} .`, run: app.toggleZen },
     { id: 'view:split', group: 'View', label: settings.split ? 'Show tools over the page' : 'Show tools beside the page', icon: Columns2, run: () => app.saveSettings({ split: !settings.split }) },
     { id: 'view:layouts', group: 'View', label: 'Save or delete layouts…', icon: LayoutGrid, run: () => app.setLayoutsOpen(true) },

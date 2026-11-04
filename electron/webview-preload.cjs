@@ -672,6 +672,8 @@ ipcRenderer.on('markers', (_e, list) => { markers = list || []; retag(markers); 
 // With a token, answer once the markers are really off screen (two frames later), so a screenshot never catches them.
 ipcRenderer.on('hide', (_e, h, token) => {
   pickHold = 0; hidden = !!h; renderMarkers(); renderHover();
+  // The keyboard-order and render overlays live in the page's own world; hide them for screenshots too.
+  document.querySelectorAll('[data-pinpoint-probe]').forEach((n) => { n.style.visibility = hidden ? 'hidden' : ''; });
   if (token) requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.sendToHost('hidden', token)));
 });
 ipcRenderer.on('clean', () => { hoverEl = null; renderHover(); ipcRenderer.sendToHost('cleaned'); });

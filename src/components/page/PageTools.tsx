@@ -3,10 +3,21 @@ import { createPortal } from 'react-dom';
 import { Check, Download, FlaskConical, Layers, Loader2, MessageSquare, Pause, Pin as PinIcon, Share2, StepForward, Trash2, Upload, X } from '../ui/icons';
 import type { NetworkMode, PageEnv, Pin } from '../../types';
 import { errText } from '../../lib/util';
+import type { FocusReport, RenderReport } from '../../lib/probes';
 import { useDismiss, useEscape } from '../../lib/hooks';
 
-export interface Conditions { stress: string[]; network: NetworkMode; anim: number }
-export const NO_CONDITIONS: Conditions = { stress: [], network: 'normal', anim: 1 };
+export interface Conditions { stress: string[]; network: NetworkMode; anim: number; vision: string; focus: boolean; renders: boolean }
+export const NO_CONDITIONS: Conditions = { stress: [], network: 'normal', anim: 1, vision: '', focus: false, renders: false };
+
+export const VISION: { id: string; label: string; hint: string }[] = [
+  { id: '', label: 'Normal', hint: 'Full color vision' },
+  { id: 'deuteranopia', label: 'Green-blind', hint: 'Deuteranopia: red and green look alike (the most common, about 1 in 16 men)' },
+  { id: 'protanopia', label: 'Red-blind', hint: 'Protanopia: red looks dark, red and green look alike' },
+  { id: 'tritanopia', label: 'Blue-blind', hint: 'Tritanopia: blue and green, yellow and pink look alike' },
+  { id: 'achromatopsia', label: 'No color', hint: 'Achromatopsia: no color at all, only lightness' },
+  { id: 'blurredVision', label: 'Blurry', hint: 'Blurred vision: like someone without their glasses' },
+  { id: 'reducedContrast', label: 'Low contrast', hint: 'Reduced contrast: aging eyes, or a phone in sunlight' },
+];
 
 const STRESS: { id: string; label: string; hint: string }[] = [
   { id: 'long', label: 'Long text', hint: 'Every piece of text three times as long' },
@@ -28,13 +39,19 @@ export function describeConditions(c: Conditions) {
     ...c.stress.map((s) => STRESS.find((x) => x.id === s)?.label.toLowerCase() || s),
     c.network !== 'normal' ? `network: ${NETWORK.find((n) => n.id === c.network)?.hint}` : '',
     c.anim !== 1 ? (c.anim === 0 ? 'animations paused' : `animations at ${c.anim * 100}% speed`) : '',
+    c.vision ? `seen with simulated ${VISION.find((v) => v.id === c.vision)?.hint.split(':')[0].toLowerCase() || c.vision}: the page has to stay usable for someone who sees it this way, so don't rely on color alone, and keep enough contrast` : '',
   ].filter(Boolean) as string[];
 }
+
+/** How many test conditions and overlays are on, for the badge on the button. */
+export const conditionCount = (c: Conditions) => describeConditions(c).length + (c.focus ? 1 : 0) + (c.renders ? 1 : 0);
 
 interface ConditionsProps {
   value: Conditions; set(next: Conditions): void; onStep(): void;
   env: PageEnv; setEnv(next: PageEnv): void;
   layout: boolean; setLayout(on: boolean): void;
+  focusReport: FocusReport | null; renderReport: RenderReport | null;
+  onAskFocus(): void; onAskRenders(): void; onResetRenders(): void;
 }
 
 function CondRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -53,9 +70,9 @@ function CondSwitch({ label, hint, on, set }: { label: string; hint: string; on:
     </button>
   );
 }
-function CondSeg<T>({ options, value, set }: { options: { id: T; label: React.ReactNode; hint?: string }[]; value: T; set(v: T): void }) {
+function CondSeg<T>({ options, value, set, wrap }: { options: { id: T; label: React.ReactNode; hint?: string }[]; value: T; set(v: T): void; wrap?: boolean }) {
   return (
-    <div className="cond-seg" role="radiogroup">
+    <div className={`cond-seg ${wrap ? 'wrap' : ''}`} role="radiogroup">
       {options.map((o) => (
         <button key={String(o.id)} type="button" role="radio" aria-checked={value === o.id} className={value === o.id ? 'on' : ''} onClick={() => set(o.id)} title={o.hint}>{o.label}</button>
       ))}
@@ -63,7 +80,44 @@ function CondSeg<T>({ options, value, set }: { options: { id: T; label: React.Re
   );
 }
 
-export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLayout }: ConditionsProps) {
+function FocusSummary({ report, onAsk }: { report: FocusReport | null; onAsk(): void }) {
+  if (!report) return <p className="cond-note">Looking at the page…</p>;
+  return (
+    <div className="cond-report">
+      <p className="cond-note">{report.count} stop{report.count === 1 ? '' : 's'} for the Tab key, numbered in the order the keyboard reaches them. Red ones have a problem.</p>
+      {report.issues.map((i) => <div key={i.kind} className="cond-issue" title={i.items.join('\n')}><b>{i.text}</b>{i.items[0] && <small className="mono">{i.items[0]}</small>}</div>)}
+      {report.issues.length > 0 && <button type="button" className="btn xs" onClick={onAsk}>Ask to fix</button>}
+    </div>
+  );
+}
+
+function RenderSummary({ report, onAsk, onReset }: { report: RenderReport | null; onAsk(): void; onReset(): void }) {
+  if (!report) return <p className="cond-note">Watching the page…</p>;
+  const busy = report.components.filter((c) => c.count >= 3);
+  const problems = busy.some((c) => c.same || c.identity.length) || report.slow.length > 0 || report.shifts.length > 0;
+  return (
+    <div className="cond-report">
+      <p className="cond-note">
+        {report.react ? 'Use the page: each component flashes when it renders (green, then amber, then red as it keeps rendering). ' : 'No React on this page, so only slow interactions and layout shifts are watched. '}
+        Last {report.seconds}s.
+      </p>
+      {busy.slice(0, 5).map((c) => (
+        <div key={c.name} className="cond-issue" title={c.file || ''}>
+          <b>&lt;{c.name}&gt; rendered {c.count}×</b>
+          {(c.same > 0 || c.identity.length > 0) && <small>{c.same > 0 ? `${c.same} with nothing changed` : ''}{c.same > 0 && c.identity.length ? ' · ' : ''}{c.identity.length ? `new ${c.identity.join(', ')} each time` : ''}</small>}
+        </div>
+      ))}
+      {report.slow.slice(-3).map((s, i) => <div key={`s${i}`} className="cond-issue warn"><b>{s.name} took {s.ms} ms</b><small className="mono">{s.target}</small></div>)}
+      {report.shifts.slice(-2).map((s, i) => <div key={`l${i}`} className="cond-issue warn"><b>Layout shift {s.value}</b>{s.nodes[0] && <small className="mono">{s.nodes[0]}</small>}</div>)}
+      <div className="cond-actions">
+        <button type="button" className="btn xs" onClick={onReset}>Start over</button>
+        {problems && <button type="button" className="btn xs" onClick={onAsk}>Ask to fix</button>}
+      </div>
+    </div>
+  );
+}
+
+export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLayout, focusReport, renderReport, onAskFocus, onAskRenders, onResetRenders }: ConditionsProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   useEscape(() => setOpen(false), open);
@@ -80,7 +134,7 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
-  const count = describeConditions(value).length + (env.colorScheme ? 1 : 0) + (env.reducedMotion ? 1 : 0);
+  const count = conditionCount(value) + (env.colorScheme ? 1 : 0) + (env.reducedMotion ? 1 : 0);
   const toggle = (id: string) => set({ ...value, stress: value.stress.includes(id) ? value.stress.filter((s) => s !== id) : [...value.stress, id] });
   const reset = () => { set(NO_CONDITIONS); setEnv({ colorScheme: null, reducedMotion: false }); };
   const net = NETWORK.find((n) => n.id === value.network)!;
@@ -105,6 +159,20 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
             </CondRow>
             <CondSwitch label="Reduced motion" hint="As for someone who has turned animations off" on={env.reducedMotion} set={(reducedMotion) => setEnv({ ...env, reducedMotion })} />
             <CondSwitch label="Layout guides" hint="Hold Alt while selecting to see margins, padding, flex and grid, and to measure." on={layout} set={setLayout} />
+          </section>
+
+          <section>
+            <h5>Vision</h5>
+            <CondSeg wrap options={VISION} value={value.vision} set={(vision) => set({ ...value, vision })} />
+            <p className="cond-note">{VISION.find((v) => v.id === value.vision)?.hint}.</p>
+          </section>
+
+          <section>
+            <h5>See how it works</h5>
+            <CondSwitch label="Keyboard order" hint="Number every stop for the Tab key and flag what a keyboard or screen reader user would trip on" on={value.focus} set={(focus) => set({ ...value, focus })} />
+            {value.focus && <FocusSummary report={focusReport} onAsk={onAskFocus} />}
+            <CondSwitch label="Render activity" hint="Flash components as they render, and catch slow clicks and content that jumps" on={value.renders} set={(renders) => set({ ...value, renders })} />
+            {value.renders && <RenderSummary report={renderReport} onAsk={onAskRenders} onReset={onResetRenders} />}
           </section>
 
           <section>

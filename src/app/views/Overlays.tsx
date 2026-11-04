@@ -1,4 +1,5 @@
-import { BranchCompare, CompareView, ContextSheet, LayoutsSheet, ReviewPanel, SettingsModal, SweepView, Timeline, VariantsLive } from '../panels';
+import { BranchCompare, CompareView, ContextSheet, FlowMapView, LayoutsSheet, ReviewPanel, SettingsModal, SweepView, Timeline, VariantsLive } from '../panels';
+import { originOf } from '../../lib/site';
 import { api, readHistory, spentToday } from '../shared';
 import { CommandPalette } from '../../components/shell/CommandPalette';
 import { X } from '../../components/ui/icons';
@@ -42,6 +43,20 @@ export function Overlays({ app }: { app: AppContext }) {
         <SweepView
           {...app.sweepPlan()} partition={partitionOf(app.tab?.profile || '')}
           onOpen={app.sweepOpenPage} onFix={app.sweepFix} onClose={() => app.setSweepOpen(false)}
+        />
+      )}
+      {app.flowMapOpen && originOf(app.nav.url) && (
+        <FlowMapView
+          start={(() => { try { const u = new URL(app.nav.url); return u.pathname + u.search; } catch { return '/'; } })()}
+          origin={originOf(app.nav.url)} partition={partitionOf(app.tab?.profile || '')} routes={app.routes}
+          onOpen={(url) => { app.setFlowMapOpen(false); app.go(url); }}
+          onAsk={(text, replace) => {
+            app.setFlowMapOpen(false);
+            app.setInstruction((t) => (replace || !t.trim() ? text : `${t.trim()}\n\n${text}`));
+            if (app.settings?.panelHidden) app.saveSettings({ panelHidden: false });
+            app.focusComposer(50);
+          }}
+          onClose={() => app.setFlowMapOpen(false)}
         />
       )}
       {app.liveItem && (

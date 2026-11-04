@@ -12,6 +12,8 @@ import { TextItem } from './TextItem';
 import { ThinkingItem } from './ThinkingItem';
 import { UserItem } from './UserItem';
 import { VariantsItem } from './VariantsItem';
+import { VisualItem } from './VisualItem';
+import { QuestionItem } from './QuestionItem';
 
 interface Props {
   item: ChatItem;
@@ -31,6 +33,8 @@ function ChatItemView({ item, live, root, busy, gitRepo, actions }: Props) {
     case 'plan': return <PlanItem item={item} live={!!live} />;
     case 'approval': return <ApprovalItem item={item} root={root} actions={actions} />;
     case 'status': return <StatusItem item={item} />;
+    case 'visual': return <VisualItem item={item} />;
+    case 'question': return <QuestionItem item={item} actions={actions} />;
     case 'error': return <ErrorItem item={item} busy={busy} actions={actions} />;
     case 'memory': return <MemoryItem item={item} actions={actions} />;
     case 'variants': return <VariantsItem item={item} busy={busy} actions={actions} />;

@@ -1,7 +1,7 @@
 {
   "name": "pinpoint",
   "productName": "Pinpoint",
-  "version": "0.13.2",
+  "version": "0.14.0",
   "description": "Point at it. Draw on it. Ship it. A desktop visual editor that lets Claude Code or Codex change your web app from clicks, drawings and sketches.",
   "keywords": [
     "electron",
@@ -110,13 +110,23 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Pinpoint"
     },
     "linux": {
       "target": [
@@ -142,6 +152,9 @@
     "asarUnpack": [
       "node_modules/node-pty/**"
     ],
-    "npmRebuild": false
+    "npmRebuild": false,
+    "portable": {
+      "artifactName": "${productName}-${version}-win-x64-portable.${ext}"
+    }
   }
 }
