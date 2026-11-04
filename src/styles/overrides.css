@@ -1009,87 +1009,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   overflow: hidden;
 }
 
-/* sidebar */
-
-/* ---- chats sidebar ---- */
-.threads {
-  grid-area: threads;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  background: var(--bg-2);
-  border-right: 1px solid var(--line);
-  overflow: clip;
-}
-.threads-head {
-  height: 52px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px 0 14px;
-  -webkit-app-region: drag;
-  user-select: none;
-}
-.threads-search button { display: grid; place-items: center; color: var(--muted); }
-.threads-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 2px 8px 10px;
-}
-.thread-state {
-  width: 18px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  color: var(--accent-2);
-}
-.thread-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.thread-time {
-  flex-shrink: 0;
-  padding-right: 4px;
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.thread-x {
-  display: none;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  color: var(--muted);
-}
-
-/* Sidebar footer: a row of icon buttons. */
-.threads-foot {
-  flex-shrink: 0;
-  border-top: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-}
-.threads-foot button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border-radius: 8px;
-  color: var(--text-2);
-  font-size: 12.5px;
-  transition: background .12s, color .12s;
-}
-.threads-foot button:hover { background: var(--bg-3); color: var(--text); }
-
 /* topbar */
 .threads-toggle { flex-shrink: 0; }
 .cmd-pill {
@@ -1204,7 +1123,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 /* modals */
 
 /* Settings grid inputs fill their columns. */
-.harness-row input { flex: 1 1 0; width: 100%; min-width: 0; }
 
 /* tabs-and-nav */
 
@@ -1321,22 +1239,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 }
 .ask-aside button:hover { background: var(--bg-3); color: var(--text); }
 
-/* sidebar */
-
-/* ---- running tasks in the sidebar ---- */
-.task {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 4px 0 2px;
-  border-radius: 8px;
-  color: var(--text-2);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-
 /* controls */
 .icon-btn.on, .vp-toggles button.on { background: var(--bg-4); color: var(--text); }
 
@@ -1344,7 +1246,7 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .ann textarea:focus, .note-pop textarea:focus { border-color: var(--ring); }
 
 /* chat */
-.working, .working svg, .work-log.live .work-head > .spin, .thread-state, .thread.running .thread-time {
+.working, .working svg, .work-log.live .work-head > .spin {
   color: var(--text-2);
 }
 
@@ -1354,9 +1256,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 /* chat */
 .approval-head > svg { flex-shrink: 0; color: var(--text-2); }
 .approval-head b { color: var(--text); font-weight: 600; }
-
-/* sidebar */
-.thread.waiting .thread-time { color: var(--warn); }
 
 /* chat */
 .plan-head b { color: var(--text); }
@@ -1424,31 +1323,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
   .shimmer { animation: none; color: var(--text-2); background: none; }
 }
 
-/* sidebar */
-.thread-menu button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 30px;
-  padding: 0 9px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--text-2);
-  text-align: left;
-}
-.thread-menu button:hover { background: var(--bg-4); color: var(--text); }
-.thread-rename {
-  flex: 1;
-  min-width: 0;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 6px;
-  border: 1px solid var(--ring);
-  background: var(--bg);
-  outline: 0;
-  font-size: 12.5px;
-}
 
 /* topbar */
 .statusbar > button, .statusbar > span {
@@ -1531,13 +1405,6 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 .paste-chip button:hover, .img-chip button:hover, .img-chip button.on { color: var(--text); background: var(--bg-4); }
 .composer-foot .agent-controls .mp-btn > svg:first-child { display: none; }
 
-/* sidebar */
-.threads-foot button {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  justify-content: center;
-}
 
 /* composer */
 
@@ -1622,7 +1489,7 @@ button.chip:hover { border-color: var(--line-2); color: var(--text); }
 /* topbar */
 
 /* Header icons share one size and hover. */
-.top-right .icon-btn, .mode-seg button, .threads-head .icon-btn { border-radius: 7px; }
+.top-right .icon-btn, .mode-seg button { border-radius: 7px; }
 
 /* tools */
 

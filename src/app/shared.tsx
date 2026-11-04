@@ -6,7 +6,7 @@ export const isMac = api.platform === 'darwin';
 export const MOD = isMac ? '⌘' : 'Ctrl';
 document.documentElement.classList.add(`platform-${api.platform}`);
 api.onFullscreen((fs) => document.documentElement.classList.toggle('fullscreen', fs));
-export const THREADS_W = 248;
+export const THREADS_W = 280;
 export const SPEND_KEY = 'pp.spend';
 export const today = () => new Date().toISOString().slice(0, 10);
 export const spentToday = () => { try { const s = JSON.parse(localStorage.getItem(SPEND_KEY) || '{}'); return s.day === today() ? s.total || 0 : 0; } catch { return 0; } };

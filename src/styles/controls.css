@@ -217,7 +217,7 @@
   top: 2px;
   left: 2px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--text-2);
   transition: transform .15s, background .15s;
   width: 13px;
   height: 13px;

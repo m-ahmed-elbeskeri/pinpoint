@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Brain, Check, Eye, FileText, Loader2, Palette, PenLine, Plugs, Plus, Sparkles, Trash2, Users, Wand2, X } from '../ui/icons';
+import { Brain, Check, Eye, FileText, Loader2, Palette, PenLine, Plug, Plus, Sparkles, Trash2, Users, Wand2, X } from '../ui/icons';
 import { ExtensionList, InstructionsTab } from './ExtensionTabs';
 import { Markdown } from '../chat';
 import type { DesignDoc, MemoryItem, Settings } from '../../types';
@@ -39,21 +39,28 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange(v: boolean): vo
 export function ContextSheet(p: Props) {
   const { onClose } = p;
   useEscape(onClose);
+  const memoryOn = p.memory.filter((m) => m.enabled).length;
 
   return (
     <div className="sheet-backdrop" onMouseDown={p.onClose}>
       <aside className="sheet" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="sheet-head">
-          <div className="tabs">
-            <button className={p.tab === 'design' ? 'on' : ''} onClick={() => p.setTab('design')}><Palette size={14} /> Design</button>
-            <button className={p.tab === 'memory' ? 'on' : ''} onClick={() => p.setTab('memory')}>
-              <Brain size={14} /> Memory {p.memory.length > 0 && <span className="count">{p.memory.length}</span>}
-            </button>
-            <button className={p.tab === 'mcp' ? 'on' : ''} onClick={() => p.setTab('mcp')}><Plugs size={14} /> MCP</button>
-            <button className={p.tab === 'skills' ? 'on' : ''} onClick={() => p.setTab('skills')}><Sparkles size={14} /> Skills</button>
-            <button className={p.tab === 'instructions' ? 'on' : ''} onClick={() => p.setTab('instructions')}><FileText size={14} /> Instructions</button>
+        <div className="sheet-title">
+          <div>
+            <b>What the agent knows</b>
+            <small>Sent to {p.agentName}{p.root && <> in <strong>{p.root.split(/[\\/]/).filter(Boolean).pop()}</strong></>}</small>
           </div>
-          <button className="icon-btn" onClick={p.onClose} title="Close (Esc)"><X size={16} /></button>
+          <button className="icon-btn" onClick={p.onClose} aria-label="Close" title="Close (Esc)"><X size={16} /></button>
+        </div>
+        <div className="sheet-head">
+          <div className="tabs" role="tablist">
+            <button className={p.tab === 'design' ? 'on' : ''} role="tab" aria-selected={p.tab === 'design'} onClick={() => p.setTab('design')}><Palette size={14} /> Design</button>
+            <button className={p.tab === 'memory' ? 'on' : ''} role="tab" aria-selected={p.tab === 'memory'} onClick={() => p.setTab('memory')}>
+              <Brain size={14} /> Memory {memoryOn > 0 && <span className="count" title={`${memoryOn} on`}>{memoryOn}</span>}
+            </button>
+            <button className={p.tab === 'mcp' ? 'on' : ''} role="tab" aria-selected={p.tab === 'mcp'} onClick={() => p.setTab('mcp')}><Plug size={14} /> MCP</button>
+            <button className={p.tab === 'skills' ? 'on' : ''} role="tab" aria-selected={p.tab === 'skills'} onClick={() => p.setTab('skills')}><Sparkles size={14} /> Skills</button>
+            <button className={p.tab === 'instructions' ? 'on' : ''} role="tab" aria-selected={p.tab === 'instructions'} onClick={() => p.setTab('instructions')}><FileText size={14} /> Instructions</button>
+          </div>
         </div>
         {p.tab === 'design' && <DesignTab {...p} />}
         {p.tab === 'memory' && <MemoryTab {...p} />}
@@ -120,7 +127,7 @@ function DesignTab({ settings, saveSettings, design, setDesign, canExtract, extr
         </div>
         <span className="save-state">{saved === 'saving' ? 'Saving…' : saved === 'saved' ? <><Check size={12} /> Saved</> : ''}</span>
         <div className="spacer" />
-        <button className="btn xs" onClick={draft} disabled={!canExtract || busy} title={canExtract ? 'Read colors, fonts, spacing and CSS variables from the open page' : 'Open your site first'}>
+        <button className="btn xs ghost" onClick={draft} disabled={!canExtract || busy} title={canExtract ? 'Read colors, fonts, spacing and CSS variables from the open page' : 'Open your site first'}>
           {busy ? <Loader2 size={12} className="spin" /> : <Wand2 size={12} />} Draft from page
         </button>
         <button className="btn xs primary" onClick={async () => askAgent(canExtract ? await extract() : null)} title="Have the agent write or improve DESIGN.md from your code">
@@ -178,7 +185,7 @@ function MemoryTab({ settings, saveSettings, memory, setMemory }: Props) {
 
       <form className="mem-add" onSubmit={(e) => { e.preventDefault(); add(); }}>
         <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add a rule, e.g. “Never use pure black text”" />
-        <button className="btn xs primary" disabled={!draft.trim()}><Plus size={12} /> Add</button>
+        {draft.trim() && <button className="btn xs primary"><Plus size={12} /> Add</button>}
       </form>
 
       {memory.length === 0 ? (
@@ -191,7 +198,9 @@ function MemoryTab({ settings, saveSettings, memory, setMemory }: Props) {
         <ul className="mem-list">
           {memory.map((m) => (
             <li key={m.id} className={m.enabled ? '' : 'off'}>
-              <input type="checkbox" checked={m.enabled} onChange={(e) => persist(memory.map((x) => (x.id === m.id ? { ...x, enabled: e.target.checked } : x)))} title="Include in requests" />
+              <button className={`toggle ${m.enabled ? 'on' : ''}`} role="switch" aria-checked={m.enabled} aria-label="Include in requests" title={m.enabled ? 'On: sent with every request. Click to switch off.' : 'Off. Click to send it with every request.'}
+                onClick={() => persist(memory.map((x) => (x.id === m.id ? { ...x, enabled: !x.enabled } : x)))}
+              ><span className="toggle-track"><span className="toggle-thumb" /></span></button>
               <textarea
                 rows={1}
                 value={m.text}
@@ -199,11 +208,11 @@ function MemoryTab({ settings, saveSettings, memory, setMemory }: Props) {
                 onBlur={() => window.pinpoint.writeMemory(memory.filter((x) => x.text.trim()))}
               />
               <button
-                className={`icon-btn xs ${m.shared ? 'on' : ''}`} aria-pressed={!!m.shared}
+                className={`icon-btn xs mem-share ${m.shared ? 'on' : ''}`} aria-pressed={!!m.shared}
                 onClick={() => persist(memory.map((x) => (x.id === m.id ? { ...x, shared: !x.shared } : x)))}
                 title={m.shared ? 'Shared: kept in PINPOINT.md, which you commit. Click to keep it to yourself.' : 'Only on this machine. Click to share it with the team through PINPOINT.md.'}
-              ><Users size={13} /></button>
-              <button className="icon-btn xs" onClick={() => persist(memory.filter((x) => x.id !== m.id))} title="Delete"><Trash2 size={13} /></button>
+              ><Users size={13} />{m.shared && <span>Shared</span>}</button>
+              <button className="icon-btn xs" aria-label="Delete rule" onClick={() => persist(memory.filter((x) => x.id !== m.id))} title="Delete"><Trash2 size={13} /></button>
             </li>
           ))}
         </ul>

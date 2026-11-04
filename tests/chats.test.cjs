@@ -291,10 +291,10 @@ server.listen(0, '127.0.0.1', () => {
       await sleep(900);
       log('a chat can be renamed from its menu, and the name sticks', /My renamed chat/.test(await ui(`document.querySelector('.thread.on').textContent`)) && saved().some((c) => c.renamed === 'My renamed chat'), current);
       await menu('Pin to top');
-      log('pinning puts it in a Pinned group', (await ui(`[...document.querySelectorAll('.threads-label')].some((l) => l.textContent === 'Pinned')`)) && saved().some((c) => c.pinned));
+      log('pinning moves it to the top of its project', (await ui(`!!document.querySelector('.proj-chats .history-item')?.matches('.on')`)) && saved().some((c) => c.pinned));
       await menu('Archive');
-      log('archiving hides it behind Show archived', !(await ui(`!!document.querySelector('.thread.on')`)) && /Show archived \(1\)/.test(await ui(`document.querySelector('.threads-more')?.textContent || ''`)));
-      await ui(`document.querySelector('.threads-more').click(); 0`);
+      log('archiving hides it behind Show archived', !(await ui(`!!document.querySelector('.thread.on')`)) && /Show archived \(1\)/.test(await ui(`[...document.querySelectorAll('.threads-more')].map((b) => b.textContent).join()`)));
+      await ui(`[...document.querySelectorAll('.threads-more')].find((b) => /archived/.test(b.textContent)).click(); 0`);
       await sleep(200);
       log('and Show archived brings it back into view', await ui(`!!document.querySelector('.thread.on')`));
 
@@ -372,7 +372,7 @@ server.listen(0, '127.0.0.1', () => {
       await ui(`document.querySelector('.diff-dock .diff-head .icon-btn').click(); 0`);
       await sleep(150);
 
-      await ui(`document.querySelector('.proj-row.current').click(); 0`);
+      await ui(`document.querySelector('.proj-row.current .thread-more-free').click(); 0`);
       await sleep(150);
       const folderMenu = await ui(`document.querySelector('.proj-menu')?.textContent || ''`);
       log('the project folder opens a menu', /Show in/.test(folderMenu) && /Copy path/.test(folderMenu) && /Open a terminal here/.test(folderMenu), folderMenu);

@@ -83,7 +83,7 @@ export interface LayoutSlice {
   openTool: (t: DrawerTab) => void;
   paletteOpen: boolean;
   patchView: { title: string; text: string; } | null;
-  resizing: "panel" | "drawer" | "device" | null;
+  resizing: "panel" | "threads" | "drawer" | "device" | null;
   saveLayout: (name: string) => void;
   setCompare: Dispatch<SetStateAction<CompareTarget | null>>;
   setDiffView: Dispatch<SetStateAction<{ runId: string; path?: string; } | null>>;
@@ -107,6 +107,8 @@ export interface LayoutSlice {
   shortcutsOpen: boolean;
   split: boolean;
   startResize: (which: "panel") => (e: React.PointerEvent) => void;
+  startThreadsResize: (e: React.PointerEvent) => void;
+  resetThreadsWidth: () => void;
   statusOn: boolean;
   threadsOn: boolean;
   timelineOpen: boolean;

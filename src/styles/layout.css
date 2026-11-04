@@ -39,10 +39,12 @@
 .drag-shield { position: fixed; inset: 0; z-index: 9999; }
 .drag-shield.panel { cursor: col-resize; }
 .drag-shield.drawer { cursor: row-resize; }
-.platform-darwin .topbar { padding-left: 88px; }
-.platform-darwin.fullscreen .topbar { padding-left: 12px; }
-:root:not(.platform-darwin) .topbar {
-  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 10px);
+/* Room for the window controls goes inside the outer header columns, not the bar's padding,
+   so the search in the middle column stays centred on the whole window bar. */
+.platform-darwin .topbar .tb-left { margin-left: 78px; }
+.platform-darwin.fullscreen .topbar .tb-left { margin-left: 2px; }
+:root:not(.platform-darwin) .topbar .top-right {
+  margin-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
 }
 .stage {
   grid-area: stage;
@@ -68,7 +70,7 @@
 .panel.left { border-left: 0; border-right: 1px solid var(--line); }
 .platform-darwin .threads-head { padding-left: 84px; }
 .platform-darwin.fullscreen .threads-head { padding-left: 14px; }
-.platform-darwin .app.threads-on .topbar { padding-left: 12px; }
+.platform-darwin .app.threads-on .topbar .tb-left { margin-left: 2px; }
 
 /* Containers that must never scroll: overflow:hidden still lets focus() and scrollIntoView shift them, which pushed the composer up and left a gap under it. */
 html, body, #root, .app { overflow: clip; }

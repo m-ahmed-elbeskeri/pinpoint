@@ -96,7 +96,8 @@ function register(ctx) {
       dir = r.filePaths[0];
     }
     const s = loadSettings();
-    const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8);
+    const pinned = s.pinnedProjects || [];
+    const recent = [dir, ...s.recentProjects.filter((p) => p !== dir)].filter((p, i) => i < 8 || pinned.includes(p));
     const switched = path.resolve(dir) !== path.resolve(s.projectDir || '.');
     if (switched) { ctx.stopServices?.(); killTree(procs.dev); procs.dev = null; killTree(procs.story); procs.story = null; }
     saveSettings({ projectDir: dir, recentProjects: recent, ...(switched && { devCommand: '', tabs: [], activeTab: 0, liveUrl: '' }) });

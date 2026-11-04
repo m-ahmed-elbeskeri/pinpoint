@@ -70,7 +70,7 @@ function register(ctx) {
     const file = path.join(ud, 'settings.json');
     if (!fs.existsSync(file)) {
       fs.mkdirSync(ud, { recursive: true });
-      fs.writeFileSync(file, JSON.stringify({ ...s, projectDir: dir, recentProjects: [dir, ...s.recentProjects.filter((p) => p !== dir)].slice(0, 8), devCommand: '', tabs: [], activeTab: 0, liveUrl: '', onboarded: true }, null, 2));
+      fs.writeFileSync(file, JSON.stringify({ ...s, projectDir: dir, recentProjects: [dir, ...s.recentProjects.filter((p) => p !== dir)].filter((p, i) => i < 8 || (s.pinnedProjects || []).includes(p)), devCommand: '', tabs: [], activeTab: 0, liveUrl: '', onboarded: true }, null, 2));
     }
     const { ELECTRON_RUN_AS_NODE: _drop, ...env } = process.env;
     const child = spawn(process.execPath, app.isPackaged ? [] : [app.getAppPath()], { detached: true, stdio: 'ignore', env: { ...env, PINPOINT_USER_DATA: ud, PINPOINT_WINDOW: dir, PINPOINT_WINDOW_HOME: home } });

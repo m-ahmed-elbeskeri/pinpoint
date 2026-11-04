@@ -1,4 +1,4 @@
-/* Modals: settings, harness rows, shortcuts, toast. */
+/* Modals: settings frame, shortcuts, toast. */
 
 .modal-backdrop {
   position: fixed;
@@ -74,23 +74,6 @@
   animation: pop .15s ease-out;
   background: var(--bg-3);
 }
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text-2);
-  font-size: 12px;
-}
-.setting-row .seg button { gap: 5px; }
-.modal label.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-.modal label.check input { width: 15px; height: 15px; accent-color: var(--text-2); }
-.modal > .hint { margin: 12px 0 0; }
 .hex { display: inline-flex; align-items: center; gap: 4px; }
 .hex i {
   display: inline-block;
@@ -99,33 +82,12 @@
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
 }
-.modal .variants-setting input { height: 30px; }
-.harness-row .harness-name {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  color: var(--text);
-  font-size: 12.5px;
-  white-space: nowrap;
-  flex: 1.2 1 0;
-  overflow: hidden;
-  gap: 7px;
-}
-.custom-agent {
-  display: grid;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
 .modal code {
   font: 11px var(--mono);
   background: var(--bg-3);
   padding: 1px 4px;
   border-radius: 4px;
 }
-.modal section > .btn { justify-self: start; }
-
 /* ---- shortcuts sheet ---- */
 .modal.shortcuts { width: 680px; }
 
@@ -154,26 +116,6 @@
   min-height: 30px;
 }
 
-/* Settings: a regular grid for agents, quiet status text. */
-.harness-row {
-  display: grid;
-  grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-.harness-name .pill {
-  background: none;
-  padding: 0;
-  font-weight: 500;
-  font-size: 11px;
-  max-width: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.harness-name .pill.bad { color: var(--muted); }
-.harness-name .pill.ok { color: var(--muted); }
-.custom-agent .harness-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; }
 .shortcut-cols h4 { margin: 0 0 6px; }
 
 /* Layouts, shared rules, PR */

@@ -1,0 +1,271 @@
+/* Settings: a sidebar of categories, grouped cards, a footer that stays put. */
+
+.modal.settings {
+  width: 820px;
+  height: min(640px, calc(100vh - 64px));
+  padding: 0;
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  overflow: hidden;
+}
+.set-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 18px 10px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+.set-nav h3 { margin: 0 10px 14px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.set-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: left;
+}
+.set-nav button svg { color: var(--muted); flex-shrink: 0; }
+.set-nav button:hover { background: var(--bg-3); color: var(--text); }
+.set-nav button.on { background: var(--bg-4); color: var(--text); font-weight: 500; }
+.set-nav button.on svg { color: var(--text); }
+.set-nav button:focus-visible, .set-seg button:focus-visible, .set-switch:focus-visible, .set-add:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+.set-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px 28px;
+}
+.set-head h3 { margin: 0; font-size: 16px; font-weight: 600; }
+.set-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: menu-in .12s ease-out;
+  scrollbar-width: thin;
+}
+.modal .set-group { display: flex; flex-direction: column; gap: 8px; padding: 0; border: 0; }
+.modal .set-group h4 { margin: 0 2px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.set-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.set-card > * + * { border-top: 1px solid var(--line); }
+.set-note { max-width: 560px; margin: 0 2px; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.set-empty { margin: 0; padding: 14px 16px; font-size: 12.5px; color: var(--muted); }
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 52px;
+  padding: 10px 16px;
+  text-align: left;
+}
+.set-row.stack { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px 16px; }
+.set-label { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.set-label b { font-size: 13px; font-weight: 500; color: var(--text); }
+.set-label small { font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.set-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.set-switch { width: 100%; cursor: pointer; transition: background .12s; }
+.set-switch:hover { background: var(--tint); }
+.set-knob {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--line-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+  transition: background .15s;
+}
+.set-knob::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+  transition: transform .15s, background .15s;
+}
+.set-switch.on .set-knob { background: var(--text); box-shadow: none; }
+.set-switch.on .set-knob::after { transform: translateX(14px); background: var(--bg-2); }
+
+.set-seg {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.modal .set-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.modal .set-seg button:hover { color: var(--text); }
+.modal .set-seg button.on { background: var(--bg-4); color: var(--text); font-weight: 500; box-shadow: inset 0 0 0 1px var(--line-2); }
+
+.modal.settings input {
+  height: 32px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  font-size: 12.5px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.modal.settings input::placeholder { color: var(--muted); opacity: .7; }
+.modal.settings input:focus { border-color: var(--ring); box-shadow: 0 0 0 3px var(--tint); }
+.modal kbd {
+  display: inline-block;
+  min-width: 16px;
+  margin: 0 1px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  font: 10.5px/16px var(--mono);
+  text-align: center;
+  color: var(--text-2);
+}
+
+/* Agents: a table, so the command and model columns line up. */
+.set-agent {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 16px;
+}
+.set-agent-head {
+  padding-top: 8px;
+  padding-bottom: 6px;
+  background: var(--bg-2);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.set-agent-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.set-agent-name b { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.set-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
+.set-status.ok { color: var(--text-2); }
+.set-status.ok i { background: var(--ok); }
+
+.set-custom { display: grid; gap: 8px; padding: 12px 12px 12px 16px; }
+.set-custom-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto; align-items: center; gap: 8px; }
+.set-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 16px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  text-align: left;
+}
+.set-add:hover { background: var(--tint); color: var(--text); }
+
+.set-snippet { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 9px 12px 9px 16px; font-size: 12.5px; }
+.set-snippet b { color: var(--text); font-weight: 500; }
+.set-snippet span { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.set-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 12px 28px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.set-dirty { flex: 1; display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.set-dirty.on { color: var(--text-2); }
+.set-dirty.on::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.set-foot .btn.primary:disabled { opacity: 1; background: var(--bg-4); color: var(--muted); cursor: default; }
+.set-foot .btn { min-width: 72px; }
+
+/* Inputs on a row sit at a fixed width on the right, like every other control. */
+.set-control > input { width: 300px; }
+
+.set-agent.missing .set-agent-name > :not(.set-status) { opacity: .55; }
+.set-agent.missing input { opacity: .5; }
+.set-agent.missing input:focus { opacity: 1; }
+
+/* The pane fades out above the footer, so there's a hint it scrolls. */
+.set-pane { mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent); padding-bottom: 48px; }
+
+.set-stepper {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.set-stepper button {
+  width: 30px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  color: var(--text-2);
+}
+.set-stepper button:hover:not(:disabled) { color: var(--text); background: var(--bg-4); }
+.set-stepper button:first-child { border-radius: 7px 0 0 7px; }
+.set-stepper button:last-child { border-radius: 0 7px 7px 0; }
+.set-stepper button:disabled { opacity: .35; cursor: default; }
+.set-stepper output {
+  min-width: 40px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-inline: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Light theme: a white knob always, and a visible off track. */
+:root[data-theme="light"] .set-knob { background: #d4d4d8; box-shadow: inset 0 0 0 1px #c4c4c8; }
+:root[data-theme="light"] .set-knob::after { box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+:root[data-theme="light"] .set-foot .btn.primary:disabled { background: #ececee; color: #9a9aa2; }
+:root[data-theme="light"] .set-knob::after { background: #fff; }
+:root[data-theme="light"] .set-switch.on .set-knob { background: #18181b; }
+:root[data-theme="light"] .set-switch.on .set-knob::after { background: #fff; }
+
+@media (max-width: 720px) {
+  .modal.settings { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .set-nav { flex-direction: row; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .set-nav h3 { display: none; }
+  .set-agent { grid-template-columns: 1fr 1fr; }
+  .set-agent-name, .set-agent-head span:first-child { grid-column: 1 / -1; }
+}

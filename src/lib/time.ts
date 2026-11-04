@@ -1,12 +1,13 @@
 // How long ago, in the three wordings the app uses. They really differ, so each keeps its own name.
 
-// "now", "5m", "2h", "3d", then "Jan 5": lists where every row has one.
+// "now", "5m", "2h", "3d", "2w", then "Jan 5": lists where every row has one.
 export function agoShort(t: number) {
   const s = (Date.now() - t) / 1000;
   if (s < 60) return 'now';
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   if (s < 86400 * 7) return `${Math.floor(s / 86400)}d`;
+  if (s < 86400 * 35) return `${Math.floor(s / 86400 / 7)}w`;
   return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 

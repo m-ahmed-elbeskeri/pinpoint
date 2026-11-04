@@ -80,7 +80,10 @@ export default function App() {
           others={app.others} pulls={app.pulls} refreshKey={`${app.chatId}:${app.chat.length}:${app.others.map((o) => o.id + o.running).join()}`} disabled={!!app.job}
           onOpen={app.openChat} onDelete={app.deleteChat} onNew={app.newChat} onPickProject={app.pickProject}
           onOpenIn={(dir, id) => { app.wantChat.current = id; app.pickProject(dir); }}
+          onForgetProject={(dir) => app.saveSettings({ recentProjects: (settings.recentProjects || []).filter((d) => d !== dir), pinnedProjects: (settings.pinnedProjects || []).filter((d) => d !== dir) })}
+          pinnedProjects={settings.pinnedProjects || []} onPinProject={(dir, on) => app.saveSettings({ pinnedProjects: on ? [...(settings.pinnedProjects || []).filter((d) => d !== dir), dir] : (settings.pinnedProjects || []).filter((d) => d !== dir) })}
           onSettings={() => app.setSettingsOpen(true)} onPalette={() => app.setPaletteOpen(true)} onHide={app.toggleThreads}
+          onResizeStart={app.startThreadsResize} onResizeReset={app.resetThreadsWidth} resizing={app.resizing === 'threads'}
           onTheme={() => app.saveSettings({ theme: document.documentElement.dataset.theme === 'light' ? 'dark' : 'light' })} onShortcuts={() => app.setShortcutsOpen(true)} onTerminal={() => app.openTool('term')} light={app.theme === 'light' || (app.theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)}
         />
       )}

@@ -45,12 +45,6 @@
 .project-btn span { overflow: hidden; text-overflow: ellipsis; }
 .project-btn:hover { border-color: var(--line-2); color: var(--text); }
 .top-right { display: flex; gap: 2px; align-items: center; }
-@container topbar (max-width: 1200px) {
-  .mode-seg kbd { display: none; }
-}
-@container topbar (max-width: 1040px) {
-  .mode-seg span { display: none; }
-}
 @container topbar (max-width: 880px) {
   .project-btn span { display: none; }
   .project-btn { padding: 0 8px; }
@@ -247,18 +241,6 @@
 }
 .cmd-pill svg { flex-shrink: 0; }
 .cmd-pill:hover { border-color: var(--line-2); color: var(--text-2); }
-@container topbar (max-width: 1000px) {
-  .cmd-pill span { display: none; }
-}
-@container topbar (max-width: 700px) {
-  .cmd-pill kbd { display: none; }
-}
-/* The sidebar takes the top bar's left edge, so mode labels can stay a little longer before collapsing. */
-@container topbar (min-width: 820px) {
-  .mode-seg span { display: inline; }
-}
-.mode-seg button.on kbd { background: var(--bg-3); color: var(--muted); border-color: var(--line-2); }
-.mode-seg button.on svg { color: var(--text); }
 
 /* ---- status bar ---- */
 .statusbar {
@@ -284,25 +266,175 @@
 }
 .sb-dot.on { background: var(--ok); }
 
-/* ---- header: Record is an action, not a fifth mode ---- */
-.mode-seg .rec-btn { position: relative; margin-left: 5px; }
-.mode-seg .rec-btn::before {
-  content: '';
-  position: absolute;
-  left: -4px;
-  top: 6px;
-  bottom: 6px;
-  width: 1px;
-  background: var(--line-2);
+/* ---- header ----
+   Left: what the pointer does (modes), then Record. Centre: search. Right: what the agent knows
+   (one group, it all opens the same sheet), then the chat panel. Window controls sit outside
+   this: traffic lights on the left on macOS, min/max/close on the right on Windows (layout.css). */
+/* Three columns so search sits in the middle of the bar whatever the two sides hold;
+   each side keeps at least its content width, so nothing overlaps when it gets tight. */
+.topbar {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(32px, 340px) minmax(max-content, 1fr);
+  column-gap: 12px;
 }
-.mode-seg .rec-btn:not(.rec) span { display: none; }
-.mode-seg .rec-btn.rec { color: #fff; background: var(--bad); }
-.mode-seg .rec-btn.rec svg { color: #fff; }
+.tb-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.topbar .top-right { justify-self: end; }
+.topbar .mode-seg {
+  height: 34px;
+  padding: 3px;
+  gap: 1px;
+  border-radius: 9px;
+  align-items: center;
+}
+.topbar .mode-seg button {
+  height: 26px;
+  min-width: 30px;
+  padding: 0 7px;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.topbar .mode-seg button:hover:not(:disabled) { color: var(--text); background: var(--bg-3); }
+.topbar .mode-seg button span { display: none; }
+.topbar .mode-seg button.on {
+  padding: 0 10px 0 8px;
+  color: var(--text);
+  background: var(--bg-4);
+  box-shadow: 0 0 0 1px var(--line-2) inset, 0 1px 2px rgba(0, 0, 0, .35);
+}
+.topbar .mode-seg button.on span { display: inline; }
 
-/* ---- icons first: words only where they carry meaning ---- */
-/* Modes: the active one is labelled, the rest are icons (name and key in the tooltip). */
-.mode-seg button:not(.on):not(.rec-btn) span, .mode-seg kbd { display: none; }
-.top-right .icon-btn { width: 30px; height: 30px; }
+.rec-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 30px;
+  min-width: 82px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.rec-btn:hover:not(:disabled) { color: var(--text); border-color: var(--line-2); background: var(--bg-3); }
+.rec-btn:disabled { opacity: .4; cursor: default; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex-shrink: 0; }
+.rec-btn.rec {
+  color: var(--bad-fg);
+  border-color: rgba(255, 77, 109, .4);
+  background: rgba(255, 77, 109, .12);
+}
+.rec-btn.rec svg { color: var(--bad); animation: recpulse 1.4s ease-in-out infinite; }
+.rec-btn.rec:hover { background: rgba(255, 77, 109, .18); color: var(--bad-fg); border-color: rgba(255, 77, 109, .5); }
 
-/* ---- modes are icons only; the name and key are in the tooltip ---- */
-.mode-seg button:not(.rec-btn) span { display: none; }
+.topbar .cmd-pill {
+  height: 32px;
+  width: 100%;
+  gap: 8px;
+  padding: 0 6px 0 11px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.topbar .cmd-pill { container: pill / inline-size; }
+.topbar .cmd-pill b { font-weight: inherit; }
+.topbar .cmd-pill .short, .topbar .update-chip .short { display: none; }
+@container pill (max-width: 300px) {
+  .topbar .cmd-pill .long { display: none; }
+  .topbar .cmd-pill .short { display: inline; }
+}
+.topbar .cmd-pill kbd { padding: 3px 5px; background: var(--bg-3); border-color: var(--line); color: var(--muted); font-size: 10.5px; }
+
+.topbar .top-right { gap: 6px; }
+.ctx-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 34px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.topbar .ctx-group .icon-btn { width: 30px; height: 28px; border-radius: 6px; color: var(--text-2); }
+.topbar .ctx-group .icon-btn:hover:not(:disabled) { color: var(--text); background: var(--bg-3); }
+.topbar .ctx-group .icon-btn.on { color: var(--text); background: var(--bg-4); }
+.topbar .ctx-group .icon-btn.warn { color: var(--warn); background: transparent; }
+.topbar .ctx-group .icon-btn:disabled { opacity: .35; cursor: default; }
+.topbar .ctx-dot {
+  top: 3px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background: var(--ok);
+  box-shadow: 0 0 0 1.5px var(--bg-2);
+}
+.topbar .warn .ctx-dot { background: var(--warn); }
+.topbar .icon-count {
+  top: -1px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: #4a4a54;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 14px;
+  font-family: inherit;
+  box-shadow: 0 0 0 1.5px var(--bg-2);
+}
+.topbar .ctx-group { overflow: visible; }
+.topbar .tb-div { height: 18px; margin: 0 2px; background: var(--line-2); }
+.topbar .panel-toggle, .topbar .tb-settings { width: 32px; height: 32px; color: var(--muted); }
+.topbar .tb-settings:hover:not(:disabled) { color: var(--text); background: var(--bg-3); }
+.topbar .panel-toggle.on, .topbar .panel-toggle.on:hover:not(:disabled) { color: var(--text); background: transparent; }
+.topbar .panel-toggle:hover:not(:disabled) { color: var(--text); background: var(--bg-3); }
+
+.topbar .update-chip {
+  height: 30px;
+  gap: 7px;
+  margin-right: 0;
+  padding: 0 11px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line-2);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.topbar .update-chip:hover:not(:disabled) { background: var(--bg-3); }
+.update-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(255, 214, 10, .16); }
+.topbar .update-chip.downloading { color: var(--text-2); }
+
+@container topbar (max-width: 1240px) {
+  .topbar .update-chip .long { display: none; }
+  .topbar .update-chip .short { display: inline; }
+}
+@container topbar (max-width: 1040px) {
+  .rec-btn { min-width: 30px; width: 30px; padding: 0; }
+  .rec-btn span { display: none; }
+}
+@container topbar (max-width: 940px) {
+  .topbar .mode-seg button.on { padding: 0 7px; }
+  .topbar .mode-seg button.on span { display: none; }
+}
+@container topbar (max-width: 820px) {
+  .topbar { grid-template-columns: minmax(max-content, 1fr) 32px minmax(max-content, 1fr); }
+  .topbar .cmd-pill { padding: 0; justify-content: center; }
+  .topbar .cmd-pill span, .topbar .cmd-pill { container: pill / inline-size; }
+.topbar .cmd-pill b { font-weight: inherit; }
+.topbar .cmd-pill .short, .topbar .update-chip .short { display: none; }
+@container pill (max-width: 300px) {
+  .topbar .cmd-pill .long { display: none; }
+  .topbar .cmd-pill .short { display: inline; }
+}
+.topbar .cmd-pill kbd { display: none; }
+}

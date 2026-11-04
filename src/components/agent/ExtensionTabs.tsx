@@ -52,7 +52,7 @@ export function ExtensionList({ kind, settings, saveSettings, agentName }: ListP
   return (
     <div className="sheet-body">
       <div className="ext-head">
-        <span>{data ? `${active} of ${all.length} on for ${agentName}` : `Asking ${agentName}…`}</span>
+        <span>{data ? `${active} of ${all.length} on` : `Asking ${agentName}…`}</span>
         <button className="icon-btn xs" onClick={refresh} disabled={checking} title="Check again">{checking ? <Loader2 size={13} className="spin" /> : <RotateCw size={13} />}</button>
       </div>
       <p className="ext-note">Applies from your next message, in Pinpoint only. {agentName}'s own setup isn't changed.</p>
@@ -72,9 +72,11 @@ export function ExtensionList({ kind, settings, saveSettings, agentName }: ListP
         {inScope.map((item) => (
           <li key={item.id} className={item.enabled ? '' : 'off'}>
             <div className="ext-text">
-              <b title={item.name}>{item.name}</b>
+              <span className="ext-name">
+                <b title={item.name}>{item.name}</b>
+                {kind === 'mcp' && item.status && <span className={`ext-status ${statusTone(item.status)}`} title={/auth/.test(item.status) ? `Sign in from ${agentName}: run /mcp in a terminal, then check again` : undefined}><i />{statusLabel(item.status)}{/auth/.test(item.status) && <em> · run <code onClick={() => navigator.clipboard?.writeText('/mcp')} title="Copy">/mcp</code> to sign in</em>}</span>}
+              </span>
               {item.description && <small title={item.description}>{item.description}</small>}
-              {kind === 'mcp' && item.status && <small className={item.status === 'connected' ? 'ok' : ''}>{item.status}</small>}
             </div>
             <button className={`toggle ${item.enabled ? 'on' : ''}`} onClick={() => toggle(item, !item.enabled)} role="switch" aria-checked={item.enabled} aria-label={item.name} title={item.enabled ? 'Switch off' : 'Switch on'}>
               <span className="toggle-track"><span className="toggle-thumb" /></span>
@@ -89,6 +91,9 @@ export function ExtensionList({ kind, settings, saveSettings, agentName }: ListP
     </div>
   );
 }
+
+const statusTone = (s: string) => (/^(connected|configured)$/.test(s) ? 'ok' : /fail|error/.test(s) ? 'bad' : /auth|connecting/.test(s) ? 'warn' : '');
+const statusLabel = (s: string) => { const t = s.replace(/-/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 const fileNote = (f: InstructionFile) => (f.scope === 'All your projects' ? 'Applies to every project on this computer.' : f.key === 'claude-local' ? 'Just for you: usually kept out of git.' : 'Shared with anyone working in this project once committed.');
 const READ_BY: Record<string, string> = { claude: 'Claude Code', 'claude-local': 'Claude Code', 'claude-user': 'Claude Code', agents: 'Codex and others', 'codex-user': 'Codex' };

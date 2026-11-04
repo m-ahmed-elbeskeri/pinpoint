@@ -1,5 +1,380 @@
-/* Chats sidebar: project tree, threads, history. */
+/* Chats sidebar: every project folder is a section in one tree, its chats underneath. */
 
+/* Rows share one grid: an 18px icon slot at 8px, the label at 34px, so a project's name
+   and its chats' titles start on the same line. */
+.threads {
+  --row: 30px;
+  --slot: 18px;
+  --indent: 34px;
+  --side-bg: var(--bg-2);
+  grid-area: threads;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--side-bg);
+  border-right: 1px solid var(--line);
+  position: relative;
+  overflow: clip;
+  font-size: 13px;
+}
+/* The drag handle sits inside the sidebar's right edge, since the sidebar clips overflow. */
+.threads-resizer { top: 0; bottom: 0; right: 0; }
+.threads-head {
+  height: 52px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 16px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.threads-head button { -webkit-app-region: no-drag; }
+.threads-head .icon-btn { color: var(--muted); border-radius: 7px; }
+.threads-brand { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: -.005em; color: var(--text); }
+
+/* ---- new chat and search ---- */
+.threads-actions { display: grid; gap: 2px; padding: 0 8px 4px; }
+.threads-new, .threads-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row);
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+.threads-new svg, .threads-search > svg { flex-shrink: 0; width: var(--slot); }
+.threads-new { color: var(--text); font-weight: 500; transition: background .12s; }
+.threads-new:hover:not(:disabled) { background: var(--bg-3); }
+.threads-new:disabled { color: var(--muted); }
+.threads-new kbd { margin-left: auto; opacity: 0; transition: opacity .12s; }
+.threads-new:hover:not(:disabled) kbd { opacity: 1; }
+.threads-search { color: var(--muted); cursor: text; transition: background .12s, border-color .12s; }
+.threads-search:hover { background: var(--bg-3); }
+.threads-search:focus-within { background: var(--bg); border-color: var(--ring); }
+.threads-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  outline: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.threads-search input::placeholder { color: var(--text-2); }
+.threads-search:focus-within input::placeholder { color: var(--muted); }
+.threads-search button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: var(--muted); }
+.threads-search button:hover { background: var(--bg-4); color: var(--text); }
+
+.threads-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 8px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+/* ---- the Projects heading, with Open folder on its right ---- */
+.threads-label {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  margin-top: 6px;
+  padding: 0 4px 0 8px;
+  background: var(--side-bg);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  color: var(--muted);
+}
+.threads-label span { flex: 1; }
+.threads-label button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--muted);
+  transition: background .12s, color .12s;
+}
+.threads-label button:hover:not(:disabled) { background: var(--bg-4); color: var(--text); }
+
+/* ---- a project ---- */
+.proj-node { position: relative; }
+/* Folded projects stack at row pitch; an open one leaves a gap after its chats. */
+.proj-node + .proj-node { margin-top: 0; }
+.proj-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row);
+  padding: 0 4px 0 8px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background .12s, color .12s;
+}
+.proj-row:hover, .proj-row.menu-open { background: var(--bg-3); color: var(--text-2); }
+.proj-row:not(.current) { color: var(--text-2); font-weight: 500; }
+.proj-row.current, .proj-row.current .proj-icon { color: var(--text); }
+.proj-row.current .proj-icon { color: var(--text-2); }
+/* Open folders sit a step brighter than closed ones, so the state reads without hovering. */
+.proj-row.open .proj-icon { color: var(--text-2); }
+.proj-row:not(.open) .proj-icon { opacity: .75; }
+.proj-pin { flex-shrink: 0; margin-left: -2px; color: var(--muted); opacity: .7; }
+.proj-row:hover .proj-pin { display: none; }
+.proj-name small { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.proj-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The folder icon turns into a disclosure caret on hover. */
+.proj-icon { position: relative; display: grid; place-items: center; width: var(--slot); height: var(--slot); flex-shrink: 0; color: var(--muted); }
+.proj-icon > svg { transition: opacity .12s, transform .15s; }
+.proj-chev { position: absolute; opacity: 0; }
+.proj-row:hover .proj-icon > svg:first-child { opacity: 0; }
+.proj-row:hover .proj-chev { opacity: 1; color: var(--text-2); }
+.proj-row.open .proj-chev { transform: rotate(90deg); }
+.proj-tools { display: none; gap: 1px; flex-shrink: 0; margin-left: auto; }
+.proj-row:hover .proj-tools, .proj-row.menu-open .proj-tools { display: flex; }
+/* A collapsed project still shows what its chats are doing; the tools take its place on hover. */
+.proj-status { margin-left: auto; display: flex; align-items: center; gap: 5px; padding-right: 8px; color: var(--text-2); }
+.proj-row:hover .proj-status, .proj-row.menu-open .proj-status { display: none; }
+.proj-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.proj-tools button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.proj-tools button:hover:not(:disabled) { background: var(--bg-4); color: var(--text); }
+.proj-chats { padding: 1px 0 10px; }
+
+/* ---- a chat ---- */
+.thread {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row);
+  padding: 0 4px 0 8px;
+  border-radius: 7px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+}
+.thread:hover, .thread.kb { background: var(--bg-3); color: var(--text); }
+.thread.kb { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.thread.on { background: var(--bg-4); color: var(--text); cursor: default; }
+.thread.archived { color: var(--muted); }
+/* Chats in projects other than this window's sit back a step. */
+.proj-node:not(.here) .thread { color: var(--muted); }
+.proj-node:not(.here) .thread:hover { color: var(--text); }
+.thread-state {
+  width: var(--slot);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+/* Long titles fade out rather than end in an ellipsis, which keeps a few more letters. */
+.thread-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.thread-time {
+  flex: 0 0 auto;
+  margin-left: 2px;
+  padding-right: 2px;
+  min-width: 22px;
+  font-size: 11px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.thread-pinned { color: var(--muted); }
+.thread-failed { color: var(--bad-fg); }
+/* A dot for a chat that wants a look: amber when it's waiting on you, green when it finished elsewhere. */
+.thread-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+/* Idle rows sit a step back; the open row and hover come up to full white, and the dot and time mark the ones that want you. */
+.history-item:not(.on):not(:hover) .thread-title { color: color-mix(in srgb, var(--text-2) 88%, var(--muted)); }
+.thread.finished:not(.on):not(:hover) .thread-title, .thread.waiting:not(.on):not(:hover) .thread-title { color: var(--text-2); }
+.thread.finished .thread-time { color: var(--ok); }
+.thread.waiting .thread-dot, .thread-dot.waiting { background: var(--warn); }
+.thread.waiting .thread-time { color: var(--warn); }
+.thread.running .thread-time { color: var(--text-2); }
+.thread-time.failed { color: var(--bad-fg); }
+/* Light theme: status text a step darker, so 11px times clear 4.5:1 on the sidebar grey. */
+:root[data-theme="light"] .thread.finished .thread-time { color: var(--ok-fg); }
+:root[data-theme="light"] .thread.waiting .thread-time, :root[data-theme="light"] .proj-count { color: var(--warn-fg); }
+
+/* On hover the PR icon and ⋯ float over the row's right end, so the title doesn't reflow. */
+.thread { --row-bg: var(--side-bg); }
+.thread:hover, .thread.kb { --row-bg: var(--bg-3); }
+.thread.on { --row-bg: var(--bg-4); }
+.thread-x, .thread .pull-icon {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--row-bg);
+}
+.thread-x { right: 4px; box-shadow: -12px 0 8px -2px var(--row-bg); }
+.thread .pull-icon { right: 28px; box-shadow: -12px 0 8px -2px var(--row-bg); }
+.thread:has(.pull-icon) .thread-x { box-shadow: none; }
+.thread:hover .thread-x, .thread:hover .pull-icon { display: grid; }
+.thread:hover .thread-time, .thread:has(.thread-more.open) .thread-time { visibility: hidden; }
+.thread-x:hover { color: var(--text); background: var(--bg-4); }
+.thread-more.open { display: grid; color: var(--text); background: var(--bg-4); }
+.thread .pull-icon.merged { color: #a78bfa; }
+.thread .pull-icon:hover { color: var(--text); background: var(--bg-4); }
+.thread-rename {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--ring);
+  background: var(--bg);
+  outline: 0;
+  font-size: 13px;
+}
+
+/* A chat that's working: a soft band of light travels across its row. */
+.thread.running {
+  background-image: linear-gradient(100deg, transparent 40%, color-mix(in srgb, var(--text) var(--shimmer, 6%), transparent) 50%, transparent 60%);
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  animation: thread-working 3.2s ease-in-out infinite;
+}
+/* Sweep, then rest a beat, so it reads as alive rather than as a second selection. */
+@keyframes thread-working {
+  0% { background-position: 130% 0; }
+  70%, 100% { background-position: -30% 0; }
+}
+:root[data-theme="light"] .threads { --shimmer: 5%; }
+@media (prefers-reduced-motion: reduce) { .thread.running { animation: none; background-image: none; } }
+
+/* Side chats and background tasks, one step in under the chat that started them. */
+/* Children end where their parent's title ends, so the column stays square. */
+.thread.sub-chat { height: 26px; padding: 0 34px 0 calc(var(--indent) - 4px); gap: 6px; font-size: 12px; }
+.thread.sub-chat:has(.thread-time) { padding-right: 4px; }
+.thread.sub-chat .thread-state { width: 14px; color: var(--text-2); }
+.thread.sub-chat .thread-time { font-size: 10.5px; }
+.thread.sub-chat .thread-state .thread-failed, .thread.sub-chat.failed .thread-state { color: var(--bad-fg); }
+/* A thin guide down from the parent's icon ties the group together. */
+.thread.sub-chat::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-2);
+}
+
+.threads-empty, .threads-more {
+  display: block;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px 0 var(--indent);
+  font-size: 11.5px;
+  line-height: 26px;
+  text-align: left;
+  color: var(--muted);
+}
+.threads-more { display: flex; align-items: center; gap: 6px; margin-top: 2px; border-radius: 7px; }
+.threads-more:hover:not(:disabled) { color: var(--text); }
+
+/* No project yet: one clear way in. */
+.threads-start {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--line-2);
+  color: var(--text-2);
+  text-align: left;
+  transition: border-color .12s, background .12s;
+}
+.threads-start svg { margin-bottom: 4px; color: var(--muted); }
+.threads-start b { color: var(--text); font-weight: 600; }
+.threads-start span { font-size: 12px; line-height: 1.45; color: var(--muted); }
+.threads-start:hover:not(:disabled) { border-color: var(--ring); background: var(--bg-3); }
+
+/* ---- menus: a chat's (rename, pin, archive, export, delete) and a project's ---- */
+.thread-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 2px;
+  min-width: 200px;
+  animation: pop .1s ease-out;
+  z-index: 40;
+}
+.thread-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  color: var(--text-2);
+  text-align: left;
+}
+.thread-menu button:hover:not(:disabled) { background: var(--bg-4); color: var(--text); }
+.thread-menu button:disabled { opacity: .5; }
+.thread-menu button.danger:hover { color: var(--bad-fg); }
+.proj-menu { top: calc(var(--row) + 2px); right: 4px; min-width: 214px; }
+
+/* ---- footer: a row of icon buttons ---- */
+.threads-foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+}
+.threads-foot .spacer { flex: 1; }
+.threads-foot button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--muted);
+  transition: background .12s, color .12s;
+}
+.threads-foot button:hover { background: var(--bg-3); color: var(--text); }
+
+/* The top bar's chat history menu, used while the sidebar is hidden. */
 .history-menu { width: 300px; }
 .history-item { cursor: pointer; }
 .history-item .icon-btn { opacity: 0; }
@@ -19,209 +394,9 @@
   line-height: 14px;
   text-align: center;
 }
-.threads-head button { -webkit-app-region: no-drag; }
-.threads-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: -.005em;
-}
-.threads-head .icon-btn { color: var(--muted); }
-.threads-actions { display: grid; gap: 6px; padding: 0 8px 6px; }
-.threads-new {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  height: 32px;
-  padding: 0 9px;
-  border-radius: 8px;
-  color: var(--text);
-  font-weight: 500;
-  transition: background .12s;
-}
-.threads-new:hover:not(:disabled) { background: var(--bg-4); }
-.threads-new kbd, .threads-foot kbd { margin-left: auto; opacity: 0; transition: opacity .12s; }
-.threads-new:hover kbd, .threads-foot button:hover kbd { opacity: 1; }
-.threads-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 8px 0 10px;
-  border-radius: 8px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  cursor: text;
-  transition: border-color .12s;
-}
-.threads-search:focus-within { border-color: var(--ring); }
-.threads-search input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: 0;
-  outline: 0;
-  font-size: 12.5px;
-}
-.threads-search input::placeholder { color: var(--muted); }
-.threads-label {
-  padding: 14px 8px 4px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.threads-empty {
-  padding: 4px 8px 8px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.proj-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 30px;
-  padding: 0 8px;
-  border-radius: 8px;
-  color: var(--text-2);
-  font-size: 12.5px;
-  text-align: left;
-  transition: background .12s, color .12s;
-}
-.proj-row span {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.proj-row svg { flex-shrink: 0; color: var(--muted); }
-.proj-row:hover:not(:disabled) { background: var(--bg-3); color: var(--text); }
-.proj-row.current { color: var(--text); font-weight: 600; margin-top: 4px; }
-.proj-row.add { color: var(--muted); }
-.thread {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 4px 0 2px;
-  border-radius: 8px;
-  color: var(--text-2);
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: background .1s, color .1s;
-}
-.thread:hover { background: var(--bg-3); color: var(--text); }
-.thread.on { background: var(--bg-4); color: var(--text); cursor: default; }
-.thread.finished .thread-title { color: var(--text); font-weight: 500; }
-.thread.running .thread-time { color: var(--accent-2); }
-.thread:hover .thread-x, .thread-x.confirm { display: grid; }
-.thread:hover .thread-time, .thread:has(.thread-x.confirm) .thread-time { display: none; }
-.thread-x:hover { color: #ff8aa0; background: rgba(255, 77, 109, .12); }
-.thread-x.confirm, .thread-x.confirm:hover { color: #fff; background: var(--bad); }
-.threads-foot svg { color: var(--muted); }
 
-/* A chat that finished while you were elsewhere: bold title and "done" in place of the time. */
-.thread.finished .thread-time { color: var(--ok); }
-.task:hover { background: var(--bg-3); color: var(--text); }
-.task.done .thread-state { color: var(--ok); }
-.task.failed .thread-state { color: var(--bad); }
-.task:hover .thread-x { display: grid; }
-
-/* ---- project tree: other projects expand to show their chats ---- */
-.proj-node .proj-row { cursor: pointer; }
-.proj-chev { color: var(--muted); transition: transform .12s; margin-left: -2px; }
-.proj-row.open .proj-chev { transform: rotate(90deg); }
-.proj-go {
-  display: none;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 5px;
-  font-size: 11px;
-  color: var(--text-2);
-  background: var(--bg-4);
-}
-.proj-row:hover .proj-go { display: block; }
-.proj-go:hover { color: var(--text); }
-.thread.nested { padding-left: 14px; }
-.threads-empty.nested { padding: 2px 8px 6px 32px; }
-
-/* ---- chat menu: rename, pin, archive, export, delete ---- */
-.thread-more.open { display: grid; color: var(--text); background: var(--bg-4); }
-.thread:has(.thread-more.open) .thread-time { display: none; }
-.thread-menu {
-  position: absolute;
-  top: calc(100% + 2px);
-  right: 2px;
-  min-width: 190px;
-  padding: 4px;
-  border-radius: 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--line-2);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .4);
-  animation: pop .1s ease-out;
-  z-index: 40;
-}
-.thread-menu button.danger:hover { color: var(--bad-fg, #ff8aa0); }
-.thread-pinned { margin-right: 5px; color: var(--muted); vertical-align: -1px; }
-.threads-more {
-  display: block;
-  width: 100%;
-  padding: 8px 8px 2px;
-  text-align: left;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.threads-more:hover { color: var(--text-2); }
-.thread-x.confirm:not(.thread-more), .thread-x.confirm:not(.thread-more):hover {
-  color: #fff;
-  background: var(--bad);
-}
-.threads-foot button span, .threads-foot kbd { display: none; }
-.threads-foot .spacer { flex: 1; }
-
-/* ---- text size, density, enter motion, rewind, resume, failed chats ---- */
+/* ---- text size and density ---- */
 :root[data-text-size="small"] :is(.threads,.topbar,.panel,.drawer-wrap,.statusbar) { zoom: .92; }
 :root[data-text-size="large"] :is(.threads,.topbar,.panel,.drawer-wrap,.statusbar) { zoom: 1.1; }
-:root[data-density="compact"] .thread, :root[data-density="compact"] .task, :root[data-density="compact"] .proj-row {
-  height: 26px;
-}
-:root[data-density="compact"] .threads-label { padding-top: 10px; }
-.thread-time.failed { color: var(--bad-fg, #ff8aa0); }
-
-/* ---- the folder opens a menu: file manager, editor, terminal, path, switch ---- */
-.proj-anchor, .proj-node { position: relative; }
-.proj-caret { margin-left: auto; opacity: 0; color: var(--muted); }
-.proj-row:hover .proj-caret, .proj-row.open .proj-caret { opacity: 1; }
-.proj-row.open { background: var(--bg-3); }
-.proj-menu {
-  top: 32px;
-  left: 4px;
-  right: auto;
-  min-width: 210px;
-}
-.proj-menu button:disabled { opacity: .5; }
-
-/* A chat that's working: a soft band of light travels across its row. */
-.thread.running {
-  background-image: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--text) 11%, transparent) 50%, transparent 70%);
-  background-size: 250% 100%;
-  background-repeat: no-repeat;
-  animation: thread-working 2.4s ease-in-out infinite;
-}
-@keyframes thread-working {
-  from { background-position: 130% 0; }
-  to { background-position: -30% 0; }
-}
-@media (prefers-reduced-motion: reduce) { .thread.running { animation: none; background-image: none; } }
-
-/* Side chats and background tasks, under the chat that started them. */
-.thread.sub-chat { margin-left: 14px; min-height: 26px; font-size: 12px; color: var(--text-2); }
-.thread.sub-chat .thread-state { color: var(--muted); }
-.thread.sub-chat .thread-time { font-size: 10.5px; }
-.thread.sub-chat.on { color: var(--text); }
+:root[data-density="compact"] .threads { --row: 26px; }
+:root[data-density="compact"] .threads-label { height: 28px; margin-top: 4px; }

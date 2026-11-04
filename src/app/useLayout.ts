@@ -11,6 +11,7 @@ export type ChatLayout = 'docked' | 'expanded' | 'tab' | 'floating';
 export const CHAT_LAYOUTS: ChatLayout[] = ['docked', 'expanded', 'tab', 'floating'];
 const SNAP_TAB_PX = 240; // a chat dragged thinner than this becomes a tab
 const SNAP_MAIN_SHARE = 0.68; // and wider than this share of the window, the main view
+const clampSide = (w: number) => Math.round(Math.min(420, Math.max(220, w))); // the chats sidebar's drag range
 
 export function useLayout(app: AppContext) {
   const settings = app.settings;
@@ -19,7 +20,9 @@ export function useLayout(app: AppContext) {
   const [panelWidth, setPanelWidth] = useState<number | null>(null);
   // Terminal, dev server, network and logs open as tabs beside the page tabs.
   const [toolTabs, setToolTabs] = useState<DrawerTab[]>([]);
-  const [resizing, setResizing] = useState<'panel' | 'drawer' | 'device' | null>(null);
+  const [resizing, setResizing] = useState<'panel' | 'threads' | 'drawer' | 'device' | null>(null);
+  const [threadsWidth, setThreadsWidth] = useState<number | null>(null);
+  const sideW = () => clampSide(threadsWidth ?? app.settings?.threadsWidth ?? THREADS_W);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('term');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -42,7 +45,7 @@ export function useLayout(app: AppContext) {
     app.dragging.current = true;
     const grid = (e.currentTarget as HTMLElement).closest('.app') as HTMLElement | null;
     const left = app.settings?.panelSide === 'left';
-    const tw = app.settings?.threadsHidden ? 0 : THREADS_W;
+    const tw = app.settings?.threadsHidden ? 0 : sideW();
     let last = 0, raw = 0, frame = 0;
     const room = window.innerWidth - tw;
     const snapOf = (w: number) => (w < SNAP_TAB_PX ? 'tab' : w > room * SNAP_MAIN_SHARE ? 'expanded' : null);
@@ -81,6 +84,33 @@ export function useLayout(app: AppContext) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
+  // Dragging the sidebar's edge: painted straight onto the grid while moving, saved on release.
+  const startThreadsResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    setResizing('threads');
+    app.dragging.current = true;
+    const grid = (e.currentTarget as HTMLElement).closest('.app') as HTMLElement | null;
+    let last = 0, frame = 0;
+    const paint = () => { frame = 0; if (grid && last) grid.style.gridTemplateColumns = left ? `${last}px ${pw}px 1fr` : `${last}px 1fr ${pw}px`; };
+    const move = (ev: PointerEvent) => { last = clampSide(ev.clientX); if (!frame) frame = requestAnimationFrame(paint); };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (frame) cancelAnimationFrame(frame);
+      app.dragging.current = false;
+      grid?.style.removeProperty('grid-template-columns');
+      setResizing(null);
+      if (!last) return;
+      setThreadsWidth(last);
+      app.saveSettings({ threadsWidth: last });
+      const a = app.area.current;
+      if (a) app.setAvail({ w: Math.floor(a.clientWidth), h: Math.floor(a.clientHeight) });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const resetThreadsWidth = () => { setThreadsWidth(THREADS_W); app.saveSettings({ threadsWidth: THREADS_W }); };
   const openTool = (t: DrawerTab) => { setDrawerTab(t); setDrawerOpen(true); };
   const togglePanel = () => app.saveSettings({ panelHidden: !app.settings?.panelHidden });
   const toggleThreads = () => { if (app.zen) setZen(false); else app.saveSettings({ threadsHidden: !app.settings?.threadsHidden }); };
@@ -100,7 +130,7 @@ export function useLayout(app: AppContext) {
   };
   const left = settings?.panelSide === 'left';
   const threadsOn = !settings?.threadsHidden && !zen;
-  const tw = threadsOn ? THREADS_W : 0;
+  const tw = threadsOn ? sideW() : 0;
   const chatLayout = settings?.chatLayout || 'docked';
   // As a tab, the chat is either the tab in front or a small composer floating over the page.
   const [chatTabOn, setChatTabOn] = useState(true);
@@ -133,5 +163,5 @@ export function useLayout(app: AppContext) {
     gridTemplateAreas: `'threads top top' ${row2}${statusOn ? " 'threads status status'" : ''}`,
   };
 
-  Object.assign(app, { chatLayout, chatTabOn, setChatTabOn, floatOpen, setFloatOpen, setChatLayout, cycleChatLayout, chatLayoutBack, applyLayout, compare, diffView, drawerOpen, drawerTab, enginesOpen, frame, gridStyle, historyOpen, layoutsOpen, left, openTool, paletteOpen, patchView, resizing, saveLayout, setCompare, setDiffView, setDrawerOpen, setDrawerTab, setEnginesOpen, setHistoryOpen, setLayoutsOpen, setPaletteOpen, setPanelWidth, setPatchView, setResizing, setSettingsOpen, setSheet, setShortcutsOpen, setTimelineOpen, setToolTabs, setWsOpen, settingsOpen, sheet, shortcutsOpen, split, startResize, statusOn, threadsOn, timelineOpen, togglePanel, toggleThreads, toggleZen, toolTabs, wsOpen, zen });
+  Object.assign(app, { startThreadsResize, resetThreadsWidth, chatLayout, chatTabOn, setChatTabOn, floatOpen, setFloatOpen, setChatLayout, cycleChatLayout, chatLayoutBack, applyLayout, compare, diffView, drawerOpen, drawerTab, enginesOpen, frame, gridStyle, historyOpen, layoutsOpen, left, openTool, paletteOpen, patchView, resizing, saveLayout, setCompare, setDiffView, setDrawerOpen, setDrawerTab, setEnginesOpen, setHistoryOpen, setLayoutsOpen, setPaletteOpen, setPanelWidth, setPatchView, setResizing, setSettingsOpen, setSheet, setShortcutsOpen, setTimelineOpen, setToolTabs, setWsOpen, settingsOpen, sheet, shortcutsOpen, split, startResize, statusOn, threadsOn, timelineOpen, togglePanel, toggleThreads, toggleZen, toolTabs, wsOpen, zen });
 }

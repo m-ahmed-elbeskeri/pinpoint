@@ -29,12 +29,14 @@ export interface Settings {
   url: string;
   devCommand: string;
   recentProjects: string[];
+  pinnedProjects?: string[];
   panelSide: 'left' | 'right';
   panelWidth: number;
   terminalShell?: string;
   serverLog?: string;
   panelHidden: boolean;
   threadsHidden?: boolean;
+  threadsWidth?: number;
   theme?: 'system' | 'dark' | 'light';
   statusBar?: boolean;
   tray?: boolean;

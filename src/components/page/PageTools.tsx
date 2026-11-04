@@ -20,14 +20,14 @@ export const VISION: { id: string; label: string; hint: string }[] = [
 ];
 
 const STRESS: { id: string; label: string; hint: string }[] = [
-  { id: 'long', label: 'Long text', hint: 'Every piece of text three times as long' },
-  { id: 'pseudo', label: 'Translated-length text', hint: 'Accented and longer, like a translation' },
-  { id: 'rtl', label: 'Right-to-left', hint: 'dir="rtl" on the page' },
-  { id: 'empty', label: 'Empty lists', hint: 'Lists, tables and repeated items emptied' },
+  { id: 'long', label: 'Long text', hint: 'All text three times as long' },
+  { id: 'pseudo', label: 'Translated-length text', hint: 'Accented and longer, like German' },
+  { id: 'rtl', label: 'Right-to-left', hint: 'Laid out as for Arabic or Hebrew' },
+  { id: 'empty', label: 'Empty lists', hint: 'Lists and tables with nothing in them' },
 ];
 const NETWORK: { id: NetworkMode; label: string; hint: string }[] = [
   { id: 'normal', label: 'Normal', hint: 'Your real network and API' },
-  { id: 'slow', label: 'Slow', hint: 'Slow 3G: 400 ms delay, 50 kB a second' },
+  { id: 'slow', label: 'Slow', hint: 'Slow 3G: 400 ms delay, 50 kB/s' },
   { id: 'hang', label: 'Stuck', hint: 'API requests never answer: the page stays in its loading state' },
   { id: 'error', label: 'Failing', hint: 'API requests fail with 500: the page shows its error state' },
   { id: 'offline', label: 'Offline', hint: 'No network at all' },
@@ -62,10 +62,13 @@ function CondRow({ label, hint, children }: { label: string; hint?: string; chil
     </div>
   );
 }
-function CondSwitch({ label, hint, on, set }: { label: string; hint: string; on: boolean; set(on: boolean): void }) {
+function Heading({ n, children }: { n: number; children: React.ReactNode }) {
+  return <h5>{children}{n > 0 && <i className="cond-n">{n} on</i>}</h5>;
+}
+function CondSwitch({ label, hint, title, on, set }: { label: string; hint?: React.ReactNode; title?: string; on: boolean; set(on: boolean): void }) {
   return (
-    <button type="button" role="switch" aria-checked={on} className={`cond-item cond-toggle ${on ? 'on' : ''}`} onClick={() => set(!on)}>
-      <span className="cond-label"><b>{label}</b><small>{hint}</small></span>
+    <button type="button" role="switch" aria-checked={on} className={`cond-item cond-toggle ${on ? 'on' : ''}`} onClick={() => set(!on)} title={title}>
+      <span className="cond-label"><b>{label}</b>{hint && <small>{hint}</small>}</span>
       <i className="cond-knob" />
     </button>
   );
@@ -81,12 +84,17 @@ function CondSeg<T>({ options, value, set, wrap }: { options: { id: T; label: Re
 }
 
 function FocusSummary({ report, onAsk }: { report: FocusReport | null; onAsk(): void }) {
+  const [open, setOpen] = useState<string[]>([]);
   if (!report) return <p className="cond-note">Looking at the page…</p>;
   return (
     <div className="cond-report">
-      <p className="cond-note">{report.count} stop{report.count === 1 ? '' : 's'} for the Tab key, numbered in the order the keyboard reaches them. Red ones have a problem.</p>
-      {report.issues.map((i) => <div key={i.kind} className="cond-issue" title={i.items.join('\n')}><b>{i.text}</b>{i.items[0] && <small className="mono">{i.items[0]}</small>}</div>)}
-      {report.issues.length > 0 && <button type="button" className="btn xs" onClick={onAsk}>Ask to fix</button>}
+      <div className="cond-report-head">
+        <span>{report.count} Tab stop{report.count === 1 ? '' : 's'} · {report.issues.length ? <em>{report.issues.length} issue{report.issues.length === 1 ? '' : 's'}</em> : 'no issues'}</span>
+        {report.issues.length > 0 && <button type="button" className="btn xs" onClick={onAsk}>Ask to fix</button>}
+      </div>
+      {report.issues.map((i) => <div key={i.kind} className="cond-issue" title={i.items.join('\n')}><b>{i.text}</b>{i.items[0] && (open.includes(i.kind) || i.items.length === 1
+        ? i.items.map((it) => <small key={it} className="mono">{it}</small>)
+        : <small className="mono">{i.items[0]} <button type="button" className="cond-more" onClick={() => setOpen([...open, i.kind])}>+{i.items.length - 1} more</button></small>)}</div>)}
     </div>
   );
 }
@@ -97,10 +105,12 @@ function RenderSummary({ report, onAsk, onReset }: { report: RenderReport | null
   const problems = busy.some((c) => c.same || c.identity.length) || report.slow.length > 0 || report.shifts.length > 0;
   return (
     <div className="cond-report">
-      <p className="cond-note">
-        {report.react ? 'Use the page: each component flashes when it renders (green, then amber, then red as it keeps rendering). ' : 'No React on this page, so only slow interactions and layout shifts are watched. '}
-        Last {report.seconds}s.
-      </p>
+      <div className="cond-report-head">
+        <span>Last {report.seconds}s{problems && <> · <em>needs a look</em></>}</span>
+        <button type="button" className="btn xs ghost" onClick={onReset}>Start over</button>
+        {problems && <button type="button" className="btn xs" onClick={onAsk}>Ask to fix</button>}
+      </div>
+      <p className="cond-note">{report.react ? 'Use the page: components flash green, then amber, then red as they keep rendering.' : 'No React here, so only slow interactions and layout shifts are watched.'}</p>
       {busy.slice(0, 5).map((c) => (
         <div key={c.name} className="cond-issue" title={c.file || ''}>
           <b>&lt;{c.name}&gt; rendered {c.count}×</b>
@@ -109,10 +119,6 @@ function RenderSummary({ report, onAsk, onReset }: { report: RenderReport | null
       ))}
       {report.slow.slice(-3).map((s, i) => <div key={`s${i}`} className="cond-issue warn"><b>{s.name} took {s.ms} ms</b><small className="mono">{s.target}</small></div>)}
       {report.shifts.slice(-2).map((s, i) => <div key={`l${i}`} className="cond-issue warn"><b>Layout shift {s.value}</b>{s.nodes[0] && <small className="mono">{s.nodes[0]}</small>}</div>)}
-      <div className="cond-actions">
-        <button type="button" className="btn xs" onClick={onReset}>Start over</button>
-        {problems && <button type="button" className="btn xs" onClick={onAsk}>Ask to fix</button>}
-      </div>
     </div>
   );
 }
@@ -138,6 +144,15 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
   const toggle = (id: string) => set({ ...value, stress: value.stress.includes(id) ? value.stress.filter((s) => s !== id) : [...value.stress, id] });
   const reset = () => { set(NO_CONDITIONS); setEnv({ colorScheme: null, reducedMotion: false }); };
   const net = NETWORK.find((n) => n.id === value.network)!;
+  const active = [
+    env.colorScheme && `${env.colorScheme[0].toUpperCase()}${env.colorScheme.slice(1)} theme`,
+    value.vision && VISION.find((v) => v.id === value.vision)?.label,
+    env.reducedMotion && 'Reduced motion',
+    ...value.stress.map((s) => STRESS.find((x) => x.id === s)?.label),
+    value.network !== 'normal' && `${net.label} network`,
+    value.anim !== 1 && (value.anim ? `Animations ${value.anim * 100}%` : 'Animations paused'),
+    value.focus && 'Keyboard order', value.renders && 'Render activity',
+  ].filter(Boolean) as string[];
 
   return (
     <div className="cond-wrap">
@@ -145,58 +160,63 @@ export function ConditionsMenu({ value, set, onStep, env, setEnv, layout, setLay
         <FlaskConical size={14} />{count > 0 && <i className="cond-count">{count}</i>}
       </button>
       {open && createPortal(
-        <div className="cond-pop" style={pos ? { left: pos.x, top: pos.y, right: 'auto' } : undefined}>
+        <div className={`cond-pop ${count ? 'changed' : ''}`} style={pos ? { left: pos.x, top: pos.y, right: 'auto' } : undefined}>
           <div className="cond-head" onPointerDown={startDrag} title="Drag to move">
-            <div><b>Test conditions</b><small>{count ? `${count} changed from normal` : 'The page as it normally is'}</small></div>
-            <button type="button" className="cond-reset" disabled={!count} onClick={reset}>Reset</button>
+            <div><b>Test conditions</b><small title={active.join(', ')}>{count ? active.join(' · ') : 'The page as it normally is'}</small></div>
+            <button type="button" className="cond-reset" disabled={!count} onClick={reset} title="Put everything back to normal">Reset all</button>
             <button type="button" className="cond-close" onClick={() => setOpen(false)} title="Close (Esc)"><X size={14} /></button>
           </div>
 
           <section>
-            <h5>Appearance</h5>
-            <CondRow label="Theme" hint="Light or dark, as the system reports it">
-              <CondSeg options={[{ id: null, label: 'System' }, { id: 'dark' as const, label: 'Dark' }, { id: 'light' as const, label: 'Light' }]} value={env.colorScheme} set={(colorScheme) => setEnv({ ...env, colorScheme })} />
+            <Heading n={(env.colorScheme ? 1 : 0) + (value.vision ? 1 : 0) + (env.reducedMotion ? 1 : 0)}>How it's seen</Heading>
+            <CondRow label="Theme">
+              <CondSeg options={[{ id: null, label: 'System' }, { id: 'light' as const, label: 'Light' }, { id: 'dark' as const, label: 'Dark' }]} value={env.colorScheme} set={(colorScheme) => setEnv({ ...env, colorScheme })} />
             </CondRow>
-            <CondSwitch label="Reduced motion" hint="As for someone who has turned animations off" on={env.reducedMotion} set={(reducedMotion) => setEnv({ ...env, reducedMotion })} />
-            <CondSwitch label="Layout guides" hint="Hold Alt while selecting to see margins, padding, flex and grid, and to measure." on={layout} set={setLayout} />
+            <CondRow label="Vision" hint={value.vision ? VISION.find((v) => v.id === value.vision)?.hint.split(': ')[1] : undefined}>
+              <select className={`cond-select ${value.vision ? 'on' : ''}`} value={value.vision} onChange={(e) => set({ ...value, vision: e.target.value })} aria-label="Simulated vision">
+                {VISION.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+              </select>
+            </CondRow>
+            <CondSwitch label="Reduced motion" hint="As if animations are off in the OS" on={env.reducedMotion} set={(reducedMotion) => setEnv({ ...env, reducedMotion })} />
           </section>
 
           <section>
-            <h5>Vision</h5>
-            <CondSeg wrap options={VISION} value={value.vision} set={(vision) => set({ ...value, vision })} />
-            <p className="cond-note">{VISION.find((v) => v.id === value.vision)?.hint}.</p>
-          </section>
-
-          <section>
-            <h5>See how it works</h5>
-            <CondSwitch label="Keyboard order" hint="Number every stop for the Tab key and flag what a keyboard or screen reader user would trip on" on={value.focus} set={(focus) => set({ ...value, focus })} />
-            {value.focus && <FocusSummary report={focusReport} onAsk={onAskFocus} />}
-            <CondSwitch label="Render activity" hint="Flash components as they render, and catch slow clicks and content that jumps" on={value.renders} set={(renders) => set({ ...value, renders })} />
-            {value.renders && <RenderSummary report={renderReport} onAsk={onAskRenders} onReset={onResetRenders} />}
-          </section>
-
-          <section>
-            <h5>Awkward content</h5>
+            <Heading n={value.stress.length}>Awkward content</Heading>
             {STRESS.map((s) => <CondSwitch key={s.id} label={s.label} hint={s.hint} on={value.stress.includes(s.id)} set={() => toggle(s.id)} />)}
           </section>
 
           <section>
-            <h5>Data</h5>
+            <Heading n={value.network !== 'normal' ? 1 : 0}>Network</Heading>
             <CondSeg options={NETWORK} value={value.network} set={(network) => set({ ...value, network })} />
-            <p className="cond-note">{net.hint}.{value.network !== 'normal' ? ' The page reloads to show it.' : ''}</p>
+            <p className="cond-note">{net.hint}.{value.network !== 'normal' ? ' Page reloads to apply.' : ''}</p>
           </section>
 
           <section>
-            <h5>Animation speed</h5>
+            <Heading n={value.anim !== 1 ? 1 : 0}>Animation speed</Heading>
             <div className="cond-anim">
               <CondSeg
-                options={[...SPEEDS.map((sp) => ({ id: sp.rate, label: sp.label })), { id: 0, label: <><Pause size={11} /> Paused</>, hint: 'Hold every animation and transition where it is' }]}
+                options={[...SPEEDS.map((sp) => ({ id: sp.rate, label: sp.label })), { id: 0, label: <><Pause size={11} /> Pause</>, hint: 'Hold every animation and transition where it is' }]}
                 value={value.anim} set={(anim) => set({ ...value, anim })}
               />
-              <button type="button" className="cond-step" disabled={value.anim !== 0} onClick={onStep} title={value.anim === 0 ? 'Move every animation on by about a tenth of a second' : 'Pause first, then step through frame by frame'}>
-                <StepForward size={12} /> Step
-              </button>
+              {value.anim === 0 && (
+                <button type="button" className="cond-step" onClick={onStep} title="Move every animation on by about a tenth of a second">
+                  <StepForward size={12} /> Step
+                </button>
+              )}
             </div>
+          </section>
+
+          <section>
+            <Heading n={(value.focus ? 1 : 0) + (value.renders ? 1 : 0) + (layout ? 1 : 0)}>Inspect</Heading>
+            <div className={`cond-block ${value.focus ? 'on' : ''}`}>
+            <CondSwitch label="Keyboard order" hint="Number each Tab stop and flag problems" on={value.focus} set={(focus) => set({ ...value, focus })} />
+            {value.focus && <FocusSummary report={focusReport} onAsk={onAskFocus} />}
+            </div>
+            <div className={`cond-block ${value.renders ? 'on' : ''}`}>
+            <CondSwitch label="Render activity" hint="Flash re-renders, catch slow clicks and jumps" on={value.renders} set={(renders) => set({ ...value, renders })} />
+            {value.renders && <RenderSummary report={renderReport} onAsk={onAskRenders} onReset={onResetRenders} />}
+            </div>
+            <CondSwitch label="Layout guides" hint={<>Hold <kbd>Alt</kbd> while selecting to measure</>} on={layout} set={setLayout} />
           </section>
         </div>,
         document.body,
