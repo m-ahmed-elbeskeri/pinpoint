@@ -201,19 +201,7 @@ function probe(cmd: string): unknown {
 
   if (cmd === 'tap:on') { P.tap = []; return hasReact(); }
   if (cmd === 'tap:off') { P.tap = null; return true; }
-  if (cmd === 'tap:drain') {
-    if (!P.tap) return null;
-    const lines = P.tap.splice(0);
-    // Keep the first "from" and last "to" of each piece of state, so typing a word is one change, not one per letter.
-    const byKey = new Map<string, { from: string; to: string }>();
-    for (const { line } of lines) {
-      const m = /^(.*?): (.*) → (.*)$/.exec(line);
-      if (!m) continue;
-      const had = byKey.get(m[1]);
-      byKey.set(m[1], { from: had ? had.from : m[2], to: m[3] });
-    }
-    return [...byKey].filter(([, v]) => v.from !== v.to).slice(0, 12).map(([k, v]) => `${k}: ${v.from} → ${v.to}`);
-  }
+  if (cmd === 'tap:drain') return P.tap ? P.tap.splice(0) : null;
 
   if (cmd === 'focus:on' || cmd === 'focus:report') {
     if (cmd === 'focus:on' && !P.focus) {

@@ -633,8 +633,8 @@
 .ctx-card { position: absolute; bottom: calc(100% + 8px); right: -40px; z-index: 50; display: none; width: 230px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg-2); box-shadow: 0 12px 32px rgba(0, 0, 0, .35); color: var(--text-2); font-size: 11.5px; line-height: 1.4; text-align: left; white-space: normal; cursor: default; }
 .ctx-meter:hover .ctx-card, .ctx-meter:focus-visible .ctx-card { display: grid; gap: 6px; animation: menu-in .12s ease-out; }
 .ctx-card b { color: var(--text); font-size: 12px; font-weight: 600; }
-.ctx-bar { height: 4px; border-radius: 2px; background: var(--bg-4); overflow: hidden; }
-.ctx-bar i { display: block; height: 100%; border-radius: 2px; background: var(--text-2); }
+.ctx-card .ctx-bar { height: 4px; border-radius: 2px; background: var(--bg-4); overflow: hidden; }
+.ctx-card .ctx-bar i { display: block; height: 100%; border-radius: 2px; background: var(--text-2); }
 .ctx-meter.mid .ctx-bar i { background: var(--warn); }
 .ctx-meter.high .ctx-bar i { background: var(--bad); }
 .ctx-row { display: flex; justify-content: space-between; gap: 10px; }

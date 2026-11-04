@@ -4,6 +4,12 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+### Fixed
+
+- **The chips above the composer are back.** The context meter's tooltip styles squashed the row holding the route, design system, page problems and accessibility chips into a thin line.
+- **Recorded steps get their own changes.** State changes, requests and errors are matched to steps by time, so each one lands on the step that caused it instead of the one before.
+- Translation keys in the element note keep their case.
+
 ## [0.14.0] - 2026-11-04
 
 ### Added

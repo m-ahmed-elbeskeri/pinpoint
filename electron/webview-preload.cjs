@@ -858,19 +858,25 @@ function stepTarget(el) {
   const text = (t.innerText || t.getAttribute('aria-label') || t.getAttribute('placeholder') || t.getAttribute('name') || '').replace(/\s+/g, ' ').trim();
   return { selector: selectorFor(t), tag: t.tagName.toLowerCase(), text: text.slice(0, 60) };
 }
+// Each step says when it happened, so what the page did next can be matched to it by time.
+// Typing changes state before the change event, so a fill starts at its first keystroke.
+const typingSince = new WeakMap();
 window.addEventListener('click', (e) => {
   if (!recording || mode === 'select' || isOurs(e.target)) return;
-  ipcRenderer.sendToHost('step', { type: 'click', ...stepTarget(e.target) });
+  ipcRenderer.sendToHost('step', { type: 'click', ...stepTarget(e.target), at: Date.now() });
 }, true);
+window.addEventListener('input', (e) => { if (recording && e.target && !typingSince.has(e.target)) typingSince.set(e.target, Date.now()); }, true);
 window.addEventListener('change', (e) => {
   const t = e.target;
   if (!recording || !t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
   const secret = t.type === 'password';
   const value = t.type === 'checkbox' || t.type === 'radio' ? String(t.checked) : secret ? '••••••' : String(t.value).slice(0, 200);
-  ipcRenderer.sendToHost('step', { type: t.type === 'checkbox' || t.type === 'radio' ? 'check' : 'fill', ...stepTarget(t), value, secret: secret || undefined });
+  const at = typingSince.get(t) || Date.now();
+  typingSince.delete(t);
+  ipcRenderer.sendToHost('step', { type: t.type === 'checkbox' || t.type === 'radio' ? 'check' : 'fill', ...stepTarget(t), value, secret: secret || undefined, at });
 }, true);
 window.addEventListener('keydown', (e) => {
-  if (recording && mode !== 'select' && ['Enter', 'Escape', 'Tab'].includes(e.key)) ipcRenderer.sendToHost('step', { type: 'key', key: e.key });
+  if (recording && mode !== 'select' && ['Enter', 'Escape', 'Tab'].includes(e.key)) ipcRenderer.sendToHost('step', { type: 'key', key: e.key, at: Date.now() });
 }, true);
 ipcRenderer.on('record', (_e, on) => { recording = !!on; });
 

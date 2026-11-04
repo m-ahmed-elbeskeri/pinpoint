@@ -11,32 +11,47 @@ export function useFlows(app: AppContext) {
   const [rec, setRec] = useState<{ steps: FlowStep[]; startUrl: string } | null>(null);
   const runFlowRef = useRef<Record<string, { steps: FlowStep[]; startUrl: string; seen?: { errors: string[]; failed: string[] } }>>({});
   const tapRef = useRef<{ errors: string[]; failed: string[] } | null>(null);
-  // While recording: what the page did after each step, gathered when the next step arrives.
-  const trail = useRef<{ step: FlowStep | null; since: number; errorsAt: number; chain: Promise<void>; afters: Map<FlowStep, NonNullable<FlowStep['after']>> } | null>(null);
-  const settleStep = (until: number) => {
+  // While recording: React state changes, drained from the page at each step (a full page load would lose them).
+  const trail = useRef<{ entries: { at: number; line: string }[]; chain: Promise<void> } | null>(null);
+  const drainTap = () => {
     const t = trail.current;
     if (!t) return;
-    const step = t.step, since = t.since, errorsAt = t.errorsAt;
-    t.since = until;
-    t.errorsAt = tapRef.current?.errors.length ?? 0;
     t.chain = t.chain.then(async () => {
       const b = app.browser.current;
-      const drained = b ? await b.evaluate<string[] | null>(probeScript('tap:drain')).catch(() => null) : null;
+      const got = b ? await b.evaluate<{ at: number; line: string }[] | null>(probeScript('tap:drain')).catch(() => null) : null;
       // A full page load drops the probe: switch it back on for the steps still to come.
-      if (drained == null && b) await b.evaluate(probeScript('tap:on')).catch(() => {});
-      const state = drained || [];
-      if (!step) return;
-      const requests = app.requests.filter((r) => r.at >= since && r.at < until).slice(0, 8)
+      if (got == null && b) await b.evaluate(probeScript('tap:on')).catch(() => {});
+      if (got) t.entries.push(...got);
+    });
+  };
+  // Every state change, request and error goes to the last step before it in time.
+  const attach = (steps: FlowStep[], entries: { at: number; line: string }[], end: number) => {
+    const acts = steps.filter((s) => s.type !== 'navigate' && s.at);
+    return steps.map((s) => {
+      const i = acts.indexOf(s);
+      if (i < 0) return s;
+      const from = s.at!, to = acts[i + 1]?.at ?? end;
+      const inside = (at: number) => at >= from && at < to;
+      const byKey = new Map<string, { from: string; to: string }>();
+      for (const e of entries.filter((x) => inside(x.at))) {
+        const m = /^(.*?): (.*) → (.*)$/.exec(e.line);
+        if (!m) continue;
+        const had = byKey.get(m[1]);
+        byKey.set(m[1], { from: had ? had.from : m[2], to: m[3] });
+      }
+      const state = [...byKey].filter(([, v]) => v.from !== v.to).slice(0, 12).map(([k, v]) => `${k}: ${v.from} → ${v.to}`);
+      const requests = app.requests.filter((r) => inside(r.at)).slice(0, 8)
         .map((r) => `${r.method} ${pathOf(r.url)} → ${r.status || r.error || 'no answer'}${r.ms != null ? ` (${r.ms} ms)` : ''}`);
-      const errors = (tapRef.current?.errors || []).slice(errorsAt).slice(0, 4);
-      if (!state.length && !requests.length && !errors.length) return;
-      t.afters.set(step, { ...(state.length && { state }), ...(requests.length && { requests }), ...(errors.length && { errors }) });
+      const errors = app.consoleLog.filter((c) => c.level === 'error' && inside(c.at)).slice(0, 4).map((c) => c.message.split('\n')[0].slice(0, 200));
+      if (!state.length && !requests.length && !errors.length) return s;
+      return { ...s, after: { ...(state.length && { state }), ...(requests.length && { requests }), ...(errors.length && { errors }) } };
     });
   };
   useEffect(() => api.onNetworkError((n) => { tapRef.current?.failed.push(`${n.method} ${pathOf(n.url)} (${n.status || n.error})`); }), []);
   const onStep = useCallback((s: FlowStep) => {
     // A navigation is the result of the step before it, so what follows still belongs to that step.
-    if (trail.current && s.type !== 'navigate') { settleStep(Date.now()); trail.current.step = s; }
+    if (!s.at) s = { ...s, at: Date.now() };
+    drainTap();
     setRec((r) => {
       if (!r) return r;
       const last = r.steps[r.steps.length - 1];
@@ -50,7 +65,7 @@ export function useFlows(app: AppContext) {
       app.setMode('browse');
       setRec({ steps: [], startUrl: app.nav.url });
       tapRef.current = { errors: [], failed: [] };
-      trail.current = { step: null, since: Date.now(), errorsAt: 0, chain: Promise.resolve(), afters: new Map() };
+      trail.current = { entries: [], chain: Promise.resolve() };
       b?.send('record', true);
       b?.evaluate(probeScript('tap:on')).catch(() => {});
       return;
@@ -70,14 +85,15 @@ export function useFlows(app: AppContext) {
     app.focusNote(ann.id);
     if (!t) return;
     // Stop is instant; what the page did after the last steps is filled in once it settles.
+    const end = Date.now();
     await sleep(500);
     trail.current = t;
-    settleStep(Date.now());
+    drainTap();
     trail.current = null;
     await t.chain;
     b?.evaluate(probeScript('tap:off')).catch(() => {});
-    if (!t.afters.size) return;
-    const withAfter = steps.map((s) => { const after = t.afters.get(s); return after ? { ...s, after } : s; });
+    const withAfter = attach(steps, t.entries, end + 500);
+    if (!withAfter.some((s) => s.after)) return;
     app.setAnnotations((prev) => prev.map((x) => (x.id === ann.id ? { ...x, steps: withAfter } : x)));
   };
   const replayFlow = async (flow: { steps: FlowStep[]; startUrl: string }): Promise<FlowResult | null> => {

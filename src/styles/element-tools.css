@@ -348,3 +348,4 @@
 .el-field.missing { border-style: dashed; }
 .i18n-actions { display: flex; align-items: center; gap: 6px; }
 .i18n-actions .spacer { flex: 1; }
+.i18n-key .el-label { text-transform: none; letter-spacing: 0; }

@@ -51,6 +51,8 @@ export interface CssRuleInfo {
 
 export interface FlowStep {
   type: 'click' | 'fill' | 'check' | 'key' | 'navigate'; selector?: string; tag?: string; text?: string; value?: string; key?: string; url?: string; secret?: boolean;
+  /** When the user did it (ms since the epoch). */
+  at?: number;
   /** What happened between this step and the next: component state that changed, requests made, errors. */
   after?: { state?: string[]; requests?: string[]; errors?: string[] };
 }
