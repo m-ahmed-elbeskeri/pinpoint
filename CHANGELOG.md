@@ -4,6 +4,8 @@ All notable changes to Pinpoint are listed here. The format follows [Keep a Chan
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-04
+
 ### Fixed
 
 - **The chips above the composer are back.** The context meter's tooltip styles squashed the row holding the route, design system, page problems and accessibility chips into a thin line.
