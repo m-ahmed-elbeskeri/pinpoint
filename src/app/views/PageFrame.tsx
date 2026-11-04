@@ -20,7 +20,7 @@ export function PageFrame({ app }: { app: AppContext }) {
       {app.device.on && <DeviceBar device={app.device} set={app.setDevice} scale={app.deviceScale} height={app.deviceH} breakpoints={app.breakpoints} />}
       <div className="device-area" ref={app.area}>
         <div className="device-box" style={app.device.on ? { width: app.device.w * app.deviceScale, height: app.deviceH * app.deviceScale } : undefined}>
-          <div ref={app.frame} className={`frame mode-${app.mode}`} style={app.device.on ? { width: app.device.w, height: app.deviceH, transform: `scale(${app.deviceScale})` } : undefined}>
+          <div ref={app.frame} className={`frame mode-${app.mode} ${app.loadError && app.nav.url !== 'about:blank' ? 'has-error' : ''}`} style={app.device.on ? { width: app.device.w, height: app.deviceH, transform: `scale(${app.deviceScale})` } : undefined}>
             {app.tabs.map((t) => {
               const here = () => t.id === app.activeTab;
               return (
@@ -104,8 +104,8 @@ export function PageFrame({ app }: { app: AppContext }) {
               <div className="load-error">
                 <b>Couldn't load the page</b><span>{app.loadError}</span>
                 <div>
-                  <button className="btn xs" onClick={() => app.browser.current?.reload()}>Retry</button>
-                  <button className="btn xs ghost" onClick={() => app.quickStartDev()} title={app.devCommand || undefined}>Start dev server</button>
+                  {app.devCommand && !app.devRunning && <button className="btn xs primary" onClick={() => app.quickStartDev()} title={app.devCommand}>Start dev server</button>}
+                  <button className={`btn xs ${app.devCommand && !app.devRunning ? 'ghost' : 'primary'}`} onClick={() => app.browser.current?.reload()}>Retry</button>
                 </div>
               </div>
             )}

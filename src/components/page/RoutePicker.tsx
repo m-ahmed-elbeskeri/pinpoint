@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, FileCode2, Link2, Route as RouteIcon } from '../ui/icons';
+import { Check, ChevronDown, FileCode2, Link2, Route as RouteIcon } from '../ui/icons';
 import type { RouteInfo } from '../../types';
 import { useDismiss } from '../../lib/hooks';
 
@@ -52,6 +52,7 @@ export function RoutePicker({ routes, current, baseUrl, getLinks, onGo, onEdit }
               <button key={r.route} className={`route-item ${current?.route === r.route ? 'sel' : ''}`} onClick={() => pick(r)} title={r.dynamic ? 'Dynamic route: opens in the URL bar so you can fill in the parameters' : r.file}>
                 <span className="route-path">{r.route.split(/(\[[^\]]+\]|:[\w]+|\*)/).map((part, i) => (/^(\[|:|\*)/.test(part) ? <em key={i}>{part}</em> : part))}</span>
                 <span className="route-file"><FileCode2 size={11} /> {r.file}</span>
+                {current?.route === r.route && <Check size={13} className="route-tick" />}
               </button>
             ))}
             {shownLinks.length > 0 && (
