@@ -51,7 +51,7 @@
     "@xterm/xterm": "^6.0.0",
     "axe-core": "^4.14.0",
     "diff": "^9.0.0",
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.11",
     "node-pty": "^1.1.0",
     "source-map-js": "^1.2.2"
   },
