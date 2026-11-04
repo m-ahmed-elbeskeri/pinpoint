@@ -287,9 +287,11 @@ export function ThreadSidebar(p: Props) {
                       key={c.id}
                       className={`thread history-item ${on ? 'on' : ''} ${running ? 'running' : ''} ${finished ? 'finished' : ''} ${waiting ? 'waiting' : ''} ${c.archived ? 'archived' : ''}`}
                       onClick={() => !on && !p.disabled && p.onOpen(c.id)}
-                      title={`${(c.title || 'Untitled').trim()}\n${running ? 'Working' : waiting ? 'Waiting on you' : finished ? 'Finished. Click to see the result' : c.failed ? 'The last run failed' : 'Last active'} · ${agoLong(c.updatedAt)}`}
+                      title={`${(c.title || 'Untitled').trim()}\n${waiting ? 'Waiting on you' : running ? 'Working' : finished ? 'Finished. Click to see the result' : c.failed ? 'The last run failed' : 'Last active'} · ${agoLong(c.updatedAt)}`}
                     >
-                      <i className="thread-state">{running ? <Loader2 size={12} className="spin" /> : waiting || finished ? <b className="thread-dot" /> : c.failed ? <XCircle size={12} className="thread-failed" /> : c.pinned ? <Pin size={11} className="thread-pinned" /> : null}</i>
+                      <i className="thread-state">{waiting ? <b className="thread-dot" /> : running ? <Loader2 size={12} className="spin" /> : finished ? <b className="thread-dot" /> : c.failed ? <XCircle size={12} className="thread-failed" /> : c.pinned ? <Pin size={11} className="thread-pinned" /> : null}</i>
+                      {/* The dot and colour say it on screen; this says it to screen readers. */}
+                      {(running || waiting || finished || c.failed) && <span className="sr-only">{waiting ? 'needs you' : running ? 'working' : finished ? 'finished' : 'failed'}</span>}
                       {renaming?.id === c.id ? (
                         <input
                           className="thread-rename" autoFocus value={renaming.value} onClick={(e) => e.stopPropagation()}
